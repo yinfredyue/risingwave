@@ -104,16 +104,8 @@ impl StateStore for TikvStateStore {
                 key_range.end_bound().map(|b| b.as_ref().to_owned()),
             );
 
-            let req = self.raw_client().await.scan(BoundRange::from(range), scan_limit);
+            let req = self.raw_client().await.scan(BoundRange::from(range), 10240);
             let res = req.await.unwrap();
-
-            // let mut txn = self.client().await.begin_optimistic().await.unwrap();
-            // let res: Vec<KvPair> = txn
-            //     .scan(BoundRange::from(range), scan_limit)
-            //     .await
-            //     .unwrap()
-            //     .collect();
-            // txn.commit().await.unwrap();
 
             for tikv_client::KvPair(key, value) in res {
                 let key = Bytes::copy_from_slice(key.as_ref().into());
