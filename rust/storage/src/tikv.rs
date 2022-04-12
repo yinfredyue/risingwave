@@ -68,10 +68,13 @@ impl StateStore for TikvStateStore {
 
     fn get<'a>(&'a self, key: &'a [u8], _epoch: u64) -> Self::GetFuture<'_> {
         async move {
-            let mut txn = self.client().await.begin_optimistic().await.unwrap();
-            let res = txn.get(key.to_owned()).await.expect("key not found");
-            txn.commit().await.unwrap();
-            Ok(res.map(Bytes::from))
+            // let mut txn = self.client().await.begin_optimistic().await.unwrap();
+            // let res = txn.get(key.to_owned()).await.expect("key not found");
+            // txn.commit().await.unwrap();
+            // Ok(res.map(Bytes::from))
+            let req = self.raw_client().await.get(key.to_owned());
+            req.await.unwrap();
+            Ok(req.map(Bytes::from))
         }
     }
 

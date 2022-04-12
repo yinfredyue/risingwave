@@ -96,7 +96,7 @@ impl Operations {
             })
             .collect_vec();
         let stat = LatencyStat::new(total_latencies);
-        let qps = opts.reads as u128 * 1_000_000_000 / total_time_nano as u128;
+        let qps = opts.scans as u128 * 1_000_000_000 / total_time_nano as u128;
         let bytes_pre_sec = total_sizes as u128 * 1_000_000_000 / total_time_nano as u128;
 
         println!(
