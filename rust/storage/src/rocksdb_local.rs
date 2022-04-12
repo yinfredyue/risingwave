@@ -67,16 +67,84 @@ impl StateStore for RocksDBStateStore {
         B: AsRef<[u8]> + Send,
     {
         async move {
-            let mut iter = self.iter(key_range, epoch).await?;
-            let mut kvs = Vec::with_capacity(limit.unwrap_or_default());
+            // let mut iter = self.iter(key_range, epoch).await?;
+            // let mut kvs = Vec::with_capacity(limit.unwrap_or_default());
+            //
+            // for _ in 0..limit.unwrap_or(usize::MAX) {
+            //     match iter.next().await? {
+            //         Some(kv) => kvs.push(kv),
+            //         None => break,
+            //     }
+            // }
+            //
+            // Ok(kvs)
+            let range = (
+                key_range.start_bound().map(|b| b.as_ref().to_owned()),
+                key_range.end_bound().map(|b| b.as_ref().to_owned()),
+            );
+            let mut start_key = vec![];
+            let mut is_start_unbounded = false;
+            match range.start_bound() {
+                Bound::Included(s_key) => {
+                    start_key = s_key.clone();
+                }
+                Bound::Unbounded => {
+                    is_start_unbounded = true;
+                }
+                _ => {
+                    return Err(InternalError("invalid range start".to_string()).into());
+                }
+            };
 
-            for _ in 0..limit.unwrap_or(usize::MAX) {
-                match iter.next().await? {
-                    Some(kv) => kvs.push(kv),
-                    None => break,
+            let mut iter = self.storage().await.iter().await;
+            let seek_key = if is_start_unbounded {
+                SeekKey::Start
+            } else {
+                SeekKey::from(start_key.as_slice())
+            };
+            iter.seek(seek_key)
+                .map_err(|e| RwError::from(InternalError(e)))?;
+
+            let mut end_key = Bytes::new();
+            let mut is_end_exclude = false;
+            let mut is_end_unbounded = false;
+            match range.end_bound() {
+                Bound::Included(e_key) => {
+                    end_key = Bytes::from(e_key.clone());
+                }
+                Bound::Excluded(e_key) => {
+                    end_key = Bytes::from(e_key.clone());
+                    is_end_exclude = true;
+                }
+                Bound::Unbounded => {
+                    is_end_unbounded = true;
                 }
             }
 
+            let mut kvs = Vec::with_capacity(limit.unwrap_or_default());
+            for _ in 0..limit.unwrap_or(usize::MAX) {
+                let result = iter.valid().map_err(|e| RwError::from(InternalError(e)));
+                if let Err(e) = result {
+                    return Err(e);
+                }
+                if !result.unwrap() {
+                    break;
+                }
+                let k = Bytes::from(iter.key().to_vec());
+                let v = Bytes::from(iter.value().to_vec());
+
+                if is_end_unbounded {
+                    kvs.push((k,v));
+                    continue;
+                }
+                if k > end_key || (k == end_key && is_end_exclude) {
+                    break;
+                }
+                if let Err(e) = iter.next().map_err(|e| RwError::from(InternalError(e))) {
+                    return Err(e);
+                }
+                kvs.push((k,v));
+            }
             Ok(kvs)
         }
     }
