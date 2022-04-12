@@ -73,8 +73,8 @@ impl StateStore for TikvStateStore {
             // txn.commit().await.unwrap();
             // Ok(res.map(Bytes::from))
             let req = self.raw_client().await.get(key.to_owned());
-            req.await.unwrap();
-            Ok(req.map(Bytes::from))
+            let res = req.await.unwrap();
+            Ok(res.map(Bytes::from))
         }
     }
 
