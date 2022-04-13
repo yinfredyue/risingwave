@@ -19,7 +19,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use risingwave_common::error::ErrorCode::InternalError;
 use risingwave_common::error::{Result, RwError};
-use rocksdb::{DBIterator, ReadOptions, SeekKey, Writable, WriteBatch, WriteOptions, DB};
+use rocksdb::{DBIterator, ReadOptions, SeekKey, Writable, WriteBatch, WriteOptions, DB, DBOptions};
 use tokio::sync::OnceCell;
 use tokio::task;
 
@@ -325,11 +325,14 @@ pub struct RocksDBStorage {
 impl RocksDBStorage {
     pub async fn new(path: &str) -> Self {
         let path = path.to_string();
-        let db = task::spawn_blocking(move || DB::open_default(path.as_str()).unwrap())
-            .await
-            .unwrap();
+        let mut opts = DBOptions::new();
+        opts.create_if_missing(true);
+        opts.set_max_background_compactions(4);
+        opts.set_max_background_flushes(2);
+        opts.set_bytes_per_sync(1048576);
+
+        let db = DB::open(opts, path.as_str()).unwrap();
         let storage = RocksDBStorage { db: Arc::new(db) };
-        storage.clear_all().await.unwrap();
         storage
     }
 
