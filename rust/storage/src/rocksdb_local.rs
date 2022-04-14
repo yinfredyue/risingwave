@@ -53,7 +53,7 @@ impl StateStore for RocksDBStateStore {
     define_state_store_associated_type!();
 
     fn get<'a>(&'a self, key: &'a [u8], _epoch: u64) -> Self::GetFuture<'_> {
-        async move { self.storage().await.get(key).await }
+        async move { self.storage().await.get(key) }
     }
 
     fn scan<R, B>(
@@ -388,16 +388,13 @@ impl RocksDBStorage {
         }).await?
     }
 
-    async fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
+    fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
         let db = self.db.clone();
         let seek_key = key.to_vec();
-        task::spawn_blocking(move || {
-            db.get(&seek_key).map_or_else(
-                |e| Err(InternalError(e).into()),
-                |option_v| Ok(option_v.map(|v| Bytes::from(v.to_vec()))),
-            )
-        })
-        .await?
+        db.get(&seek_key).map_or_else(
+            |e| Err(InternalError(e).into()),
+            |option_v| Ok(option_v.map(|v| Bytes::from(v.to_vec()))),
+        )
     }
 
     async fn iter(&self) -> DBIterator<Arc<DB>> {
