@@ -15,15 +15,17 @@
 use std::mem::size_of_val;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use itertools::Itertools;
 use rand::distributions::Uniform;
 use rand::prelude::Distribution;
+use tokio::time::sleep;
 use risingwave_storage::hummock::hummock_meta_client::HummockMetaClient;
 use risingwave_storage::hummock::mock::MockHummockMetaClient;
 use risingwave_storage::storage_value::StorageValue;
 use risingwave_storage::StateStore;
+use risingwave_storage::StateStoreImpl;
 
 use super::{Batch, Operations, PerfMetrics};
 use crate::utils::latency_stat::LatencyStat;
@@ -89,7 +91,14 @@ impl Operations {
         println!("batch size: {}", batches.len());
 
         let perf = self.run_batches(store, opts, batches).await;
-
+        match store {
+            StateStoreImpl::RocksDBStateStore(store) => {
+                sleep(Duration::from_secs(30));
+            }
+            StateStoreImpl::TikvStateStore(store) => {
+                sleep(Duration::from_secs(30));
+            }
+        }
         println!(
             "
     writebatch
