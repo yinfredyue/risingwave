@@ -91,14 +91,7 @@ impl Operations {
         println!("batch size: {}", batches.len());
 
         let perf = self.run_batches(store, opts, batches).await;
-        match store {
-            StateStoreImpl::RocksDBStateStore(store) => {
-                sleep(Duration::from_secs(30));
-            }
-            StateStoreImpl::TikvStateStore(store) => {
-                sleep(Duration::from_secs(30));
-            }
-        }
+        sleep(Duration::from_secs(30)).await;
         println!(
             "
     writebatch
