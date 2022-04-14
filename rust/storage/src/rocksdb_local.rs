@@ -335,6 +335,7 @@ impl RocksDBStorage {
         let mut block_base_opts = BlockBasedOptions::new();
         let cache = Cache::new_lru_cache(lru_opts);
         block_base_opts.set_block_cache(&cache);
+        block_base_opts.set_block_size(1 << 20);
 
         let cf = "default";
         let mut cf_opts = ColumnFamilyOptions::new();
