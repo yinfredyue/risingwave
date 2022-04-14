@@ -327,9 +327,9 @@ impl RocksDBStorage {
         let path = path.to_string();
         let mut opts = DBOptions::new();
         opts.create_if_missing(true);
-        opts.set_max_background_compactions(4);
-        opts.set_max_background_flushes(2);
-        opts.set_bytes_per_sync(1048576);
+        // opts.set_max_background_compactions(4);
+        // opts.set_max_background_flushes(2);
+        // opts.set_bytes_per_sync(1048576);
         let mut lru_opts = LRUCacheOptions::new();
         lru_opts.set_capacity(256 << 20);
         let mut block_base_opts = BlockBasedOptions::new();
