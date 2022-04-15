@@ -43,7 +43,7 @@ impl RocksDBStateStore {
 
     pub async fn storage(&self) -> &RocksDBStorage {
         self.storage
-            .get_or_init(|| async { RocksDBStorage::new(&self.db_path).await })
+            .get_or_init(|| async { RocksDBStorage::new(&self.db_path) })
             .await
     }
 }
@@ -60,24 +60,13 @@ impl StateStore for RocksDBStateStore {
         &self,
         key_range: R,
         limit: Option<usize>,
-        epoch: u64,
+        _epoch: u64,
     ) -> Self::ScanFuture<'_, R, B>
     where
         R: RangeBounds<B> + Send,
         B: AsRef<[u8]> + Send,
     {
         async move {
-            // let mut iter = self.iter(key_range, epoch).await?;
-            // let mut kvs = Vec::with_capacity(limit.unwrap_or_default());
-            //
-            // for _ in 0..limit.unwrap_or(usize::MAX) {
-            //     match iter.next().await? {
-            //         Some(kv) => kvs.push(kv),
-            //         None => break,
-            //     }
-            // }
-            //
-            // Ok(kvs)
             let range = (
                 key_range.start_bound().map(|b| b.as_ref().to_owned()),
                 key_range.end_bound().map(|b| b.as_ref().to_owned()),
@@ -206,7 +195,6 @@ impl StateStore for RocksDBStateStore {
 
     fn sync(&self, _epoch: Option<u64>) -> Self::SyncFuture<'_> {
         async move {
-            //self.storage().await.sync().await
             Ok(())
         }
     }
@@ -323,7 +311,7 @@ pub struct RocksDBStorage {
 }
 
 impl RocksDBStorage {
-    pub async fn new(path: &str) -> Self {
+    pub fn new(path: &str) -> Self {
         let path = path.to_string();
         let mut opts = DBOptions::new();
         opts.create_if_missing(true);
@@ -335,7 +323,7 @@ impl RocksDBStorage {
         let mut block_base_opts = BlockBasedOptions::new();
         let cache = Cache::new_lru_cache(lru_opts);
         block_base_opts.set_block_cache(&cache);
-        block_base_opts.set_block_size(1 << 20);
+        block_base_opts.set_block_size(64 << 10);
 
         let cf = "default";
         let mut cf_opts = ColumnFamilyOptions::new();
