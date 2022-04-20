@@ -18,7 +18,7 @@ risedev:
     - use: meta-node
       enable-dashboard-v2: false
     - use: compute-node
-    - use: frontend
+    # - use: frontend
 
     # If you want to enable metrics, uncomment those two lines.
     # - use: prometheus
@@ -28,7 +28,7 @@ risedev:
     # - use: jaeger
 
     # If you want to use the legacy frontend, uncomment the following line.
-    # - use: frontend-legacy
+    - use: frontend-legacy
 
   legacy:
     - use: meta-node

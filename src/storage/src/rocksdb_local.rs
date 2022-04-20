@@ -19,7 +19,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use risingwave_common::error::ErrorCode::InternalError;
 use risingwave_common::error::{Result, RwError};
-use rocksdb::{DBIterator, ReadOptions, SeekKey, Writable, WriteBatch, WriteOptions, DB};
+use rocksdb::{DBIterator, ReadOptions, SeekKey, Writable, WriteBatch, WriteOptions, DB, DBOptions, LRUCacheOptions, BlockBasedOptions, Cache, ColumnFamilyOptions};
 use tokio::sync::OnceCell;
 use tokio::task;
 
@@ -43,7 +43,7 @@ impl RocksDBStateStore {
 
     pub async fn storage(&self) -> &RocksDBStorage {
         self.storage
-            .get_or_init(|| async { RocksDBStorage::new(&self.db_path).await })
+            .get_or_init(|| async { RocksDBStorage::new(&self.db_path) })
             .await
     }
 }
@@ -53,30 +53,87 @@ impl StateStore for RocksDBStateStore {
     define_state_store_associated_type!();
 
     fn get<'a>(&'a self, key: &'a [u8], _epoch: u64) -> Self::GetFuture<'_> {
-        async move { self.storage().await.get(key).await }
+        async move { self.storage().await.get(key) }
     }
 
     fn scan<R, B>(
         &self,
         key_range: R,
         limit: Option<usize>,
-        epoch: u64,
+        _epoch: u64,
     ) -> Self::ScanFuture<'_, R, B>
-    where
-        R: RangeBounds<B> + Send,
-        B: AsRef<[u8]> + Send,
+        where
+            R: RangeBounds<B> + Send,
+            B: AsRef<[u8]> + Send,
     {
         async move {
-            let mut iter = self.iter(key_range, epoch).await?;
-            let mut kvs = Vec::with_capacity(limit.unwrap_or_default());
+            let range = (
+                key_range.start_bound().map(|b| b.as_ref().to_owned()),
+                key_range.end_bound().map(|b| b.as_ref().to_owned()),
+            );
+            let mut start_key = vec![];
+            let mut is_start_unbounded = false;
+            match range.start_bound() {
+                Bound::Included(s_key) => {
+                    start_key = s_key.clone();
+                }
+                Bound::Unbounded => {
+                    is_start_unbounded = true;
+                }
+                _ => {
+                    return Err(InternalError("invalid range start".to_string()).into());
+                }
+            };
 
-            for _ in 0..limit.unwrap_or(usize::MAX) {
-                match iter.next().await? {
-                    Some(kv) => kvs.push(kv),
-                    None => break,
+            let mut iter = self.storage().await.iter().await;
+            let seek_key = if is_start_unbounded {
+                SeekKey::Start
+            } else {
+                SeekKey::from(start_key.as_slice())
+            };
+            iter.seek(seek_key)
+                .map_err(|e| RwError::from(InternalError(e)))?;
+
+            let mut end_key = Bytes::new();
+            let mut is_end_exclude = false;
+            let mut is_end_unbounded = false;
+            match range.end_bound() {
+                Bound::Included(e_key) => {
+                    end_key = Bytes::from(e_key.clone());
+                }
+                Bound::Excluded(e_key) => {
+                    end_key = Bytes::from(e_key.clone());
+                    is_end_exclude = true;
+                }
+                Bound::Unbounded => {
+                    is_end_unbounded = true;
                 }
             }
 
+            let mut kvs = Vec::with_capacity(limit.unwrap_or_default());
+            for _ in 0..limit.unwrap_or(usize::MAX) {
+                let result = iter.valid().map_err(|e| RwError::from(InternalError(e)));
+                if let Err(e) = result {
+                    return Err(e);
+                }
+                if !result.unwrap() {
+                    break;
+                }
+                let k = Bytes::from(iter.key().to_vec());
+                let v = Bytes::from(iter.value().to_vec());
+
+                if is_end_unbounded {
+                    kvs.push((k,v));
+                    continue;
+                }
+                if k > end_key || (k == end_key && is_end_exclude) {
+                    break;
+                }
+                if let Err(e) = iter.next().map_err(|e| RwError::from(InternalError(e))) {
+                    return Err(e);
+                }
+                kvs.push((k,v));
+            }
             Ok(kvs)
         }
     }
@@ -87,9 +144,9 @@ impl StateStore for RocksDBStateStore {
         _limit: Option<usize>,
         _epoch: u64,
     ) -> Self::ReverseScanFuture<'_, R, B>
-    where
-        R: RangeBounds<B> + Send,
-        B: AsRef<[u8]> + Send,
+        where
+            R: RangeBounds<B> + Send,
+            B: AsRef<[u8]> + Send,
     {
         async move { unimplemented!() }
     }
@@ -99,7 +156,7 @@ impl StateStore for RocksDBStateStore {
         kv_pairs: Vec<(Bytes, StorageValue)>,
         _epoch: u64,
     ) -> Self::IngestBatchFuture<'_> {
-        async move { self.storage().await.write_batch(kv_pairs).await }
+        async move { self.storage().await.write_batch(kv_pairs) }
     }
 
     fn replicate_batch(
@@ -111,9 +168,9 @@ impl StateStore for RocksDBStateStore {
     }
 
     fn iter<R, B>(&self, key_range: R, _epoch: u64) -> Self::IterFuture<'_, R, B>
-    where
-        R: RangeBounds<B> + Send,
-        B: AsRef<[u8]> + Send,
+        where
+            R: RangeBounds<B> + Send,
+            B: AsRef<[u8]> + Send,
     {
         async move {
             let range = (
@@ -125,19 +182,21 @@ impl StateStore for RocksDBStateStore {
     }
 
     fn reverse_iter<R, B>(&self, _key_range: R, _epoch: u64) -> Self::ReverseIterFuture<'_, R, B>
-    where
-        R: RangeBounds<B> + Send,
-        B: AsRef<[u8]> + Send,
+        where
+            R: RangeBounds<B> + Send,
+            B: AsRef<[u8]> + Send,
     {
         async move { unimplemented!() }
     }
 
     fn wait_epoch(&self, _epoch: u64) -> Self::WaitEpochFuture<'_> {
-        async move { unimplemented!() }
+        async move { Ok(()) }
     }
 
     fn sync(&self, _epoch: Option<u64>) -> Self::SyncFuture<'_> {
-        async move { unimplemented!() }
+        async move {
+            Ok(())
+        }
     }
 }
 
@@ -188,7 +247,7 @@ impl RocksDBStateStoreIter {
                 key_range: range,
             })
         })
-        .await?
+            .await?
     }
 }
 
@@ -237,8 +296,8 @@ impl StateStoreIter for RocksDBStateStoreIter {
                 }
                 (Ok(Some((k, v))), iter)
             })
-            .await
-            .unwrap();
+                .await
+                .unwrap();
 
             self.iter = Some(iter);
             kv
@@ -252,13 +311,26 @@ pub struct RocksDBStorage {
 }
 
 impl RocksDBStorage {
-    pub async fn new(path: &str) -> Self {
+    pub fn new(path: &str) -> Self {
         let path = path.to_string();
-        let db = task::spawn_blocking(move || DB::open_default(path.as_str()).unwrap())
-            .await
-            .unwrap();
+        let mut opts = DBOptions::new();
+        opts.create_if_missing(true);
+        opts.set_max_background_compactions(4);
+        opts.set_max_background_flushes(2);
+        // opts.set_bytes_per_sync(1048576);
+        let mut lru_opts = LRUCacheOptions::new();
+        lru_opts.set_capacity(256 << 20);
+        let mut block_base_opts = BlockBasedOptions::new();
+        let cache = Cache::new_lru_cache(lru_opts);
+        block_base_opts.set_block_cache(&cache);
+        block_base_opts.set_block_size(64 << 10);
+
+        let cf = "default";
+        let mut cf_opts = ColumnFamilyOptions::new();
+        cf_opts.set_block_based_table_factory(&block_base_opts);
+        cf_opts.set_write_buffer_size(10 << 20);
+        let db = DB::open_cf(opts, path.as_str(), vec![(cf, cf_opts)]).unwrap();
         let storage = RocksDBStorage { db: Arc::new(db) };
-        storage.clear_all().await.unwrap();
         storage
     }
 
@@ -275,13 +347,13 @@ impl RocksDBStorage {
             db.delete_range(start_key.as_slice(), end_key.as_slice())
                 .map_err(|e| RwError::from(InternalError(e)))
         })
-        .await?
+            .await?
     }
 
-    async fn write_batch(&self, kv_pairs: Vec<(Bytes, StorageValue)>) -> Result<()> {
+    fn write_batch(&self, kv_pairs: Vec<(Bytes, StorageValue)>) -> Result<()> {
         let wb = WriteBatch::new();
         for (key, value) in kv_pairs {
-            let value = value.user_value();
+            let value = value.user_value;
             if let Some(value) = value {
                 if let Err(e) = wb.put(key.as_ref(), value.as_ref()) {
                     return Err(InternalError(e).into());
@@ -292,25 +364,26 @@ impl RocksDBStorage {
         }
 
         let db = self.db.clone();
-        task::spawn_blocking(move || {
-            let mut opts = WriteOptions::default();
-            opts.set_sync(true);
-            db.write_opt(&wb, &opts)
-                .map_or_else(|e| Err(InternalError(e).into()), |_| Ok(()))
-        })
-        .await?
+        let mut opts = WriteOptions::default();
+        opts.set_sync(false);
+        db.write_opt(&wb, &opts)
+            .map_or_else(|e| Err(InternalError(e).into()), |_| Ok(()))
     }
 
-    async fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
+    async fn sync(&self) -> Result<()> {
+        let db = self.db.clone();
+        task::spawn_blocking(move || {
+            db.flush(true).map_err(|e| InternalError(e).into())
+        }).await?
+    }
+
+    fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
         let db = self.db.clone();
         let seek_key = key.to_vec();
-        task::spawn_blocking(move || {
-            db.get(&seek_key).map_or_else(
-                |e| Err(InternalError(e).into()),
-                |option_v| Ok(option_v.map(|v| Bytes::from(v.to_vec()))),
-            )
-        })
-        .await?
+        db.get(&seek_key).map_or_else(
+            |e| Err(InternalError(e).into()),
+            |option_v| Ok(option_v.map(|v| Bytes::from(v.to_vec()))),
+        )
     }
 
     async fn iter(&self) -> DBIterator<Arc<DB>> {
