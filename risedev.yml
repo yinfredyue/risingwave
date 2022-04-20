@@ -242,7 +242,7 @@ template:
 
   frontend-legacy:
     # Listen address of frontend-legacy
-    address: "127.0.0.1"
+    address: "0.0.0.0"
 
     # Listen port of frontend-legacy
     port: 4567
