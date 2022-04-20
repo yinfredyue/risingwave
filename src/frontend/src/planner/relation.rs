@@ -18,7 +18,7 @@ use risingwave_common::error::{ErrorCode, Result};
 use risingwave_common::types::DataType;
 
 use crate::binder::{
-    BoundBaseTable, BoundJoin, BoundSource, BoundWindowTableFunction, Relation,
+    BoundBaseTable, BoundJoin, BoundSource, BoundTableFunction, BoundWindowTableFunction, Relation,
     WindowTableFunctionKind,
 };
 use crate::expr::{ExprImpl, ExprType, FunctionCall, InputRef};
@@ -35,6 +35,7 @@ impl Planner {
             Relation::Subquery(q) => Ok(self.plan_query(q.query)?.as_subplan()),
             Relation::Join(join) => self.plan_join(*join),
             Relation::WindowTableFunction(tf) => self.plan_window_table_function(*tf),
+            Relation::TableFunction(func) => self.plan_table_function(*func),
             Relation::Source(s) => self.plan_source(*s),
         }
     }
@@ -76,6 +77,16 @@ impl Planner {
             )
             .into()),
         }
+    }
+
+    pub(super) fn plan_table_function(&mut self, func: BoundTableFunction) -> Result<PlanRef> {
+        dbg!(&func);
+        todo!();
+        // let left = self.plan_relation(join.left)?;
+        // let right = self.plan_relation(join.right)?;
+        // let join_type = join.join_type;
+        // let on_clause = join.cond;
+        // Ok(LogicalJoin::create(left, right, join_type, on_clause))
     }
 
     fn plan_tumble_window(

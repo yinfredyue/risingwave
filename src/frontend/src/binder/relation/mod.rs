@@ -27,10 +27,13 @@ mod join;
 mod subquery;
 mod table_or_source;
 mod window_table_function;
+mod table_function;
 pub use join::BoundJoin;
 pub use subquery::BoundSubquery;
 pub use table_or_source::{BoundBaseTable, BoundSource, BoundTableSource};
 pub use window_table_function::{BoundWindowTableFunction, WindowTableFunctionKind};
+pub use table_function::BoundTableFunction;
+
 
 /// A validated item that refers to a table-like entity, including base table, subquery, join, etc.
 /// It is usually part of the `from` clause.
@@ -41,6 +44,7 @@ pub enum Relation {
     Subquery(Box<BoundSubquery>),
     Join(Box<BoundJoin>),
     WindowTableFunction(Box<BoundWindowTableFunction>),
+    TableFunction(Box<BoundTableFunction>),
 }
 
 impl Binder {
@@ -136,6 +140,9 @@ impl Binder {
                     )))
                 }
             }
+            TableFactor::TableFunction { name,args,alias, .. } => {
+                 Ok(Relation::TableFunction(Box::new(self.bind_table_function(name,args,alias)?)))
+             }
             TableFactor::Derived {
                 lateral,
                 subquery,
