@@ -122,6 +122,7 @@ impl Binder {
     }
 
     pub(super) fn bind_table_factor(&mut self, table_factor: TableFactor) -> Result<Relation> {
+        dbg!(&table_factor);
         match table_factor {
             TableFactor::Table { name, alias, args } => {
                 if args.is_empty() {
