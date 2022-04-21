@@ -328,7 +328,7 @@ impl RocksDBStorage {
         let cf = "default";
         let mut cf_opts = ColumnFamilyOptions::new();
         cf_opts.set_block_based_table_factory(&block_base_opts);
-        cf_opts.set_write_buffer_size(10 << 20);
+        cf_opts.set_write_buffer_size(64 << 20);
         let db = DB::open_cf(opts, path.as_str(), vec![(cf, cf_opts)]).unwrap();
         let storage = RocksDBStorage { db: Arc::new(db) };
         storage
