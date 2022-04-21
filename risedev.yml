@@ -161,7 +161,7 @@ template:
     port: 5688
 
     # Prometheus exporter listen address
-    exporter-address: "127.0.0.1"
+    exporter-address: "0.0.0.0"
 
     # Prometheus exporter listen port
     exporter-port: 1222
@@ -204,7 +204,7 @@ template:
     dashboard-port: 5691
 
     # Prometheus exporter listen address
-    exporter-address: "127.0.0.1"
+    exporter-address: "0.0.0.0"
 
     # Prometheus exporter listen port
     exporter-port: 1250
