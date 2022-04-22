@@ -9,8 +9,8 @@ risedev:
     # - use: minio
 
     # If you want to use aws-s3, configure AK and SK in env var and enable the following lines:
-    - use: aws-s3
-      bucket: s3-ut
+    # - use: aws-s3
+      # bucket: s3-ut
 
     # if you want to enable etcd backend, uncomment the following lines.
     # - use: etcd
