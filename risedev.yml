@@ -259,7 +259,7 @@ template:
     port: 5690
 
     # Dashboard listen address
-    dashboard-address: "127.0.0.1"
+    dashboard-address: "0.0.0.0"
 
     # Dashboard listen port
     dashboard-port: 5691
