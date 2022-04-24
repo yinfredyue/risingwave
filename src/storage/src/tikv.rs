@@ -18,8 +18,7 @@ use std::ops::{Bound, RangeBounds};
 use std::sync::Arc;
 
 use bytes::Bytes;
-use risingwave_common::error::{Result, ToRwResult};
-use tikv_client::{BoundRange, KvPair, TransactionClient};
+use tikv_client::{BoundRange, KvPair, TransactionClient, RawClient, Key};
 use tokio::sync::OnceCell;
 
 use super::StateStore;
@@ -31,6 +30,7 @@ const SCAN_LIMIT: usize = 100;
 #[derive(Clone)]
 pub struct TikvStateStore {
     client: Arc<OnceCell<tikv_client::transaction::Client>>,
+    raw_client: Arc<OnceCell<tikv_client::raw::Client>>,
     pd: Vec<String>,
 }
 
@@ -39,10 +39,10 @@ impl TikvStateStore {
         println!("\n use tikv stateStore \n");
         Self {
             client: Arc::new(OnceCell::new()),
+            raw_client: Arc::new(OnceCell::new()),
             pd: pd_endpoints,
         }
     }
-
     pub async fn client(&self) -> &tikv_client::transaction::Client {
         self.client
             .get_or_init(|| async {
@@ -51,18 +51,24 @@ impl TikvStateStore {
             })
             .await
     }
+    pub async fn raw_client(&self) -> &tikv_client::raw::Client {
+        self.raw_client
+            .get_or_init(|| async {
+                let client = RawClient::new(self.pd.clone(), None).await.unwrap();
+                client
+            })
+            .await
+    }
 }
 
 impl StateStore for TikvStateStore {
     type Iter<'a> = TikvStateStoreIter;
-
     define_state_store_associated_type!();
 
     fn get<'a>(&'a self, key: &'a [u8], _epoch: u64) -> Self::GetFuture<'_> {
         async move {
-            let mut txn = self.client().await.begin_optimistic().await.unwrap();
-            let res = txn.get(key.to_owned()).await.expect("key not found");
-            txn.commit().await.unwrap();
+            let req = self.raw_client().await.get(key.to_owned());
+            let res = req.await.unwrap();
             Ok(res.map(Bytes::from))
         }
     }
@@ -73,9 +79,9 @@ impl StateStore for TikvStateStore {
         limit: Option<usize>,
         _epoch: u64,
     ) -> Self::ScanFuture<'_, R, B>
-    where
-        R: RangeBounds<B> + Send,
-        B: AsRef<[u8]> + Send,
+        where
+            R: RangeBounds<B> + Send,
+            B: AsRef<[u8]> + Send,
     {
         async move {
             let mut data = vec![];
@@ -83,23 +89,14 @@ impl StateStore for TikvStateStore {
             if limit == Some(0) {
                 return Ok(vec![]);
             }
-            let scan_limit = match limit {
-                Some(x) => x as u32,
-                None => u32::MAX,
-            };
 
             let range = (
                 key_range.start_bound().map(|b| b.as_ref().to_owned()),
                 key_range.end_bound().map(|b| b.as_ref().to_owned()),
             );
 
-            let mut txn = self.client().await.begin_optimistic().await.unwrap();
-            let res: Vec<KvPair> = txn
-                .scan(BoundRange::from(range), scan_limit)
-                .await
-                .unwrap()
-                .collect();
-            txn.commit().await.unwrap();
+            let req = self.raw_client().await.scan(BoundRange::from(range), 10240);
+            let res = req.await.unwrap();
 
             for tikv_client::KvPair(key, value) in res {
                 let key = Bytes::copy_from_slice(key.as_ref().into());
@@ -122,9 +119,9 @@ impl StateStore for TikvStateStore {
         _limit: Option<usize>,
         _epoch: u64,
     ) -> Self::ReverseScanFuture<'_, R, B>
-    where
-        R: RangeBounds<B> + Send,
-        B: AsRef<[u8]> + Send,
+        where
+            R: RangeBounds<B> + Send,
+            B: AsRef<[u8]> + Send,
     {
         async move { unimplemented!() }
     }
@@ -135,26 +132,26 @@ impl StateStore for TikvStateStore {
         _epoch: u64,
     ) -> Self::IngestBatchFuture<'_> {
         async move {
-            let mut txn = self.client().await.begin_optimistic().await.unwrap();
+            let mut size = 0 as usize;
+            let mut batch_put: Vec<KvPair> = Vec::new();
+            let mut batch_delete: Vec<Key> = Vec::new();
             for (key, value) in kv_pairs {
-                let value = value.user_value();
+                size += key.len() + value.size();
+                let value = value.user_value;
                 match value {
                     Some(value) => {
-                        txn.put(tikv_client::Key::from(key.to_vec()), value.to_vec())
-                            .await
-                            .map_err(anyhow::Error::new)
-                            .to_rw_result()?;
+                        batch_put.push(KvPair::new(tikv_client::Key::from(key.to_vec()), value.to_vec()));
                     }
                     None => {
-                        txn.delete(tikv_client::Key::from(key.to_vec()))
-                            .await
-                            .map_err(anyhow::Error::new)
-                            .to_rw_result()?;
+                        batch_delete.push(tikv_client::Key::from(key.to_vec()));
                     }
                 }
             }
-            txn.commit().await.unwrap();
-            Ok(())
+            let req = self.raw_client().await.batch_put(batch_put);
+            req.await.unwrap();
+            let req = self.raw_client().await.batch_delete(batch_delete);
+            req.await.unwrap();
+            Ok(size as u64)
         }
     }
 
@@ -167,9 +164,9 @@ impl StateStore for TikvStateStore {
     }
 
     fn iter<R, B>(&self, key_range: R, _epoch: u64) -> Self::IterFuture<'_, R, B>
-    where
-        R: RangeBounds<B> + Send,
-        B: AsRef<[u8]> + Send,
+        where
+            R: RangeBounds<B> + Send,
+            B: AsRef<[u8]> + Send,
     {
         async move {
             let range = (
@@ -181,19 +178,19 @@ impl StateStore for TikvStateStore {
     }
 
     fn reverse_iter<R, B>(&self, _key_range: R, _epoch: u64) -> Self::ReverseIterFuture<'_, R, B>
-    where
-        R: RangeBounds<B> + Send,
-        B: AsRef<[u8]> + Send,
+        where
+            R: RangeBounds<B> + Send,
+            B: AsRef<[u8]> + Send,
     {
         async move { unimplemented!() }
     }
 
     fn wait_epoch(&self, _epoch: u64) -> Self::WaitEpochFuture<'_> {
-        async move { unimplemented!() }
+        async move { Ok(()) }
     }
 
     fn sync(&self, _epoch: Option<u64>) -> Self::SyncFuture<'_> {
-        async move { unimplemented!() }
+        async move { Ok(()) }
     }
 }
 
@@ -217,9 +214,7 @@ impl TikvStateStoreIter {
 
 impl StateStoreIter for TikvStateStoreIter {
     type Item = (Bytes, Bytes);
-
-    type NextFuture<'a> =
-        impl Future<Output = crate::error::StorageResult<Option<Self::Item>>> + Send;
+    type NextFuture<'a> = impl Future<Output = crate::error::StorageResult<Option<Self::Item>>> + Send;
 
     fn next(&mut self) -> Self::NextFuture<'_> {
         async move {
@@ -233,7 +228,7 @@ impl StateStoreIter for TikvStateStoreIter {
                             Bytes::copy_from_slice(
                                 self.kv_pair_buffer.last().unwrap().0.as_ref().into(),
                             )
-                            .to_vec(),
+                                .to_vec(),
                         ),
                         self.key_range.1.clone(),
                     )
@@ -261,9 +256,9 @@ impl StateStoreIter for TikvStateStoreIter {
 mod tests {
 
     use bytes::Bytes;
-    use risingwave_hummock_sdk::key::next_key;
 
     use super::{TikvStateStore, *};
+    use crate::hummock::key::next_key;
     use crate::StateStore;
 
     #[tokio::test]

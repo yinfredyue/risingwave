@@ -43,15 +43,15 @@ risingwave_common = { path = "../common" }
 risingwave_hummock_sdk = { path = "../storage/hummock_sdk" }
 risingwave_pb = { path = "../prost" }
 risingwave_rpc_client = { path = "../rpc_client" }
-# rocksdb = { git = "https://github.com/tikv/rust-rocksdb.git", rev = "fa83ff19", features = [
-#     "encryption",
-#     "static_libcpp",
-# ], optional = true }
+ rocksdb = { git = "https://github.com/tikv/rust-rocksdb.git", rev = "fa83ff19", features = [
+     "encryption",
+     "static_libcpp",
+ ], optional = true }
 serde = { version = "1", features = ["derive"] }
 smallvec = "1"
 spin = "0.5.2"
 thiserror = "1"
-# tikv-client = { git = "https://github.com/tikv/client-rust", rev = "5714b2", optional = true }
+tikv-client = { git = "https://github.com/tikv/client-rust", rev = "5714b2", optional = true }
 tokio = { version = "1", features = [
     "fs",
     "rt",
@@ -79,8 +79,8 @@ risingwave_meta = { path = "../meta", features = ["test"] }
 uuid = { version = "0.8", features = ["v4"] }
 
 [features]
-# rocksdb-local = ["rocksdb"]
-# tikv = ["tikv-client"]
+rocksdb-local = ["rocksdb"]
+tikv = ["tikv-client"]
 failpoints = ["fail/failpoints"]
 
 [[bench]]
