@@ -28,10 +28,10 @@ use tower::make::Shared;
 use tower::ServiceBuilder;
 use tower_http::add_extension::AddExtensionLayer;
 
-pub const BARRIER_BUCKETS: &[f64; 36] = &[
+pub const BARRIER_BUCKETS: &[f64; 41] = &[
     0.000005, 0.00001, 0.000025, 0.00005, 0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01,
     0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6,
-    2.7, 2.8, 2.9, 3.0, 3.5, 4.0, 5.0,
+    2.7, 2.8, 2.9, 3.0, 3.5, 4.0, 5.0, 10.0, 20.0, 30.0, 50.0, 100.0,
 ];
 pub struct MetaMetrics {
     registry: Registry,
