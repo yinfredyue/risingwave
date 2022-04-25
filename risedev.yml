@@ -22,12 +22,12 @@ risedev:
     - use: compute-node
       port: 5687
       exporter-port: 1222
-    #- use: compute-node
-      #port: 5688
-      #exporter-port: 1223
-    #- use: compute-node
-      #port: 5689
-      #exporter-port: 1224
+    - use: compute-node
+      port: 5688
+      exporter-port: 1223
+    - use: compute-node
+      port: 5689
+      exporter-port: 1224
     - use: frontend
 
     # If you want to enable metrics, uncomment those two lines.
@@ -56,6 +56,16 @@ risedev:
   dev-compute-node:
     - use: meta-node
     - use: compute-node
+      port: 5687
+      exporter-port: 1222
+      user-managed: true
+    - use: compute-node
+      port: 5688
+      exporter-port: 1223
+      user-managed: true
+    - use: compute-node
+      port: 5689
+      exporter-port: 1224
       user-managed: true
     - use: frontend
     - use: prometheus
