@@ -100,14 +100,14 @@ where
             // checkpoint, used as init barrier to initialize all executors.
             let command_ctx = CommandContext::new(
                 self.fragment_manager.clone(),
-                self.env.stream_clients_ref(),
+                self.env.read().await.stream_clients_ref(),
                 &info,
                 &prev_epoch,
                 &new_epoch,
                 Command::checkpoint(),
             );
 
-            match self.inject_barrier(&command_ctx).await {
+            match GlobalBarrierManager::inject_barrier(self.env.clone(),&command_ctx).await {
                 Ok(response) => {
                     if let Err(err) = command_ctx.post_collect().await {
                         error!("post_collect failed: {}", err);
@@ -162,7 +162,7 @@ where
                 sources: sources.clone(),
             };
             async move {
-                let client = &self.env.stream_clients().get(node).await?;
+                let client = &self.env.read().await.stream_clients().get(node).await?;
                 client
                     .to_owned()
                     .sync_sources(request)
@@ -201,7 +201,7 @@ where
         let node_actors = self.fragment_manager.all_node_actors(false).await;
         for (node_id, actors) in &info.actor_map {
             let node = info.node_map.get(node_id).unwrap();
-            let client = self.env.stream_clients().get(node).await?;
+            let client = self.env.read().await.stream_clients().get(node).await?;
 
             client
                 .to_owned()
@@ -231,7 +231,7 @@ where
     async fn build_actors(&self, info: &BarrierActorInfo) -> Result<()> {
         for (node_id, actors) in &info.actor_map {
             let node = info.node_map.get(node_id).unwrap();
-            let client = self.env.stream_clients().get(node).await?;
+            let client = self.env.read().await.stream_clients().get(node).await?;
 
             let request_id = Uuid::new_v4().to_string();
             tracing::debug!(request_id = request_id.as_str(), actors = ?actors, "build actors");
@@ -260,7 +260,7 @@ where
 
             async move {
                 tokio_retry::Retry::spawn(retry_strategy, || async {
-                    let client = self.env.stream_clients().get(worker_node).await?;
+                    let client = self.env.read().await.stream_clients().get(worker_node).await?;
                     debug!("force stop actors: {}", worker_node.id);
                     client
                         .to_owned()
