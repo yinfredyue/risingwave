@@ -105,7 +105,7 @@ where
     (join_handle, shutdown_tx)
 }
 
-const COMPACT_TRIGGER_INTERVAL: Duration = Duration::from_secs(10);
+const COMPACT_TRIGGER_INTERVAL: Duration = Duration::from_secs(1);
 /// Starts a worker to conditionally trigger compaction.
 pub fn start_compaction_trigger<S>(
     hummock_manager: HummockManagerRef<S>,
