@@ -220,7 +220,7 @@ mod default {
 
     pub fn block_cache_capacity() -> usize {
         // 256 MB
-        268435456
+        4000
     }
 
     pub fn meta_cache_capacity() -> usize {
