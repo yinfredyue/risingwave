@@ -249,18 +249,17 @@ where
                     tracing::info!("Barrier manager is shutting down");
                     return;
                 }
-                // there's barrier scheduled.
-                _ = self.scheduled_barriers.wait_one() => {}
-                // Wait for the minimal interval,
-                _ = min_interval.tick() => {},
                 result = rx.recv() =>{
                     match result{
                         Some(scanneruse::Ok1(new_epoch,actors_to_finish,notifiers,responses)) => {
                             unfinished.add(new_epoch.0, actors_to_finish, notifiers);
+
                             for finished in responses.into_iter().flat_map(|r| r.finished_create_mviews) {
                                 unfinished.finish_actors(finished.epoch, once(finished.actor_id));
                             }
+
                         state.prev_epoch = new_epoch;
+
                         }
                         Some(scanneruse::Err1(command,e)) => {
                             if self.enable_recovery {
@@ -282,6 +281,10 @@ where
                     }
                     state.update(self.env.read().await.meta_store()).await.unwrap();
                 }
+                // there's barrier scheduled.
+                _ = self.scheduled_barriers.wait_one() => {}
+                // Wait for the minimal interval,
+                _ = min_interval.tick() => {}
             }
             // let envconnet = self.env.clone();
             // Get a barrier to send.
@@ -302,10 +305,10 @@ where
             let envconnet = self.env.clone();
             let fragment_manager = self.fragment_manager.clone();
             let metrics = self.metrics.clone();
-            
             let txcom = tx.clone();
             let heap = self.epochheap.clone();
             let hummock_manager = self.hummock_manager.clone();
+
             tokio::spawn(async move {
                 let env = envconnet.read().await;
                 let command_ctx = CommandContext::new(
@@ -318,17 +321,15 @@ where
                 );
                 let mut notifiers = notifiers;
                 notifiers.iter_mut().for_each(Notifier::notify_to_send);
-                
                 let result = GlobalBarrierManager::run_inner(envconnet.clone(),metrics,&command_ctx,heap,hummock_manager).await;
                 match result{
                     Ok(responses)=>{
-                    //Notify about collected first.
+                        //Notify about collected first.
                         notifiers.iter_mut().for_each(Notifier::notify_collected);
                         // Then try to finish the barrier for Create MVs.
                         let actors_to_finish = command_ctx.actors_to_finish();
                         txcom.send(scanneruse::Ok1(new_epoch,actors_to_finish,notifiers,responses)).unwrap();
 
-                        
                         // unfinished.add(new_epoch.0, actors_to_finish, notifiers);
 
                         // for finished in responses.into_iter().flat_map(|r| r.finished_create_mviews) {
@@ -360,7 +361,6 @@ where
                 }
                 // let re = result?;
             });
-            rx.recv().await;
 
             // let command_ctx = CommandContext::new(
             //     self.fragment_manager.clone(),
@@ -441,13 +441,11 @@ where
                     hummock_manager
                         .commit_epoch(command_context.prev_epoch.0)
                         .await?;
-                    
                 }
                 Err(_) => {
                     hummock_manager
                         .abort_epoch(command_context.prev_epoch.0)
                         .await?;
-                    
                 }
             };
             heap.write().await.pop();
