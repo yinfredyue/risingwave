@@ -223,16 +223,14 @@ impl LocalBarrierManager {
             #[cfg(test)]
             BarrierState::Local => {}
 
-            BarrierState::Managed(managed_state) => {
-                managed_state
-                    .finished_create_mviews_map
-                    .get_mut(&ddl_epoch)
-                    .unwrap()
-                    .push(FinishedCreateMview {
-                        epoch: ddl_epoch,
-                        actor_id,
-                    })
-            }
+            BarrierState::Managed(managed_state) => managed_state
+                .finished_create_mviews_map
+                .get_mut(&ddl_epoch)
+                .unwrap()
+                .push(FinishedCreateMview {
+                    epoch: ddl_epoch,
+                    actor_id,
+                }),
         }
     }
 }

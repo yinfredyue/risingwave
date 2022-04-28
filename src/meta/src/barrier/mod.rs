@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::VecDeque;
+use std::collections::{BinaryHeap, HashSet, VecDeque};
 use std::iter::once;
 use std::sync::Arc;
 use std::time::Duration;
@@ -40,13 +40,10 @@ use self::notifier::{Notifier, UnfinishedNotifiers};
 use crate::cluster::{ClusterManagerRef, META_NODE_ID};
 use crate::hummock::HummockManagerRef;
 use crate::manager::{CatalogManagerRef, MetaSrvEnv};
-use crate::model::BarrierManagerState;
+use crate::model::{ActorId, BarrierManagerState};
 use crate::rpc::metrics::MetaMetrics;
 use crate::storage::MetaStore;
 use crate::stream::FragmentManagerRef;
-use std::collections:: HashSet;
-use crate::model::ActorId;
-use std::collections::BinaryHeap;
 
 mod command;
 mod info;
@@ -57,8 +54,13 @@ type Scheduled = (Command, SmallVec<[Notifier; 1]>);
 
 #[derive(Debug)]
 enum BarrierSendResult {
-    Ok(Epoch,HashSet<ActorId>,SmallVec<[Notifier;1]>,Vec<InjectBarrierResponse>),
-    Err(Command,RwError),
+    Ok(
+        Epoch,
+        HashSet<ActorId>,
+        SmallVec<[Notifier; 1]>,
+        Vec<InjectBarrierResponse>,
+    ),
+    Err(Command, RwError),
 }
 
 /// A buffer or queue for scheduling barriers.
@@ -169,7 +171,6 @@ pub struct GlobalBarrierManager<S: MetaStore> {
     env: Arc<RwLock<MetaSrvEnv<S>>>,
 
     epoch_heap: Arc<RwLock<BinaryHeap<u64>>>,
-
 }
 
 impl<S> GlobalBarrierManager<S>
@@ -200,7 +201,7 @@ where
             hummock_manager,
             metrics,
             env: Arc::new(RwLock::new(env)),
-            epoch_heap: Arc::new(RwLock::new(BinaryHeap::new()))
+            epoch_heap: Arc::new(RwLock::new(BinaryHeap::new())),
         }
     }
 
@@ -320,21 +321,37 @@ where
                 );
                 let mut notifiers = notifiers;
                 notifiers.iter_mut().for_each(Notifier::notify_to_send);
-                let result = GlobalBarrierManager::run_inner(envconnet.clone(),metrics,&command_ctx,heap,hummock_manager).await;
-                match result{
-                    Ok(responses)=>{
-                        //Notify about collected first.
+                let result = GlobalBarrierManager::run_inner(
+                    envconnet.clone(),
+                    metrics,
+                    &command_ctx,
+                    heap,
+                    hummock_manager,
+                )
+                .await;
+                match result {
+                    Ok(responses) => {
+                        // Notify about collected first.
                         notifiers.iter_mut().for_each(Notifier::notify_collected);
                         // Then try to finish the barrier for Create MVs.
                         let actors_to_finish = command_ctx.actors_to_finish();
-                        barrier_send_tx_clone.send(BarrierSendResult::Ok(new_epoch, actors_to_finish, notifiers, responses)).unwrap();
+                        barrier_send_tx_clone
+                            .send(BarrierSendResult::Ok(
+                                new_epoch,
+                                actors_to_finish,
+                                notifiers,
+                                responses,
+                            ))
+                            .unwrap();
                     }
-                    Err(e)=>{
+                    Err(e) => {
                         notifiers
-                        .into_iter()
-                        .for_each(|notifier| notifier.notify_collection_failed(e.clone()));
+                            .into_iter()
+                            .for_each(|notifier| notifier.notify_collection_failed(e.clone()));
 
-                        barrier_send_tx_clone.send(BarrierSendResult::Err(command, e)).unwrap();
+                        barrier_send_tx_clone
+                            .send(BarrierSendResult::Err(command, e))
+                            .unwrap();
                     }
                 }
             });
@@ -347,23 +364,22 @@ where
         metrics: Arc<MetaMetrics>,
         command_context: &CommandContext<'a, S>,
         heap: Arc<RwLock<BinaryHeap<u64>>>,
-        hummock_manager: HummockManagerRef<S>
-    )->Result<Vec<InjectBarrierResponse>> {
+        hummock_manager: HummockManagerRef<S>,
+    ) -> Result<Vec<InjectBarrierResponse>> {
         let timer = metrics.barrier_latency.start_timer();
         heap.write().await.push(command_context.prev_epoch.0);
 
-        //Wait for all barriers collected
-        let result = GlobalBarrierManager::inject_barrier(env,command_context).await;
-        //Commit this epoch to Hummock
+        // Wait for all barriers collected
+        let result = GlobalBarrierManager::inject_barrier(env, command_context).await;
+        // Commit this epoch to Hummock
         if command_context.prev_epoch.0 != INVALID_EPOCH {
-
             match result {
                 Ok(_) => {
                     // We must ensure all epochs are committed in ascending order, because
                     // the storage engine will query from new to old in the order in which
                     // the L0 layer files are generated. see https://github.com/singularity-data/risingwave/issues/1251
-                    loop{
-                        if heap.read().await.peek() == Some(&command_context.prev_epoch.0){
+                    loop {
+                        if heap.read().await.peek() == Some(&command_context.prev_epoch.0) {
                             break;
                         }
                     }

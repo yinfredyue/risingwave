@@ -107,7 +107,7 @@ where
                 Command::checkpoint(),
             );
 
-            match GlobalBarrierManager::inject_barrier(self.env.clone(),&command_ctx).await {
+            match GlobalBarrierManager::inject_barrier(self.env.clone(), &command_ctx).await {
                 Ok(response) => {
                     if let Err(err) = command_ctx.post_collect().await {
                         error!("post_collect failed: {}", err);
@@ -260,7 +260,13 @@ where
 
             async move {
                 tokio_retry::Retry::spawn(retry_strategy, || async {
-                    let client = self.env.read().await.stream_clients().get(worker_node).await?;
+                    let client = self
+                        .env
+                        .read()
+                        .await
+                        .stream_clients()
+                        .get(worker_node)
+                        .await?;
                     debug!("force stop actors: {}", worker_node.id);
                     client
                         .to_owned()

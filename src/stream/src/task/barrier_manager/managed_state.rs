@@ -45,9 +45,8 @@ enum ManagedBarrierStateInner {
 
 #[derive(Debug)]
 pub(super) struct ManagedBarrierState {
-    map: HashMap<u64,ManagedBarrierStateInner>,
-    pub finished_create_mviews_map: HashMap<u64,Vec<FinishedCreateMview>>,
-
+    map: HashMap<u64, ManagedBarrierStateInner>,
+    pub finished_create_mviews_map: HashMap<u64, Vec<FinishedCreateMview>>,
 }
 
 impl ManagedBarrierState {
@@ -58,7 +57,7 @@ impl ManagedBarrierState {
             //     // TODO: specify last epoch
             //     last_epoch: None,
             // },
-             //finished_create_mviews: Default::default(),
+            // finished_create_mviews: Default::default(),
             map: HashMap::new(),
             finished_create_mviews_map: HashMap::new(),
         }
@@ -69,20 +68,23 @@ impl ManagedBarrierState {
     // }
 
     /// Notify if we have collected barriers from all actor ids. The state must be `Issued`.
-    fn may_notify(&mut self,curr_epoch: u64) {
+    fn may_notify(&mut self, curr_epoch: u64) {
         let to_notify = match self.map.get(&curr_epoch) {
-            Some(ManagedBarrierStateInner::Issued{
-                 remaining_actors,
-                 ..
-            })=>(remaining_actors.is_empty()),
+            Some(ManagedBarrierStateInner::Issued {
+                remaining_actors, ..
+            }) => (remaining_actors.is_empty()),
             _ => unreachable!(),
         };
 
         if to_notify {
             let inner = self.map.remove(&curr_epoch);
-            let finished_create_mviews =
-                if let Some(finished_create_mviews) = self.finished_create_mviews_map.remove(&curr_epoch) { finished_create_mviews }
-                else { panic!("not find finished_create_mviews") };
+            let finished_create_mviews = if let Some(finished_create_mviews) =
+                self.finished_create_mviews_map.remove(&curr_epoch)
+            {
+                finished_create_mviews
+            } else {
+                panic!("not find finished_create_mviews")
+            };
             match inner {
                 Some(ManagedBarrierStateInner::Issued {
                     collect_notifier, ..
@@ -92,7 +94,10 @@ impl ManagedBarrierState {
                         finished_create_mviews,
                     };
                     if collect_notifier.send(result).is_err() {
-                        warn!("failed to notify barrier collection with epoch {}", curr_epoch)
+                        warn!(
+                            "failed to notify barrier collection with epoch {}",
+                            curr_epoch
+                        )
                     }
                 }
                 _ => unreachable!(),
@@ -110,26 +115,27 @@ impl ManagedBarrierState {
             self
         );
 
-        match self.map.get_mut(&barrier.epoch.curr){
-            Some(ManagedBarrierStateInner::Stashed {
-                     collected_actors,
-            })=>{
+        match self.map.get_mut(&barrier.epoch.curr) {
+            Some(ManagedBarrierStateInner::Stashed { collected_actors }) => {
                 let new = collected_actors.insert(actor_id);
                 assert!(new);
             }
             Some(ManagedBarrierStateInner::Issued {
-                remaining_actors,
-                ..
-            })=>{
+                remaining_actors, ..
+            }) => {
                 let exist = remaining_actors.remove(&actor_id);
                 assert!(exist);
                 self.may_notify(barrier.epoch.curr);
             }
-            None =>{
-                self.map.insert(barrier.epoch.curr,ManagedBarrierStateInner::Stashed {
-                    collected_actors: once(actor_id).collect(),
-                });
-                self.finished_create_mviews_map.insert(barrier.epoch.curr,Default::default());
+            None => {
+                self.map.insert(
+                    barrier.epoch.curr,
+                    ManagedBarrierStateInner::Stashed {
+                        collected_actors: once(actor_id).collect(),
+                    },
+                );
+                self.finished_create_mviews_map
+                    .insert(barrier.epoch.curr, Default::default());
             }
         }
     }
@@ -142,34 +148,40 @@ impl ManagedBarrierState {
         actor_ids_to_collect: impl IntoIterator<Item = ActorId>,
         collect_notifier: oneshot::Sender<CollectResult>,
     ) {
-        match self.map.get(&barrier.epoch.curr){
-            Some(ManagedBarrierStateInner::Stashed {
-                collected_actors,
-            })=>{
+        match self.map.get(&barrier.epoch.curr) {
+            Some(ManagedBarrierStateInner::Stashed { collected_actors }) => {
                 let remaining_actors = actor_ids_to_collect
                     .into_iter()
                     .filter(|a| !collected_actors.contains(a))
                     .collect();
-                self.map.insert(barrier.epoch.curr,ManagedBarrierStateInner::Issued {
+                self.map.insert(
+                    barrier.epoch.curr,
+                    ManagedBarrierStateInner::Issued {
                         remaining_actors,
                         collect_notifier,
-                    });
+                    },
+                );
                 self.may_notify(barrier.epoch.curr);
             }
-            Some(ManagedBarrierStateInner::Issued {
-                ..
-            })=>{
-                panic!("barrier epochs{:?} state has already been `Issued`",barrier.epoch)
+            Some(ManagedBarrierStateInner::Issued { .. }) => {
+                panic!(
+                    "barrier epochs{:?} state has already been `Issued`",
+                    barrier.epoch
+                )
             }
-            None =>{
+            None => {
                 let remaining_actors = actor_ids_to_collect.into_iter().collect();
-                self.map.insert(barrier.epoch.curr,ManagedBarrierStateInner::Issued {
-                    remaining_actors,
-                    collect_notifier,
-                });
-                self.finished_create_mviews_map.insert(barrier.epoch.curr,Default::default());
+                self.map.insert(
+                    barrier.epoch.curr,
+                    ManagedBarrierStateInner::Issued {
+                        remaining_actors,
+                        collect_notifier,
+                    },
+                );
+                self.finished_create_mviews_map
+                    .insert(barrier.epoch.curr, Default::default());
                 self.may_notify(barrier.epoch.curr);
             }
         }
-     }
+    }
 }
