@@ -17,25 +17,27 @@ use std::collections::BinaryHeap;
 use std::sync::Arc;
 use std::vec::Vec;
 
-use risingwave_common::array::{DataChunk, DataChunkRef};
+use futures_async_stream::try_stream;
+use risingwave_common::array::DataChunk;
 use risingwave_common::catalog::Schema;
 use risingwave_common::error::ErrorCode::InternalError;
-use risingwave_common::error::Result;
+use risingwave_common::error::{Result, RwError};
+use risingwave_common::util::chunk_coalesce::DEFAULT_CHUNK_BUFFER_SIZE;
 use risingwave_common::util::sort_util::{HeapElem, OrderPair};
-use risingwave_pb::plan::plan_node::NodeBody;
+use risingwave_pb::batch_plan::plan_node::NodeBody;
 
-use super::{BoxedExecutor, BoxedExecutorBuilder};
-use crate::executor::{Executor, ExecutorBuilder};
+use crate::executor::ExecutorBuilder;
+use crate::executor2::{BoxedDataChunkStream, BoxedExecutor2, BoxedExecutor2Builder, Executor2};
 
 struct TopNHeap {
     order_pairs: Arc<Vec<OrderPair>>,
     min_heap: BinaryHeap<Reverse<HeapElem>>,
-    limit: usize,
+    size: usize,
 }
 
 impl TopNHeap {
     fn insert(&mut self, elem: HeapElem) {
-        if self.min_heap.len() < self.limit {
+        if self.min_heap.len() < self.size {
             self.min_heap.push(Reverse(elem));
         } else if elem > self.min_heap.peek().unwrap().0 {
             self.min_heap.push(Reverse(elem));
@@ -43,14 +45,14 @@ impl TopNHeap {
         }
     }
 
-    pub fn fit(&mut self, chunk: DataChunkRef) {
+    pub fn fit(&mut self, chunk: DataChunk) {
         DataChunk::rechunk(&[chunk], 1)
             .unwrap()
             .into_iter()
             .for_each(|c| {
                 let elem = HeapElem {
                     order_pairs: self.order_pairs.clone(),
-                    chunk: Arc::new(c),
+                    chunk: c,
                     chunk_idx: 0usize, // useless
                     elem_idx: 0usize,
                     encoded_chunk: None,
@@ -59,7 +61,7 @@ impl TopNHeap {
             });
     }
 
-    pub fn dump(&mut self) -> Option<DataChunk> {
+    pub fn dump(&mut self, offset: usize) -> Option<DataChunk> {
         if self.min_heap.is_empty() {
             return None;
         }
@@ -69,7 +71,9 @@ impl TopNHeap {
             .map(|e| e.0.chunk)
             .collect::<Vec<_>>();
         chunks.reverse();
-        if let Ok(mut res) = DataChunk::rechunk(&chunks, self.limit) {
+
+        // Skip the first `offset` elements
+        if let Ok(mut res) = DataChunk::rechunk(&chunks[offset..], self.size - offset) {
             assert_eq!(res.len(), 1);
             Some(res.remove(0))
         } else {
@@ -78,14 +82,16 @@ impl TopNHeap {
     }
 }
 
-pub(super) struct TopNExecutor {
-    child: BoxedExecutor,
+pub struct TopNExecutor2 {
+    child: BoxedExecutor2,
     top_n_heap: TopNHeap,
     identity: String,
+    chunk_size: usize,
+    offset: usize,
 }
 
-impl BoxedExecutorBuilder for TopNExecutor {
-    fn new_boxed_executor(source: &ExecutorBuilder) -> Result<BoxedExecutor> {
+impl BoxedExecutor2Builder for TopNExecutor2 {
+    fn new_boxed_executor2(source: &ExecutorBuilder) -> Result<BoxedExecutor2> {
         ensure!(source.plan_node().get_children().len() == 1);
 
         let top_n_node =
@@ -97,65 +103,44 @@ impl BoxedExecutorBuilder for TopNExecutor {
             .map(OrderPair::from_prost)
             .collect();
         if let Some(child_plan) = source.plan_node.get_children().get(0) {
-            let child = source.clone_for_plan(child_plan).build()?;
-            return Ok(Box::new(
-                Self::new(
-                    child,
-                    order_pairs,
-                    top_n_node.get_limit() as usize,
-                    source.plan_node().get_identity().clone(),
-                )
-                .fuse(),
-            ));
+            let child = source.clone_for_plan(child_plan).build2()?;
+            return Ok(Box::new(Self::new(
+                child,
+                order_pairs,
+                top_n_node.get_limit() as usize,
+                top_n_node.get_offset() as usize,
+                source.plan_node().get_identity().clone(),
+                DEFAULT_CHUNK_BUFFER_SIZE,
+            )));
         }
         Err(InternalError("TopN must have one child".to_string()).into())
     }
 }
 
-impl TopNExecutor {
+impl TopNExecutor2 {
     fn new(
-        child: BoxedExecutor,
+        child: BoxedExecutor2,
         order_pairs: Vec<OrderPair>,
         limit: usize,
+        offset: usize,
         identity: String,
+        chunk_size: usize,
     ) -> Self {
         Self {
             top_n_heap: TopNHeap {
                 min_heap: BinaryHeap::new(),
-                limit,
+                size: limit + offset,
                 order_pairs: Arc::new(order_pairs),
             },
             child,
             identity,
+            chunk_size,
+            offset,
         }
     }
 }
 
-#[async_trait::async_trait]
-impl Executor for TopNExecutor {
-    async fn open(&mut self) -> Result<()> {
-        self.child.open().await?;
-
-        while let Some(chunk) = self.child.next().await? {
-            self.top_n_heap.fit(Arc::new(chunk));
-        }
-        self.child.close().await?;
-
-        Ok(())
-    }
-
-    async fn next(&mut self) -> Result<Option<DataChunk>> {
-        if let Some(chunk) = self.top_n_heap.dump() {
-            Ok(Some(chunk))
-        } else {
-            Ok(None)
-        }
-    }
-
-    async fn close(&mut self) -> Result<()> {
-        Ok(())
-    }
-
+impl Executor2 for TopNExecutor2 {
     fn schema(&self) -> &Schema {
         self.child.schema()
     }
@@ -163,14 +148,35 @@ impl Executor for TopNExecutor {
     fn identity(&self) -> &str {
         &self.identity
     }
+
+    fn execute(self: Box<Self>) -> BoxedDataChunkStream {
+        self.do_execute()
+    }
+}
+
+impl TopNExecutor2 {
+    #[try_stream(boxed, ok = DataChunk, error = RwError)]
+    async fn do_execute(mut self: Box<Self>) {
+        #[for_await]
+        for data_chunk in self.child.execute() {
+            let data_chunk = data_chunk?;
+            self.top_n_heap.fit(data_chunk);
+        }
+
+        if let Some(data_chunk) = self.top_n_heap.dump(self.offset) {
+            let batch_chunks = DataChunk::rechunk(&[data_chunk], DEFAULT_CHUNK_BUFFER_SIZE)?;
+            for ret_chunk in batch_chunks {
+                yield ret_chunk
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use risingwave_common::array::column::Column;
-    use risingwave_common::array::{Array, DataChunk, PrimitiveArray};
+    use futures::stream::StreamExt;
+    use itertools::Itertools;
+    use risingwave_common::array::{Array, DataChunk, I32Array};
     use risingwave_common::catalog::{Field, Schema};
     use risingwave_common::types::DataType;
     use risingwave_common::util::sort_util::OrderType;
@@ -178,15 +184,10 @@ mod tests {
     use super::*;
     use crate::executor::test_utils::MockExecutor;
 
-    fn create_column(vec: &[Option<i32>]) -> Result<Column> {
-        let array = PrimitiveArray::from_slice(vec).map(|x| Arc::new(x.into()))?;
-        Ok(Column::new(array))
-    }
-
     #[tokio::test]
     async fn test_simple_top_n_executor() {
-        let col0 = create_column(&[Some(1), Some(2), Some(3)]).unwrap();
-        let col1 = create_column(&[Some(3), Some(2), Some(1)]).unwrap();
+        let col0 = column_nonnull! { I32Array, [1, 2, 3, 4, 5] };
+        let col1 = column_nonnull! { I32Array, [5, 4, 3, 2, 1] };
         let data_chunk = DataChunk::builder().columns(vec![col0, col1]).build();
         let schema = Schema {
             fields: vec![
@@ -206,26 +207,32 @@ mod tests {
                 order_type: OrderType::Ascending,
             },
         ];
-        let mut top_n_executor = TopNExecutor::new(
+        let top_n_executor = Box::new(TopNExecutor2::new(
             Box::new(mock_executor),
             order_pairs,
-            2usize,
-            "TopNExecutor".to_string(),
-        );
+            3,
+            1,
+            "TopNExecutor2".to_string(),
+            DEFAULT_CHUNK_BUFFER_SIZE,
+        ));
         let fields = &top_n_executor.schema().fields;
         assert_eq!(fields[0].data_type, DataType::Int32);
         assert_eq!(fields[1].data_type, DataType::Int32);
-        top_n_executor.open().await.unwrap();
-        let res = top_n_executor.next().await.unwrap();
+
+        let mut stream = top_n_executor.execute();
+        let res = stream.next().await;
+
         assert!(matches!(res, Some(_)));
         if let Some(res) = res {
-            assert_eq!(res.cardinality(), 2);
-            let col0 = res.column_at(0);
-            assert_eq!(col0.array().as_int32().value_at(0), Some(3));
-            assert_eq!(col0.array().as_int32().value_at(1), Some(2));
+            let res = res.unwrap();
+            assert_eq!(res.cardinality(), 3);
+            assert_eq!(
+                res.column_at(0).array().as_int32().iter().collect_vec(),
+                vec![Some(4), Some(3), Some(2)]
+            );
         }
-        let res = top_n_executor.next().await.unwrap();
+
+        let res = stream.next().await;
         assert!(matches!(res, None));
-        top_n_executor.close().await.unwrap();
     }
 }

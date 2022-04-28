@@ -431,9 +431,9 @@ mod tests {
     use futures::StreamExt;
     use itertools::Itertools;
     use risingwave_common::array::data_chunk_iter::Row;
-    use risingwave_common::array::{I64Array, Op, StreamChunk};
+    use risingwave_common::array::stream_chunk::StreamChunkTestExt;
+    use risingwave_common::array::{Op, StreamChunk};
     use risingwave_common::catalog::{Field, Schema};
-    use risingwave_common::column_nonnull;
     use risingwave_common::error::Result;
     use risingwave_common::hash::{calc_hash_key_kind, HashKey, HashKeyDispatcher};
     use risingwave_common::types::DataType;
@@ -443,7 +443,6 @@ mod tests {
     use crate::executor_v2::aggregation::{AggArgs, AggCall};
     use crate::executor_v2::test_utils::*;
     use crate::executor_v2::{Executor, HashAggExecutor, Message, PkIndices};
-    use crate::row_nonnull;
 
     struct HashAggExecutorDispatcher<S: StateStore>(PhantomData<S>);
 
@@ -514,25 +513,25 @@ mod tests {
     }
 
     async fn test_local_hash_aggregation_count(keyspace: Keyspace<impl StateStore>) {
-        let chunk1 = StreamChunk::new(
-            vec![Op::Insert, Op::Insert, Op::Insert],
-            vec![column_nonnull! { I64Array, [1, 2, 2] }],
-            None,
-        );
-        let chunk2 = StreamChunk::new(
-            vec![Op::Delete, Op::Delete, Op::Delete],
-            vec![column_nonnull! { I64Array, [1, 2, 2] }],
-            Some((vec![true, false, true]).try_into().unwrap()),
-        );
         let schema = Schema {
             fields: vec![Field::unnamed(DataType::Int64)],
         };
-        let mut source = MockSource::new(schema, PkIndices::new());
-        source.push_barrier(1, false);
-        source.push_chunks([chunk1].into_iter());
-        source.push_barrier(2, false);
-        source.push_chunks([chunk2].into_iter());
-        source.push_barrier(3, false);
+        let (mut tx, source) = MockSource::channel(schema, PkIndices::new());
+        tx.push_barrier(1, false);
+        tx.push_chunk(StreamChunk::from_pretty(
+            " I
+            + 1
+            + 2
+            + 2",
+        ));
+        tx.push_barrier(2, false);
+        tx.push_chunk(StreamChunk::from_pretty(
+            " I
+            - 1
+            - 2 D
+            - 2",
+        ));
+        tx.push_barrier(3, false);
 
         // This is local hash aggregation, so we add another row count state
         let keys = vec![0];
@@ -562,24 +561,15 @@ mod tests {
         hash_agg.next().await.unwrap().unwrap();
         // Consume stream chunk
         let msg = hash_agg.next().await.unwrap().unwrap();
-        if let Message::Chunk(chunk) = msg {
-            let (data_chunk, ops) = chunk.into_parts();
-
-            assert_eq!(ops, vec![Op::Insert, Op::Insert]);
-
-            let rows = data_chunk.rows().map(Row::from).sorted().collect_vec();
-            let expected_rows = [
-                row_nonnull![1i64, 1i64, 1i64, 1i64],
-                row_nonnull![2i64, 2i64, 2i64, 2i64],
-            ]
-            .into_iter()
-            .sorted()
-            .collect_vec();
-
-            assert_eq!(rows, expected_rows);
-        } else {
-            unreachable!("unexpected message {:?}", msg);
-        }
+        assert_eq!(
+            msg.into_chunk().unwrap().sorted_rows(),
+            StreamChunk::from_pretty(
+                " I I I I
+                + 1 1 1 1
+                + 2 2 2 2"
+            )
+            .sorted_rows(),
+        );
 
         assert_matches!(
             hash_agg.next().await.unwrap().unwrap(),
@@ -587,47 +577,19 @@ mod tests {
         );
 
         let msg = hash_agg.next().await.unwrap().unwrap();
-        if let Message::Chunk(chunk) = msg {
-            let (data_chunk, ops) = chunk.into_parts();
-            let rows = ops
-                .into_iter()
-                .zip_eq(data_chunk.rows().map(Row::from))
-                .sorted()
-                .collect_vec();
-            let expected_rows = [
-                (Op::Delete, row_nonnull![1i64, 1i64, 1i64, 1i64]),
-                (Op::UpdateDelete, row_nonnull![2i64, 2i64, 2i64, 2i64]),
-                (Op::UpdateInsert, row_nonnull![2i64, 1i64, 1i64, 1i64]),
-            ]
-            .into_iter()
-            .sorted()
-            .collect_vec();
-
-            assert_eq!(rows, expected_rows);
-        } else {
-            unreachable!("unexpected message {:?}", msg);
-        }
+        assert_eq!(
+            msg.into_chunk().unwrap().sorted_rows(),
+            StreamChunk::from_pretty(
+                "  I I I I
+                -  1 1 1 1
+                U- 2 2 2 2
+                U+ 2 1 1 1"
+            )
+            .sorted_rows(),
+        );
     }
 
     async fn test_global_hash_aggregation_count(keyspace: Keyspace<impl StateStore>) {
-        let chunk1 = StreamChunk::new(
-            vec![Op::Insert, Op::Insert, Op::Insert],
-            vec![
-                column_nonnull! { I64Array, [1, 2, 2] },
-                column_nonnull! { I64Array, [1, 2, 2] },
-                column_nonnull! { I64Array, [1, 2, 2] },
-            ],
-            None,
-        );
-        let chunk2 = StreamChunk::new(
-            vec![Op::Delete, Op::Delete, Op::Delete, Op::Insert],
-            vec![
-                column_nonnull! { I64Array, [1, 2, 2, 3] },
-                column_nonnull! { I64Array, [1, 2, 2, 3] },
-                column_nonnull! { I64Array, [1, 2, 2, 3] },
-            ],
-            Some((vec![true, false, true, true]).try_into().unwrap()),
-        );
         let schema = Schema {
             fields: vec![
                 Field::unnamed(DataType::Int64),
@@ -636,12 +598,23 @@ mod tests {
             ],
         };
 
-        let mut source = MockSource::new(schema, PkIndices::new());
-        source.push_barrier(1, false);
-        source.push_chunks([chunk1].into_iter());
-        source.push_barrier(2, false);
-        source.push_chunks([chunk2].into_iter());
-        source.push_barrier(3, false);
+        let (mut tx, source) = MockSource::channel(schema, PkIndices::new());
+        tx.push_barrier(1, false);
+        tx.push_chunk(StreamChunk::from_pretty(
+            " I I I
+            + 1 1 1
+            + 2 2 2
+            + 2 2 2",
+        ));
+        tx.push_barrier(2, false);
+        tx.push_chunk(StreamChunk::from_pretty(
+            " I I I
+            - 1 1 1
+            - 2 2 2 D
+            - 2 2 2
+            + 3 3 3",
+        ));
+        tx.push_barrier(3, false);
 
         // This is local hash aggregation, so we add another sum state
         let key_indices = vec![0];
@@ -677,95 +650,63 @@ mod tests {
         // Consume the init barrier
         hash_agg.next().await.unwrap().unwrap();
         // Consume stream chunk
-        if let Message::Chunk(chunk) = hash_agg.next().await.unwrap().unwrap() {
-            let (data_chunk, ops) = chunk.into_parts();
-            let rows = ops
-                .into_iter()
-                .zip_eq(data_chunk.rows().map(Row::from))
-                .sorted()
-                .collect_vec();
-
-            let expected_rows = [
-                (Op::Insert, row_nonnull![1i64, 1i64, 1i64, 1i64]),
-                (Op::Insert, row_nonnull![2i64, 2i64, 4i64, 4i64]),
-            ]
-            .into_iter()
-            .sorted()
-            .collect_vec();
-
-            assert_eq!(rows, expected_rows);
-        } else {
-            unreachable!();
-        }
+        let msg = hash_agg.next().await.unwrap().unwrap();
+        assert_eq!(
+            msg.into_chunk().unwrap().sorted_rows(),
+            StreamChunk::from_pretty(
+                " I I I I
+                + 1 1 1 1
+                + 2 2 4 4"
+            )
+            .sorted_rows(),
+        );
 
         assert_matches!(
             hash_agg.next().await.unwrap().unwrap(),
             Message::Barrier { .. }
         );
 
-        if let Message::Chunk(chunk) = hash_agg.next().await.unwrap().unwrap() {
-            let (data_chunk, ops) = chunk.into_parts();
-            let rows = ops
-                .into_iter()
-                .zip_eq(data_chunk.rows().map(Row::from))
-                .sorted()
-                .collect_vec();
-
-            let expected_rows = [
-                (Op::Delete, row_nonnull![1i64, 1i64, 1i64, 1i64]),
-                (Op::UpdateDelete, row_nonnull![2i64, 2i64, 4i64, 4i64]),
-                (Op::UpdateInsert, row_nonnull![2i64, 1i64, 2i64, 2i64]),
-                (Op::Insert, row_nonnull![3i64, 1i64, 3i64, 3i64]),
-            ]
-            .into_iter()
-            .sorted()
-            .collect_vec();
-
-            assert_eq!(rows, expected_rows);
-        } else {
-            unreachable!();
-        }
+        let msg = hash_agg.next().await.unwrap().unwrap();
+        assert_eq!(
+            msg.into_chunk().unwrap().sorted_rows(),
+            StreamChunk::from_pretty(
+                "  I I I I
+                -  1 1 1 1
+                U- 2 2 4 4
+                U+ 2 1 2 2
+                +  3 1 3 3"
+            )
+            .sorted_rows(),
+        );
     }
 
     async fn test_local_hash_aggregation_max(keyspace: Keyspace<impl StateStore>) {
-        let chunk1 = StreamChunk::new(
-            vec![Op::Insert; 3],
-            vec![
-                // group key column
-                column_nonnull! { I64Array, [1, 1, 2] },
-                // data column to get minimum
-                column_nonnull! { I64Array, [233, 23333, 2333] },
-                // primary key column
-                column_nonnull! { I64Array, [1001, 1002, 1003] },
-            ],
-            None,
-        );
-        let chunk2 = StreamChunk::new(
-            vec![Op::Delete; 3],
-            vec![
-                // group key column
-                column_nonnull! { I64Array, [1, 1, 2] },
-                // data column to get minimum
-                column_nonnull! { I64Array, [233, 23333, 2333] },
-                // primary key column
-                column_nonnull! { I64Array, [1001, 1002, 1003] },
-            ],
-            Some((vec![true, false, true]).try_into().unwrap()),
-        );
         let schema = Schema {
             fields: vec![
+                // group key column
                 Field::unnamed(DataType::Int64),
+                // data column to get minimum
                 Field::unnamed(DataType::Int64),
                 // primary key column
                 Field::unnamed(DataType::Int64),
             ],
         };
-        let mut source = MockSource::new(schema, vec![2]); // pk
-        source.push_barrier(1, false);
-        source.push_chunks([chunk1].into_iter());
-        source.push_barrier(2, false);
-        source.push_chunks([chunk2].into_iter());
-        source.push_barrier(3, false);
+        let (mut tx, source) = MockSource::channel(schema, vec![2]); // pk
+        tx.push_barrier(1, false);
+        tx.push_chunk(StreamChunk::from_pretty(
+            " I     I    I
+            + 1   233 1001
+            + 1 23333 1002
+            + 2  2333 1003",
+        ));
+        tx.push_barrier(2, false);
+        tx.push_chunk(StreamChunk::from_pretty(
+            " I     I    I
+            - 1   233 1001
+            - 1 23333 1002 D
+            - 2  2333 1003",
+        ));
+        tx.push_barrier(3, false);
 
         // This is local hash aggregation, so we add another row count state
         let keys = vec![0];
@@ -790,27 +731,15 @@ mod tests {
         hash_agg.next().await.unwrap().unwrap();
         // Consume stream chunk
         let msg = hash_agg.next().await.unwrap().unwrap();
-        if let Message::Chunk(chunk) = msg {
-            let (data_chunk, ops) = chunk.into_parts();
-            let rows = ops
-                .into_iter()
-                .zip_eq(data_chunk.rows().map(Row::from))
-                .sorted()
-                .collect_vec();
-
-            let expected_rows = [
-                // group key, row count, min data
-                (Op::Insert, row_nonnull![1i64, 2i64, 233i64]),
-                (Op::Insert, row_nonnull![2i64, 1i64, 2333i64]),
-            ]
-            .into_iter()
-            .sorted()
-            .collect_vec();
-
-            assert_eq!(rows, expected_rows);
-        } else {
-            unreachable!("unexpected message {:?}", msg);
-        }
+        assert_eq!(
+            msg.into_chunk().unwrap().sorted_rows(),
+            StreamChunk::from_pretty(
+                " I I    I
+                + 1 2  233
+                + 2 1 2333"
+            )
+            .sorted_rows(),
+        );
 
         assert_matches!(
             hash_agg.next().await.unwrap().unwrap(),
@@ -818,26 +747,28 @@ mod tests {
         );
 
         let msg = hash_agg.next().await.unwrap().unwrap();
-        if let Message::Chunk(chunk) = msg {
-            let (data_chunk, ops) = chunk.into_parts();
-            let rows = ops
-                .into_iter()
-                .zip_eq(data_chunk.rows().map(Row::from))
-                .sorted()
-                .collect_vec();
-            let expected_rows = [
-                // group key, row count, min data
-                (Op::Delete, row_nonnull![2i64, 1i64, 2333i64]),
-                (Op::UpdateDelete, row_nonnull![1i64, 2i64, 233i64]),
-                (Op::UpdateInsert, row_nonnull![1i64, 1i64, 23333i64]),
-            ]
-            .into_iter()
-            .sorted()
-            .collect_vec();
+        assert_eq!(
+            msg.into_chunk().unwrap().sorted_rows(),
+            StreamChunk::from_pretty(
+                "  I I     I
+                -  2 1  2333
+                U- 1 2   233
+                U+ 1 1 23333"
+            )
+            .sorted_rows(),
+        );
+    }
 
-            assert_eq!(rows, expected_rows);
-        } else {
-            unreachable!("unexpected message {:?}", msg);
+    trait SortedRows {
+        fn sorted_rows(self) -> Vec<(Op, Row)>;
+    }
+    impl SortedRows for StreamChunk {
+        fn sorted_rows(self) -> Vec<(Op, Row)> {
+            let (chunk, ops) = self.into_parts();
+            ops.into_iter()
+                .zip_eq(chunk.rows().map(Row::from))
+                .sorted()
+                .collect_vec()
         }
     }
 }

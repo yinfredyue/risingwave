@@ -17,12 +17,12 @@ use risingwave_common::array::DataChunk;
 use risingwave_common::catalog::{Field, Schema};
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_expr::expr::{build_from_prost, BoxedExpression};
-use risingwave_pb::plan::plan_node::NodeBody;
+use risingwave_pb::batch_plan::plan_node::NodeBody;
 
 use super::{BoxedExecutor, BoxedExecutorBuilder};
 use crate::executor::{Executor, ExecutorBuilder};
 
-pub(super) struct ProjectionExecutor {
+pub(super) struct ProjectExecutor {
     expr: Vec<BoxedExpression>,
     child: BoxedExecutor,
     schema: Schema,
@@ -30,7 +30,7 @@ pub(super) struct ProjectionExecutor {
 }
 
 #[async_trait::async_trait]
-impl Executor for ProjectionExecutor {
+impl Executor for ProjectExecutor {
     async fn open(&mut self) -> Result<()> {
         self.child.open().await?;
         Ok(())
@@ -67,7 +67,7 @@ impl Executor for ProjectionExecutor {
     }
 }
 
-impl BoxedExecutorBuilder for ProjectionExecutor {
+impl BoxedExecutorBuilder for ProjectExecutor {
     fn new_boxed_executor(source: &ExecutorBuilder) -> Result<BoxedExecutor> {
         ensure!(source.plan_node().get_children().len() == 1);
 
@@ -138,11 +138,11 @@ mod tests {
             .map(|expr| Field::unnamed(expr.return_type()))
             .collect::<Vec<Field>>();
 
-        let mut proj_executor = ProjectionExecutor {
+        let mut proj_executor = ProjectExecutor {
             expr: expr_vec,
             child: Box::new(mock_executor),
             schema: Schema { fields },
-            identity: "ProjectionExecutor".to_string(),
+            identity: "ProjectExecutor".to_string(),
         };
         proj_executor.open().await.unwrap();
 
@@ -177,11 +177,11 @@ mod tests {
             1024,
         ));
 
-        let mut proj_executor = ProjectionExecutor {
+        let mut proj_executor = ProjectExecutor {
             expr: vec![Box::new(literal)],
             child: Box::new(Executor2Wrapper::from(values_executor2)),
             schema: schema_unnamed!(DataType::Int32),
-            identity: "ProjectionExecutor".to_string(),
+            identity: "ProjectExecutor".to_string(),
         };
 
         proj_executor.open().await.unwrap();
