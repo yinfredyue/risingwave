@@ -149,6 +149,9 @@ message CompactTask {
   bool is_target_ultimate_and_leveling = 7;
   CompactMetrics metrics = 8;
   bool task_status = 9;
+  // Hash mapping from virtual node to parallel unit. Since one compactor might deal with SSTs 
+  // with data for more than one relational state tables, here a vector is required.
+  repeated common.ParallelUnitMapping vnode_mappings = 10;
 }
 
 message LevelHandler {
@@ -174,13 +177,6 @@ message CompactTaskAssignment {
 
 message CompactTaskRefId {
   uint64 id = 1;
-}
-
-message GetCompactionTasksRequest {}
-
-message GetCompactionTasksResponse {
-  common.Status status = 1;
-  CompactTask compact_task = 2;
 }
 
 message ReportCompactionTasksRequest {

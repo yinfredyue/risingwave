@@ -21,6 +21,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use itertools::Itertools;
+use risingwave_common::catalog::TableId;
 use risingwave_common::error::{internal_error, Result};
 use risingwave_common::try_match_expand;
 use risingwave_pb::common::worker_node::State;
@@ -327,8 +328,27 @@ where
         core.get_parallel_unit_count(parallel_unit_type)
     }
 
+    /// Get default hash mapping, which uses all hash parallel units in the cluster.
     pub async fn get_hash_mapping(&self) -> Vec<ParallelUnitId> {
         self.hash_mapping_manager.get_default_mapping().await
+    }
+
+    /// Get hash mapping for a specific relational state table. If the mapping does not exist yet,
+    /// then build one and return the mapping.
+    pub async fn get_table_hash_mapping(&self, table_id: TableId) -> Result<Vec<ParallelUnitId>> {
+        match self.hash_mapping_manager.get_table_mapping(&table_id).await {
+            Some(mapping) => Ok(mapping),
+            None => {
+                self.hash_mapping_manager
+                    .build_table_mapping(table_id)
+                    .await?;
+                Ok(self
+                    .hash_mapping_manager
+                    .get_table_mapping(&table_id)
+                    .await
+                    .unwrap())
+            }
+        }
     }
 
     async fn generate_cn_parallel_units(

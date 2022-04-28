@@ -399,6 +399,7 @@ impl CompactStatus {
                         }),
                     }),
                     task_status: false,
+                    vnode_mappings: vec![],
                 };
                 Some(compact_task)
             }

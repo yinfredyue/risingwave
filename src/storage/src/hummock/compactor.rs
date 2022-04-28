@@ -124,6 +124,9 @@ impl Compactor {
             is_target_ultimate_and_leveling: false,
             metrics: None,
             task_status: false,
+            // In local memory compaction, all data are mapped to the same parallel unit. Therefore,
+            // we do not need vnode mappings here.
+            vnode_mappings: vec![],
         };
 
         let parallelism = compact_task.splits.len();

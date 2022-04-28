@@ -41,7 +41,9 @@ use crate::hummock::model::{
     INVALID_TIMESTAMP,
 };
 use crate::manager::{IdCategory, MetaSrvEnv};
-use crate::model::{MetadataModel, ValTransaction, VarTransaction, Worker};
+use crate::model::{
+    compressed_hash_mapping, MetadataModel, ValTransaction, VarTransaction, Worker,
+};
 use crate::rpc::metrics::MetaMetrics;
 use crate::storage::{Error, MetaStore, Transaction};
 
@@ -587,6 +589,13 @@ where
                         .flat_map(|v| v.snapshot_id.clone())
                         .fold(max_committed_epoch, std::cmp::min)
                 };
+                // TODO: Since we do not select input SSTs according to consistent hash mapping yet,
+                // we use the default hash mapping here. Should be refined later.
+                let mapping = compressed_hash_mapping(
+                    Default::default(),
+                    &self.cluster_manager.get_hash_mapping().await,
+                );
+                compact_task.vnode_mappings.push(mapping);
                 Ok(Some(compact_task))
             }
         };

@@ -23,12 +23,13 @@ use risingwave_common::catalog::TableId;
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_common::hash::{VirtualNode, VIRTUAL_NODE_COUNT};
 use risingwave_common::try_match_expand;
-use risingwave_pb::common::{ParallelUnit, ParallelUnitType, WorkerNode, WorkerType};
-use risingwave_pb::meta::ParallelUnitMapping;
+use risingwave_pb::common::{
+    ParallelUnit, ParallelUnitMapping, ParallelUnitType, WorkerNode, WorkerType,
+};
 use tokio::sync::Mutex;
 
 use crate::cluster::ParallelUnitId;
-use crate::model::MetadataModel;
+use crate::model::{compressed_hash_mapping, original_hash_mapping, MetadataModel};
 use crate::storage::MetaStore;
 
 pub type HashMappingManagerRef<S> = Arc<HashMappingManager<S>>;
@@ -90,11 +91,13 @@ where
 
     pub async fn get_default_mapping(&self) -> Vec<ParallelUnitId> {
         let core = self.core.lock().await;
+        // FIXME: Should avoid the clone.
         core.vnode_mapping.clone()
     }
 
     pub async fn get_table_mapping(&self, table_id: &TableId) -> Option<Vec<ParallelUnitId>> {
         let core = self.core.lock().await;
+        // FIXME: Should avoid the clone.
         core.table_mappings.get(table_id).cloned()
     }
 
@@ -148,7 +151,7 @@ where
         // Currently all tables share one hash mapping, so the first one could be directly applied
         // to default.
         if let Some(mapping) = mappings.first() {
-            vnode_mapping = mapping.hash_mapping.clone();
+            vnode_mapping = original_hash_mapping(mapping);
             vnode_mapping
                 .iter()
                 .enumerate()
@@ -166,7 +169,7 @@ where
             });
 
             mappings.into_iter().for_each(|mapping| {
-                table_mappings.insert(TableId::new(mapping.table_id), mapping.hash_mapping);
+                table_mappings.insert(TableId::new(mapping.table_id), vnode_mapping.clone());
             });
         }
 
@@ -310,10 +313,7 @@ where
             .values_mut()
             .for_each(|mapping| mapping.clone_from(&self.vnode_mapping));
         for (table_id, mapping) in &self.table_mappings {
-            let mapping_model = ParallelUnitMapping {
-                table_id: table_id.table_id,
-                hash_mapping: mapping.clone(),
-            };
+            let mapping_model = compressed_hash_mapping(table_id.table_id, mapping);
             mapping_model.insert(&*self.meta_store).await?;
         }
 
@@ -405,10 +405,7 @@ where
             .values_mut()
             .for_each(|mapping| mapping.clone_from(&self.vnode_mapping));
         for (table_id, mapping) in &self.table_mappings {
-            let mapping_model = ParallelUnitMapping {
-                table_id: table_id.table_id,
-                hash_mapping: mapping.clone(),
-            };
+            let mapping_model = compressed_hash_mapping(table_id.table_id, mapping);
             mapping_model.insert(&*self.meta_store).await?;
         }
 

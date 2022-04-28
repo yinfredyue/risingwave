@@ -62,3 +62,11 @@ message Cluster {
   repeated common.WorkerNode nodes = 2;
   map<string, string> config = 3;
 }
+
+// Compressed hash mapping stored in meta. Stores mapping from virtual node to parallel unit id.
+// Sent to compactor within a compaction task.
+message ParallelUnitMapping {
+  uint32 table_id = 1;
+  repeated uint64 original_indices = 2;
+  repeated uint32 data = 3;
+}

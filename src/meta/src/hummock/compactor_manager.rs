@@ -169,6 +169,7 @@ mod tests {
                 write: Some(TableSetStatistics::default()),
             }),
             task_status: false,
+            vnode_mappings: vec![],
         }
     }
 
