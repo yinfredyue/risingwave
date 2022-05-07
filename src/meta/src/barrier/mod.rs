@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp::Reverse;
+use std::cmp::{Ordering};
 use std::collections::{BinaryHeap, HashSet, VecDeque};
 use std::iter::once;
-use std::sync::Arc;
+use std::sync::{Arc, atomic};
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use futures::future::try_join_all;
@@ -30,7 +31,7 @@ use risingwave_pb::common::WorkerType;
 use risingwave_pb::data::Barrier;
 use risingwave_pb::stream_service::{InjectBarrierRequest, InjectBarrierResponse};
 use smallvec::SmallVec;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{ UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, watch, RwLock};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
@@ -170,13 +171,51 @@ pub struct GlobalBarrierManager<S: MetaStore> {
 
     metrics: Arc<MetaMetrics>,
 
-    env: Arc<RwLock<MetaSrvEnv<S>>>,
+    env: MetaSrvEnv<S>,
 
-    epoch_heap: Arc<RwLock<BinaryHeap<Reverse<u64>>>>,
+    epoch_heap: Arc<RwLock<BinaryHeap<HeapNode>>>,
 
-    wait_recovery: Arc<RwLock<bool>>,
+    wait_recovery: Arc<AtomicBool>,
 
     abort_command: Arc<RwLock<Vec<Command>>>,
+}
+
+struct HeapNode{
+    prev_epoch : u64,
+    tx: Option<oneshot::Sender<()>>,
+}
+
+impl HeapNode {
+    fn new(prev_epoch: u64, tx: Option<oneshot::Sender<()>>) -> Self{
+        Self{
+            prev_epoch,
+            tx,
+        }
+    }
+    fn notify_wait(&mut self){
+        if let Some(tx) = self.tx.take() {
+            tx.send(()).ok();
+        }
+    }
+}
+
+impl Eq for HeapNode {}
+impl PartialEq for HeapNode{
+    fn eq(&self, other: &Self) -> bool {
+        other.prev_epoch == self.prev_epoch
+    }
+}
+
+impl PartialOrd for HeapNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        other.prev_epoch.partial_cmp(&self.prev_epoch)
+    }
+}
+
+impl Ord for HeapNode where Self: PartialOrd {
+    fn cmp(&self, other: &HeapNode) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
 }
 
 impl<S> GlobalBarrierManager<S>
@@ -209,9 +248,9 @@ where
             scheduled_barriers: ScheduledBarriers::new(),
             hummock_manager,
             metrics,
-            env: Arc::new(RwLock::new(env)),
+            env,
             epoch_heap: Arc::new(RwLock::new(BinaryHeap::new())),
-            wait_recovery: Arc::new(RwLock::new(false)),
+            wait_recovery: Arc::new(AtomicBool::new(false)),
             abort_command: Arc::new(RwLock::new(vec![])),
         }
     }
@@ -229,7 +268,7 @@ where
 
     /// Start an infinite loop to take scheduled barriers and send them.
     async fn run(&self, mut shutdown_rx: UnboundedReceiver<()>) {
-        let env = self.env.read().await;
+        let env = self.env.clone();
         let mut unfinished = UnfinishedNotifiers::default();
         let mut state = BarrierManagerState::create(env.meta_store()).await;
 
@@ -276,8 +315,7 @@ where
                         Some(BarrierSendResult::Err(command,e,isover)) => {
                             if self.enable_recovery {
                                 // if not over , need wait all err barrier
-                                let mut wait_recovery = self.wait_recovery.write().await;
-                                *wait_recovery = true;
+                                self.wait_recovery.store(true,atomic::Ordering::SeqCst);
                                 self.abort_command.write().await.push(command);
                                 if isover{
                                     // If failed, enter recovery mode.
@@ -292,8 +330,7 @@ where
                                     state.prev_epoch = new_epoch;
                                     last_epoch = new_epoch.0;
 
-                                    let mut wait_recovery = self.wait_recovery.write().await;
-                                    *wait_recovery = false;
+                                    self.wait_recovery.store(false,atomic::Ordering::SeqCst);
                                     self.abort_command.write().await.clear();
                                 }
                             } else {
@@ -302,17 +339,17 @@ where
                         }
                         _=>{}
                     }
-                    state.update(self.env.read().await.meta_store()).await.unwrap();
+                    state.update(self.env.meta_store()).await.unwrap();
                 }
                 // there's barrier scheduled.
                 _ = self.scheduled_barriers.wait_one() => {
-                    if *self.wait_recovery.read().await{
+                    if self.wait_recovery.load(atomic::Ordering::SeqCst){
                         continue;
                     }
                 }
                 // Wait for the minimal interval,
                 _ = min_interval.tick() => {
-                    if *self.wait_recovery.read().await{
+                    if self.wait_recovery.load(atomic::Ordering::SeqCst){
                         continue;
                     }
                 }
@@ -339,7 +376,7 @@ where
                 prev_epoch
             );
 
-            let envconnet = self.env.clone();
+            let env = self.env.clone();
             let fragment_manager = self.fragment_manager.clone();
             let metrics = self.metrics.clone();
             let barrier_send_tx_clone = barrier_send_tx.clone();
@@ -348,7 +385,12 @@ where
             let wait_recovery = self.wait_recovery.clone();
 
             tokio::spawn(async move {
-                let env = envconnet.read().await;
+                let (wait_tx, wait_rx) = oneshot::channel();
+                heap.write()
+                    .await
+                    .push(HeapNode::new(prev_epoch.0,Some(wait_tx)));
+
+                let env = env.clone();
                 let command_ctx = CommandContext::new(
                     fragment_manager.clone(),
                     env.stream_clients_ref(),
@@ -360,12 +402,13 @@ where
                 let mut notifiers = notifiers;
                 notifiers.iter_mut().for_each(Notifier::notify_to_send);
                 let result = GlobalBarrierManager::run_inner(
-                    envconnet.clone(),
+                    env.clone(),
                     metrics,
                     &command_ctx,
                     heap.clone(),
                     hummock_manager,
                     wait_recovery,
+                    wait_rx,
                 )
                 .await;
                 match result {
@@ -388,7 +431,7 @@ where
                             .into_iter()
                             .for_each(|notifier| notifier.notify_collection_failed(e.clone()));
                         let mut is_over = false;
-                        if heap.read().await.is_empty() {
+                        if heap.read().await.len() == 1 {
                             is_over = true;
                         }
                         barrier_send_tx_clone
@@ -397,38 +440,38 @@ where
                     }
                 }
                 heap.write().await.pop();
+                if let Some(mut next_heap_node) = heap.write().await.peek_mut(){
+                    next_heap_node.notify_wait();
+                }
             });
         }
     }
 
     /// Running a scheduled command.
     async fn run_inner<'a>(
-        env: Arc<RwLock<MetaSrvEnv<S>>>,
+        env: MetaSrvEnv<S>,
         metrics: Arc<MetaMetrics>,
         command_context: &CommandContext<'a, S>,
-        heap: Arc<RwLock<BinaryHeap<Reverse<u64>>>>,
+        heap: Arc<RwLock<BinaryHeap<HeapNode>>>,
         hummock_manager: HummockManagerRef<S>,
-        wait_recovery: Arc<RwLock<bool>>,
+        wait_recovery: Arc<AtomicBool>,
+        wait_rx:oneshot::Receiver<()>,
     ) -> Result<Vec<InjectBarrierResponse>> {
         let timer = metrics.barrier_latency.start_timer();
-        if command_context.prev_epoch.0 != INVALID_EPOCH {
-            heap.write()
-                .await
-                .push(Reverse(command_context.prev_epoch.0));
-        }
 
         // Wait for all barriers collected
         let result = GlobalBarrierManager::inject_barrier(env, command_context).await;
         // Commit this epoch to Hummock
         if command_context.prev_epoch.0 != INVALID_EPOCH {
-            loop {
-                if let Some(Reverse(min_epoch)) = heap.read().await.peek() {
-                    if *min_epoch == command_context.prev_epoch.0 {
-                        break;
-                    }
+            let heap_read = heap.read().await;
+            if let Some(heap_node) = heap_read.peek() {
+                let prev_epoch = heap_node.prev_epoch;
+                if command_context.prev_epoch.0 != prev_epoch {
+                    drop(heap_read);
+                    wait_rx.await.unwrap();
                 }
             }
-            if *wait_recovery.read().await {
+            if wait_recovery.load(atomic::Ordering::SeqCst) {
                 hummock_manager
                     .abort_epoch(command_context.prev_epoch.0)
                     .await?;
@@ -460,7 +503,7 @@ where
 
     /// Inject barrier to all computer nodes.
     async fn inject_barrier<'a>(
-        env: Arc<RwLock<MetaSrvEnv<S>>>,
+        env: MetaSrvEnv<S>,
         command_context: &CommandContext<'a, S>,
     ) -> Result<Vec<InjectBarrierResponse>> {
         let mutation = command_context.to_mutation().await?;
@@ -489,7 +532,7 @@ where
                 debug!("inject_barrier to cn {:?}", barrier);
                 let env = env.clone();
                 async move {
-                    let mut client = env.read().await.stream_clients().get(node).await?;
+                    let mut client = env.stream_clients().get(node).await?;
 
                     let request = InjectBarrierRequest {
                         request_id,
