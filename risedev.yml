@@ -17,7 +17,7 @@ risedev:
     #   unsafe-no-fsync: true
 
     - use: meta-node
-      enable-dashboard-v2: false
+      enable-dashboard-v2: true
       unsafe-disable-recovery: true
       checkpoint-interval: 100
     - use: compute-node
