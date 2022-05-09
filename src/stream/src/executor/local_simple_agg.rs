@@ -45,6 +45,7 @@ impl ExecutorBuilder for LocalSimpleAggExecutorBuilder {
             agg_calls,
             params.pk_indices,
             params.executor_id,
+            node.append_only,
         )?
         .boxed())
     }

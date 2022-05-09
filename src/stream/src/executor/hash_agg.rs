@@ -38,6 +38,7 @@ struct HashAggExecutorDispatcherArgs<S: StateStore> {
     key_indices: Vec<usize>,
     keyspace: Vec<Keyspace<S>>,
     pk_indices: PkIndices,
+    append_only: bool,
     executor_id: u64,
 }
 
@@ -51,6 +52,7 @@ impl<S: StateStore> HashKeyDispatcher for HashAggExecutorDispatcher<S> {
             args.agg_calls,
             args.keyspace,
             args.pk_indices,
+            args.append_only,
             args.executor_id,
             args.key_indices,
         )?
@@ -97,6 +99,7 @@ impl ExecutorBuilder for HashAggExecutorBuilder {
             key_indices,
             keyspace,
             pk_indices: params.pk_indices,
+            append_only: node.append_only,
             executor_id: params.executor_id,
         };
         HashAggExecutorDispatcher::dispatch_by_kind(kind, args)

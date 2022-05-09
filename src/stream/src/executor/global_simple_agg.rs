@@ -62,6 +62,7 @@ impl ExecutorBuilder for SimpleAggExecutorBuilder {
             params.pk_indices,
             params.executor_id,
             key_indices,
+            node.append_only,
         )?
         .boxed())
     }
