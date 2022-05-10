@@ -183,7 +183,7 @@ impl LocalStreamManager {
         if let Some(next_barrier_rx) = self.wait_barrier_epoch(barrier) {
             next_barrier_rx.await.unwrap();
         };
-        debug!("send_barrier{:?}", barrier);
+
         let rx = self.send_barrier(barrier, actor_ids_to_send, actor_ids_to_collect)?;
         self.update_barrier_epoch(barrier);
 

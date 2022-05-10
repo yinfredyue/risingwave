@@ -178,6 +178,8 @@ pub struct GlobalBarrierManager<S: MetaStore> {
     wait_recovery: Arc<AtomicBool>,
 
     abort_command: Arc<RwLock<Vec<Command>>>,
+
+    semaphore: Arc<RwLock<u32>>,
 }
 
 struct HeapNode{
@@ -252,6 +254,7 @@ where
             epoch_heap: Arc::new(RwLock::new(BinaryHeap::new())),
             wait_recovery: Arc::new(AtomicBool::new(false)),
             abort_command: Arc::new(RwLock::new(vec![])),
+            semaphore:Arc::new(RwLock::new(0)),
         }
     }
 
@@ -340,6 +343,7 @@ where
                         _=>{}
                     }
                     state.update(self.env.meta_store()).await.unwrap();
+                    continue;
                 }
                 // there's barrier scheduled.
                 _ = self.scheduled_barriers.wait_one() => {
@@ -352,10 +356,22 @@ where
                     if self.wait_recovery.load(atomic::Ordering::SeqCst){
                         continue;
                     }
+                    if self.semaphore.read().await.gt(&0){
+                        continue;
+                    }
                 }
             }
             // Get a barrier to send.
             let (command, notifiers) = self.scheduled_barriers.pop_or_default().await;
+
+            match command{
+                Command::Plain(..)=>{},
+                _=>{
+                    let mut semaphore = self.semaphore.write().await;
+                    *semaphore += 1;
+                },
+            }
+
             let info = self.resolve_actor_info(command.creating_table_id()).await;
             // When there's no actors exist in the cluster, we don't need to send the barrier. This
             // is an advance optimization. Besides if another barrier comes immediately,
@@ -369,6 +385,7 @@ where
             let new_epoch = Epoch::now();
             let prev_epoch = Epoch::from(last_epoch);
             last_epoch = new_epoch.0;
+            //debug!("new_epoch{:?},prev_epoch{:?},command:{:?}",new_epoch,prev_epoch,command);
             assert!(
                 new_epoch > prev_epoch,
                 "new{:?},prev{:?}",
@@ -383,6 +400,7 @@ where
             let heap = self.epoch_heap.clone();
             let hummock_manager = self.hummock_manager.clone();
             let wait_recovery = self.wait_recovery.clone();
+            let semaphore = self.semaphore.clone();
 
             tokio::spawn(async move {
                 let (wait_tx, wait_rx) = oneshot::channel();
@@ -411,6 +429,15 @@ where
                     wait_rx,
                 )
                 .await;
+
+                //debug!("over,new_epoch{:?}",new_epoch);
+                match command{
+                    Command::Plain(..)=>{},
+                    _=>{
+                        let mut semaphore = semaphore.write().await;
+                        *semaphore -= 1;
+                    },
+                }
                 match result {
                     Ok(responses) => {
                         // Notify about collected first.
@@ -529,7 +556,7 @@ where
                     // TODO(chi): add distributed tracing
                     span: vec![],
                 };
-                debug!("inject_barrier to cn {:?}", barrier);
+                //debug!("inject_barrier to cn {:?}", barrier);
                 let env = env.clone();
                 async move {
                     let mut client = env.stream_clients().get(node).await?;
