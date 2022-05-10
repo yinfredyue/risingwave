@@ -113,7 +113,7 @@ async fn test_failpoint_backward_concat_read_err() {
     .await;
     let mut iter = BackwardConcatIterator::new(
         vec![table1.get_sstable_info(), table0.get_sstable_info()],
-        sstable_store,
+        sstable_store.clone(),
     );
     iter.rewind().await.unwrap();
     fail::cfg(mem_read_err, "return").unwrap();
@@ -166,7 +166,7 @@ async fn test_failpoint_merge_invalid_key() {
         200,
     )
     .await;
-    let tables = vec![Arc::new(table0), Arc::new(table1)];
+    let tables = vec![table0, table1];
     let mut mi = MergeIterator::new(
         tables
             .iter()
@@ -213,7 +213,7 @@ async fn test_failpoint_backward_merge_invalid_key() {
         200,
     )
     .await;
-    let tables = vec![Arc::new(table0), Arc::new(table1)];
+    let tables = vec![table0, table1];
     let mut mi = BackwardMergeIterator::new(
         tables
             .iter()
@@ -262,11 +262,11 @@ async fn test_failpoint_user_read_err() {
     .await;
     let iters: Vec<BoxedForwardHummockIterator> = vec![
         Box::new(SSTableIterator::new(
-            sstable_store.sstable(table0.id).await.unwrap(),
+            block_on(sstable_store.sstable(table0.id)).unwrap(),
             sstable_store.clone(),
         )),
         Box::new(SSTableIterator::new(
-            sstable_store.sstable(table1.id).await.unwrap(),
+            block_on(sstable_store.sstable(table1.id)).unwrap(),
             sstable_store.clone(),
         )),
     ];
@@ -318,11 +318,11 @@ async fn test_failpoint_backward_user_read_err() {
     .await;
     let iters: Vec<BoxedBackwardHummockIterator> = vec![
         Box::new(BackwardSSTableIterator::new(
-            sstable_store.sstable(table0.id).await.unwrap(),
+            block_on(sstable_store.sstable(table0.id)).unwrap(),
             sstable_store.clone(),
         )),
         Box::new(BackwardSSTableIterator::new(
-            sstable_store.sstable(table1.id).await.unwrap(),
+            block_on(sstable_store.sstable(table1.id)).unwrap(),
             sstable_store.clone(),
         )),
     ];

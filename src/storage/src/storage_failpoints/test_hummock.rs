@@ -26,7 +26,7 @@ use crate::storage_value::StorageValue;
 use crate::StateStore;
 
 #[tokio::test]
-#[cfg(feature = "failpoints")]
+#[cfg(all(test, feature = "failpoints"))]
 async fn test_failpoint_state_store_read_upload() {
     let mem_upload_err = "mem_upload_err";
     let mem_read_err = "mem_read_err";
@@ -41,14 +41,14 @@ async fn test_failpoint_state_store_read_upload() {
 
     let hummock_storage = HummockStorage::with_default_stats(
         hummock_options,
-        sstable_store,
+        sstable_store.clone(),
         meta_client.clone(),
         Arc::new(crate::monitor::StateStoreMetrics::unused()),
     )
     .await
     .unwrap();
 
-    let local_version_manager = hummock_storage.local_version_manager().clone();
+    let local_version_manager = hummock_storage.local_version_manager();
 
     let anchor = Bytes::from("aa");
     let mut batch1 = vec![
@@ -77,10 +77,11 @@ async fn test_failpoint_state_store_read_upload() {
     local_version_manager
         .refresh_version(meta_client.as_ref())
         .await;
-
+    // clear block cache
+    sstable_store.clear_block_cache();
     fail::cfg(mem_read_err, "return").unwrap();
 
-    let result = hummock_storage.get(b"bb".as_ref(), 2).await;
+    let result = hummock_storage.get(&anchor, 2).await;
     assert!(result.is_err());
     let result = hummock_storage.iter(..=b"ee".to_vec(), 2).await;
     assert!(result.is_err());

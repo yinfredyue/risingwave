@@ -169,7 +169,6 @@ mod tests {
     use crate::hummock::{SSTableBuilderOptions, WriteCachePolicy, DEFAULT_RESTART_INTERVAL};
 
     #[tokio::test]
-    #[ignore]
     async fn test_compaction_group_grouping() {
         let next_id = AtomicU64::new(1001);
         let block_size = 1 << 10;
@@ -205,7 +204,7 @@ mod tests {
             builder
                 .add_full_key(
                     FullKey::from_user_key(
-                        b"\x00\x00\x00\x00\x00".to_vec(),
+                        b"\x74\x00\x00\x00\x00".to_vec(),
                         (table_capacity - i) as u64,
                     )
                     .as_slice(),
@@ -218,7 +217,7 @@ mod tests {
             builder
                 .add_full_key(
                     FullKey::from_user_key(
-                        [b"\x00", prefix.to_be_bytes().as_slice()].concat().to_vec(),
+                        [b"\x74", prefix.to_be_bytes().as_slice()].concat().to_vec(),
                         (table_capacity - i) as u64,
                     )
                     .as_slice(),

@@ -128,6 +128,8 @@ impl Compactor {
             task_status: false,
             // TODO: get compaction group info from meta
             prefix_pairs: vec![],
+            // VNode mappings are not required when compacting shared buffer to L0
+            vnode_mappings: vec![],
         };
 
         let parallelism = compact_task.splits.len();
@@ -317,7 +319,7 @@ impl Compactor {
 
             self.compact_task
                 .sorted_output_ssts
-                .extend(sst.into_iter().map(|(sst, vnode_bitmap)| SstableInfo {
+                .extend(sst.into_iter().map(|(sst, vnode_bitmaps)| SstableInfo {
                     id: sst.id,
                     key_range: Some(risingwave_pb::hummock::KeyRange {
                         left: sst.meta.smallest_key.clone(),
@@ -325,7 +327,7 @@ impl Compactor {
                         inf: false,
                     }),
                     file_size: sst.meta.estimated_size as u64,
-                    vnode_bitmap,
+                    vnode_bitmaps,
                 }));
         }
 

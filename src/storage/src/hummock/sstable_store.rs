@@ -297,6 +297,11 @@ impl SstableStore {
             &self.local_store
         }
     }
+
+    #[cfg(test)]
+    pub fn clear_block_cache(&self) {
+        self.block_cache.clear();
+    }
 }
 
 pub type SstableStoreRef = Arc<SstableStore>;
