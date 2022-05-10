@@ -19,6 +19,7 @@ use risingwave_hummock_sdk::VersionedComparator;
 
 use super::super::{HummockResult, HummockValue};
 use crate::hummock::iterator::{Forward, HummockIterator};
+use crate::hummock::sstable_store::ReadCachePolicy;
 use crate::hummock::{BlockIterator, SstableStoreRef, TableHolder};
 
 pub trait SSTableIteratorType {
@@ -64,11 +65,7 @@ impl SSTableIterator {
         } else {
             let block = self
                 .sstable_store
-                .get(
-                    self.sst.value(),
-                    idx as u64,
-                    crate::hummock::ReadCachePolicy::Fill,
-                )
+                .get(self.sst.value(), idx as u64, ReadCachePolicy::Fill)
                 .await?;
             let mut block_iter = BlockIterator::new(block);
             if let Some(key) = seek_key {

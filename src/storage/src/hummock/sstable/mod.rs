@@ -33,7 +33,7 @@ use risingwave_hummock_sdk::HummockSSTableId;
 use risingwave_pb::hummock::{KeyRange, SstableInfo};
 
 pub mod group_builder;
-pub mod sstable_store;
+pub mod sstable_writer;
 mod utils;
 
 pub use utils::CompressionAlgorithm;

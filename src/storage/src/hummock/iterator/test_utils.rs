@@ -23,7 +23,7 @@ use risingwave_hummock_sdk::key::{key_with_epoch, Epoch};
 use risingwave_hummock_sdk::HummockSSTableId;
 
 use crate::hummock::iterator::BoxedForwardHummockIterator;
-use crate::hummock::sstable::sstable_store::{SstableStore, SstableStoreRef};
+use crate::hummock::sstable_store::{SstableStore, SstableStoreRef};
 pub use crate::hummock::test_utils::default_builder_opt_for_test;
 use crate::hummock::test_utils::{
     create_small_table_cache, gen_test_sstable, gen_test_sstable_inner,

@@ -21,7 +21,8 @@ use risingwave_rpc_client::HummockMetaClient;
 
 use crate::error::StorageResult;
 use crate::hummock::compactor::Compactor;
-use crate::hummock::{HummockStorage, SstableStore};
+use crate::hummock::sstable_store::SstableStore;
+use crate::hummock::HummockStorage;
 use crate::memory::MemoryStateStore;
 use crate::monitor::{MonitoredStateStore as Monitored, StateStoreMetrics};
 use crate::object::{parse_object_store, ObjectStoreImpl};

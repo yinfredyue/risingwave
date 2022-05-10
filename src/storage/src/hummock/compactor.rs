@@ -37,7 +37,7 @@ use super::iterator::{
 use super::multi_builder::CapacitySplitTableBuilder;
 use super::shared_buffer::shared_buffer_batch::SharedBufferBatch;
 use super::{HummockResult, SSTableBuilder, SSTableIterator, Sstable};
-use crate::hummock::sstable::sstable_store::SstableStoreRef;
+use crate::hummock::sstable_store::SstableStoreRef;
 use crate::hummock::vacuum::Vacuum;
 use crate::hummock::{HummockError, SSTableBuilderOptions, WriteCachePolicy};
 use crate::monitor::StateStoreMetrics;

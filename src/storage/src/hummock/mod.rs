@@ -39,6 +39,7 @@ pub mod local_version_manager;
 pub mod shared_buffer;
 #[cfg(test)]
 mod snapshot_tests;
+pub mod sstable_store;
 mod state_store;
 #[cfg(test)]
 mod state_store_tests;
@@ -50,7 +51,7 @@ mod vacuum;
 pub mod value;
 pub use cache::{CachableEntry, LookupResult, LruCache};
 pub use error::*;
-pub use sstable::sstable_store::*;
+pub use sstable::sstable_writer::*;
 use value::*;
 
 use self::iterator::HummockIterator;
@@ -59,6 +60,7 @@ pub use self::state_store::HummockStateStoreIter;
 use super::monitor::StateStoreMetrics;
 use crate::hummock::conflict_detector::ConflictDetector;
 use crate::hummock::local_version_manager::LocalVersionManager;
+use crate::hummock::sstable_store::{SstableStoreRef, TableHolder};
 
 /// Hummock is the state store backend.
 #[derive(Clone)]

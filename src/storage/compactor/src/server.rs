@@ -24,7 +24,7 @@ use risingwave_pb::common::WorkerType;
 use risingwave_pb::hummock::compactor_service_server::CompactorServiceServer;
 use risingwave_rpc_client::MetaClient;
 use risingwave_storage::hummock::hummock_meta_client::MonitoredHummockMetaClient;
-use risingwave_storage::hummock::SstableStore;
+use risingwave_storage::hummock::sstable_store::SstableStore;
 use risingwave_storage::monitor::{HummockMetrics, StateStoreMetrics};
 use risingwave_storage::object::parse_object_store;
 use tokio::sync::mpsc::UnboundedSender;
