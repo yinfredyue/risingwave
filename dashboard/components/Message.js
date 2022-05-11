@@ -14,12 +14,11 @@
  * limitations under the License.
  *
  */
-import React from 'react';
-import { useState, useRef } from "react"
+import React from "react";
+import { useState, useRef } from "react";
 import { Snackbar, Alert } from "@mui/material";
 
 export default React.forwardRef((props, messageRef) => {
-
   let vertical = props.vertical || "bottom";
   let horizontal = props.horizontal || "left";
 
@@ -29,7 +28,7 @@ export default React.forwardRef((props, messageRef) => {
 
   const onAlertClose = () => {
     setAlertOpen(false);
-  }
+  };
 
   messageRef.current = {
     info: (content) => {
@@ -51,14 +50,19 @@ export default React.forwardRef((props, messageRef) => {
       setSeverity("error");
       setContent(content);
       setAlertOpen(true);
-    }
-  }
+    },
+  };
 
   return (
-    <Snackbar open={alertOpen} autoHideDuration={6000} onClose={onAlertClose} anchorOrigin={{ vertical, horizontal }}> 
-      <Alert onClose={onAlertClose} severity={severity} sx={{ width: '100%' }} >
+    <Snackbar
+      open={alertOpen}
+      autoHideDuration={6000}
+      onClose={onAlertClose}
+      anchorOrigin={{ vertical, horizontal }}
+    >
+      <Alert onClose={onAlertClose} severity={severity} sx={{ width: "100%" }}>
         {content}
       </Alert>
     </Snackbar>
   );
-})
+});

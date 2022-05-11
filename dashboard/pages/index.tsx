@@ -14,14 +14,11 @@
  * limitations under the License.
  *
  */
-import React from 'react';
+import type { NextPage } from "next";
+import React from "react";
 
-export default function About() {
-  return (
-    <>
-      <div>
-        About
-      </div>
-    </>
-  );
-}
+const Home: NextPage = () => {
+  return <div>Welcome</div>;
+};
+
+export default Home;

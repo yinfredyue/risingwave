@@ -14,15 +14,11 @@
  * limitations under the License.
  *
  */
-import { useEffect } from "react"
+import type { NextPage } from "next";
+import React from "react";
 
-export default function Custom404() {
+const About: NextPage = () => {
+  return <div>About: Singularity-Data</div>;
+};
 
-  useEffect(() => {
-    window.location = "/"
-  }, []);
-
-  return <>
-    
-  </>
-}
+export default About;

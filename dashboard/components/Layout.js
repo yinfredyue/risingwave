@@ -14,104 +14,100 @@
  * limitations under the License.
  *
  */
-import Head from 'next/head'
-import Link from 'next/link';
+import Head from "next/head";
+import { useRouter } from "next/router";
 
-import React from 'react';
-import { useState } from 'react';
-import { styled, useTheme } from '@mui/material/styles';
-import Box from '@mui/material/Box';
-import Drawer from '@mui/material/Drawer';
-import CssBaseline from '@mui/material/CssBaseline';
-import MuiAppBar from '@mui/material/AppBar';
-import Toolbar from '@mui/material/Toolbar';
-import List from '@mui/material/List';
-import Divider from '@mui/material/Divider';
-import IconButton from '@mui/material/IconButton';
+import React from "react";
+import { useState } from "react";
+import { styled, useTheme } from "@mui/material/styles";
+import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
+import Drawer from "@mui/material/Drawer";
+import CssBaseline from "@mui/material/CssBaseline";
+import MuiAppBar from "@mui/material/AppBar";
+import Toolbar from "@mui/material/Toolbar";
+import List from "@mui/material/List";
+import Divider from "@mui/material/Divider";
+import IconButton from "@mui/material/IconButton";
 
-import MenuIcon from '@mui/icons-material/Menu';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import DoubleArrowIcon from '@mui/icons-material/DoubleArrow';
-import ViewComfyIcon from '@mui/icons-material/ViewComfy';
-import InfoIcon from '@mui/icons-material/Info';
+import MenuIcon from "@mui/icons-material/Menu";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import DoubleArrowIcon from "@mui/icons-material/DoubleArrow";
+import ViewComfyIcon from "@mui/icons-material/ViewComfy";
+import InfoIcon from "@mui/icons-material/Info";
 
-import ListItemButton from '@mui/material/ListItemButton';
-import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
 
-import { capitalize } from '../lib/str';
+import { capitalize } from "../lib/str";
 
 const drawerWidth = 215;
-
 const mainPadding = 30;
-const Main = styled('main', { shouldForwardProp: (prop) => prop !== 'open' })(
+
+const Main = styled("main", { shouldForwardProp: (prop) => prop !== "open" })(
   ({ theme, open }) => ({
     height: "100%",
     width: "100%",
     flexGrow: 1,
     padding: `${mainPadding}px`,
-    transition: theme.transitions.create('margin', {
+    transition: theme.transitions.create("margin", {
       easing: theme.transitions.easing.sharp,
       duration: theme.transitions.duration.leavingScreen,
     }),
     marginLeft: `-${drawerWidth}px`,
     ...(open && {
-      transition: theme.transitions.create('margin', {
+      transition: theme.transitions.create("margin", {
         easing: theme.transitions.easing.easeOut,
         duration: theme.transitions.duration.enteringScreen,
       }),
       marginLeft: 0,
     }),
-  }),
+  })
 );
 
 const AppBar = styled(MuiAppBar, {
-  shouldForwardProp: (prop) => prop !== 'open',
+  shouldForwardProp: (prop) => prop !== "open",
 })(({ theme, open }) => ({
-  transition: theme.transitions.create(['margin', 'width'], {
+  transition: theme.transitions.create(["margin", "width"], {
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
   }),
   ...(open && {
     width: `calc(100% - ${drawerWidth}px)`,
     marginLeft: `${drawerWidth}px`,
-    transition: theme.transitions.create(['margin', 'width'], {
+    transition: theme.transitions.create(["margin", "width"], {
       easing: theme.transitions.easing.easeOut,
       duration: theme.transitions.duration.enteringScreen,
     }),
   }),
 }));
 
-const DrawerHeader = styled('div')(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
+const DrawerHeader = styled("div")(({ theme }) => ({
+  display: "flex",
+  alignItems: "center",
   padding: theme.spacing(0, 1),
   // necessary for content to be below app bar
   ...theme.mixins.toolbar,
-  justifyContent: 'space-between',
-}));
-
-const NavBarNavigationItem = styled('div')(() => ({
-  width: "100%",
-  display: "flex",
-  flexDirection: "row",
-  alignItems: "center"
+  justifyContent: "space-between",
 }));
 
 const NavBarItem = (props) => {
+  const router = useRouter();
+
   return (
-    <ListItemButton key={props.text} selected={props.currentPage === props.text}>
-      <Link href={"/" + props.text}>
-        <NavBarNavigationItem>
-          <ListItemIcon>
-            {props.icon}
-          </ListItemIcon>
-          <span style={{ fontSize: "15px" }}>{capitalize(props.text)}</span>
-        </NavBarNavigationItem>
-      </Link>
+    <ListItemButton
+      key={props.text}
+      selected={props.currentPage === props.text}
+      onClick={(e) => router.push(props.text)}
+    >
+      <Stack direction="row" alignItems="center" justifyContent="center">
+        <ListItemIcon>{props.icon}</ListItemIcon>
+        <span style={{ fontSize: "15px" }}>{capitalize(props.text)}</span>
+      </Stack>
     </ListItemButton>
-  )
-}
+  );
+};
 
 export default function Layout(props) {
   const theme = useTheme();
@@ -134,7 +130,7 @@ export default function Layout(props) {
         setCurrentPage={setCurrentPage}
       />
     </>
-  )
+  );
 
   return (
     <>
@@ -142,7 +138,7 @@ export default function Layout(props) {
         <title>Dashboard | RisingWave</title>
         <link rel="icon" href="/singularitydata.svg" />
       </Head>
-      <Box sx={{ display: 'flex', height: "100vh", width: "100vw" }}>
+      <Box sx={{ display: "flex", height: "100vh", width: "100vw" }}>
         <CssBaseline />
         <AppBar open={open}>
           <Toolbar>
@@ -151,22 +147,20 @@ export default function Layout(props) {
               aria-label="open drawer"
               onClick={handleDrawerOpen}
               edge="start"
-              sx={{ mr: 2, ...(open && { display: 'none' }) }}
+              sx={{ mr: 2, ...(open && { display: "none" }) }}
             >
               <MenuIcon />
             </IconButton>
-            <div>
-              {capitalize(currentPage)}
-            </div>
+            <div>{capitalize(currentPage)}</div>
           </Toolbar>
         </AppBar>
         <Drawer
           sx={{
             width: drawerWidth,
             flexShrink: 0,
-            '& .MuiDrawer-paper': {
+            "& .MuiDrawer-paper": {
               width: drawerWidth,
-              boxSizing: 'border-box',
+              boxSizing: "border-box",
             },
           }}
           variant="persistent"
@@ -174,11 +168,12 @@ export default function Layout(props) {
           open={open}
         >
           <DrawerHeader>
-
             <div style={{ display: "flex", flexDirection: "column", marginLeft: "5px" }}>
               <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
                 <img src="/singularitydata.svg" width="20px" height="20px" />
-                <span style={{ fontSize: "15px", fontWeight: "700", marginLeft: "5px" }}>RisingWave</span>
+                <span style={{ fontSize: "15px", fontWeight: "700", marginLeft: "5px" }}>
+                  RisingWave
+                </span>
               </div>
               <div>
                 <span style={{ fontSize: "13px" }}>Dashboard </span>
@@ -186,31 +181,22 @@ export default function Layout(props) {
               </div>
             </div>
             <IconButton onClick={handleDrawerClose}>
-              {theme.direction === 'ltr' ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+              {theme.direction === "ltr" ? <ChevronLeftIcon /> : <ChevronRightIcon />}
             </IconButton>
           </DrawerHeader>
           <Divider />
           <List>
-            <WrapNavItem
-              text='cluster'
-              icon={<ViewComfyIcon fontSize="small" />}
-            />
-            <WrapNavItem
-              text='streaming'
-              icon={<DoubleArrowIcon fontSize="small" />}
-            />
+            <WrapNavItem text="cluster" icon={<ViewComfyIcon fontSize="small" />} />
+            <WrapNavItem text="streaming" icon={<DoubleArrowIcon fontSize="small" />} />
           </List>
           <Divider />
           <List>
-            <WrapNavItem
-              text='about'
-              icon={<InfoIcon fontSize="small" />}
-            />
+            <WrapNavItem text="about" icon={<InfoIcon fontSize="small" />} />
           </List>
         </Drawer>
         <Main open={open}>
-          <div style={{height: "68px"}}></div>
-          <div style={{width: "calc(100vw - 275px)", height: "calc(100% - 68px)"}}>
+          <div style={{ height: "68px" }}></div>
+          <div style={{ width: "calc(100vw - 275px)", height: "calc(100% - 68px)" }}>
             {props.children}
           </div>
         </Main>
