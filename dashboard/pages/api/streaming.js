@@ -14,16 +14,16 @@
  * limitations under the License.
  *
  */
-import api from "./api"
+import api from "./api";
 
-export async function getActors(){
-  return (await api.get("/api/actors"));
+export async function getActors() {
+  return await api.get("/api/actors");
 }
 
-export async function getFragments(){
+export async function getFragments() {
   return await api.get("/api/fragments");
 }
 
-export async function getMaterializedViews(){
+export async function getMaterializedViews() {
   return await api.get("/api/materialized_views");
 }

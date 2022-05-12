@@ -14,29 +14,25 @@
  * limitations under the License.
  *
  */
-import config from "../../config";
-
-
+export const baseUrl = "http://127.0.0.1:5691";
 
 class Api {
+  baseUrl: string;
 
-  constructor() {
-    this.baseUrl = config.baseUrl.charAt(config.baseUrl.length - 1) === "/"
-      ? config.baseUrl.slice(0, config.baseUrl.length)
-      : config.baseUrl;
+  constructor(url: string) {
+    this.baseUrl = url;
   }
 
-  async get(url) {
+  async get(path: string) {
     try {
-      const res = await fetch(this.baseUrl + url);
+      const res = await fetch(this.baseUrl + path);
       const data = await res.json();
       return data;
     } catch (e) {
       console.error(e);
-      throw Error("Failed to fetch " + url);
+      throw Error("Failed to fetch " + path);
     }
   }
 }
 
-
-export default new Api();
+export default new Api(baseUrl);

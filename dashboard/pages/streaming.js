@@ -14,11 +14,11 @@
  * limitations under the License.
  *
  */
-import StreamingView from '../components/StreamingView';
-import NoData from '../components/NoData';
-import Message from '../components/Message';
-import { getActors, getFragments, getMaterializedViews } from './api/streaming';
-import { useEffect, useRef, useState } from 'react';
+import StreamingView from "../components/StreamingView";
+import NoData from "../components/NoData";
+import Message from "../components/Message";
+import { getActors, getMaterializedViews } from "./api/streaming";
+import { useEffect, useRef, useState } from "react";
 
 export default function Streaming(props) {
   const [actorProtoList, setActorProtoList] = useState(null);
@@ -26,27 +26,40 @@ export default function Streaming(props) {
 
   const message = useRef(null);
 
-  useEffect(async () => {
-    try {
-      setActorProtoList(await getActors());
-      setMvList(await getMaterializedViews());
-    } catch (e) {
-      message.current.error(e.toString());
-      console.error(e);
-    }
+  useEffect(() => {
+    const getActorLists = async () => {
+      const actorLists = await getActors();
+      return actorLists;
+    };
+    getActorLists()
+      .then((res) => setActorProtoList(res))
+      .catch((e) => {
+        message.current.error(e.toString());
+        console.error(e);
+      });
+  }, []);
+
+  useEffect(() => {
+    const getMVLists = async () => {
+      const actorLists = await getMaterializedViews();
+      return actorLists;
+    };
+    getMVLists()
+      .then((res) => setMvList(res))
+      .catch((e) => {
+        message.current.error(e.toString());
+        console.error(e);
+      });
   }, []);
 
   return (
     <>
-      {actorProtoList
-        && actorProtoList.length !== 0
-        && actorProtoList[0].actors ?
-        <StreamingView
-          data={actorProtoList}
-          mvList={mvList}
-        />
-        : <NoData />}
+      {actorProtoList && actorProtoList.length !== 0 && actorProtoList[0].actors ? (
+        <StreamingView data={actorProtoList} mvList={mvList} />
+      ) : (
+        <NoData />
+      )}
       <Message ref={message} vertical="top" horizontal="center" />
     </>
-  )
+  );
 }
