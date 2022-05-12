@@ -14,7 +14,7 @@
  * limitations under the License.
  *
  */
-export const baseUrl = "http://127.0.0.1:5691";
+const baseUrl = "http://127.0.0.1:5691/";
 
 class Api {
   baseUrl: string;
@@ -24,13 +24,16 @@ class Api {
   }
 
   async get(path: string) {
+    const url = `${this.baseUrl}${path}`;
     try {
-      const res = await fetch(this.baseUrl + path);
-      const data = await res.json();
-      return data;
+      const response = await fetch(url);
+      if (response.ok) {
+        return response;
+      }
     } catch (e) {
-      console.error(e);
-      throw Error("Failed to fetch " + path);
+      if (e instanceof Error) {
+        throw new Error(`${e.message}: ${url}`);
+      }
     }
   }
 }

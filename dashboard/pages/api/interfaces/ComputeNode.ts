@@ -2,9 +2,9 @@ import { Host } from "./Host";
 import { ParallelUnit } from "./ParallelUnit";
 
 export interface ComputeNode {
-  id: Number;
-  type: String;
+  id: number;
+  type: string;
   host: Host;
-  state: String;
+  state: string;
   parallelUnits: ParallelUnit[];
 }

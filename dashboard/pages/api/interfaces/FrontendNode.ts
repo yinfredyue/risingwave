@@ -1,7 +1,7 @@
 import { Host } from "./Host";
 
 export interface FrontendNode {
-  id: Number;
+  id: number;
   host: Host;
-  state: String;
+  state: string;
 }

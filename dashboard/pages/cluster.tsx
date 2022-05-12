@@ -16,10 +16,8 @@
  */
 import type { NextPage } from "next";
 import React, { useEffect } from "react";
-import { useState, useRef } from "react";
-import Message from "../components/Message";
+import { useState } from "react";
 import NoData from "../components/NoData";
-import { getClusterInfoFrontend, getClusterInfoComputeNode } from "./api/cluster";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
@@ -31,11 +29,21 @@ import TableRow from "@mui/material/TableRow";
 import Paper from "@mui/material/Paper";
 import StatusLamp from "../components/StatusLamp";
 import Typography from "@mui/material/Typography";
+import api from "./api/api";
+import { FrontendNode } from "./api/interfaces/FrontendNode";
+import { ComputeNode } from "./api/interfaces/ComputeNode";
+import Message from "../components/Message";
 
-const NodeTable = (props) => {
+type TableNode = FrontendNode | ComputeNode;
+
+type TableProps = {
+  data: TableNode[] | [];
+};
+
+const NodeTable = ({ data }: TableProps) => {
   return (
     <Box sx={{ width: "100%", maxWidth: 1000 }}>
-      {props.data.length !== 0 ? (
+      {data?.length !== 0 ? (
         <TableContainer component={Paper}>
           <Table size="small">
             <TableHead>
@@ -47,7 +55,7 @@ const NodeTable = (props) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {props.data.map((row, i) => (
+              {data?.map((row, i) => (
                 <TableRow key={i}>
                   <TableCell>{row.id}</TableCell>
                   <TableCell sx={{ color: "green" }}>
@@ -71,40 +79,36 @@ const NodeTable = (props) => {
 };
 
 const Cluster: NextPage = () => {
-  const [frontendList, setFrontendList] = useState([]);
-  const [computeNodeList, setComputeNodeList] = useState([]);
+  const clusterFrontendPath = "api/clusters/0";
+  const clusterComputeNodePath = "api/clusters/1";
 
-  const message = useRef(null);
+  const [message, setMessage] = useState("");
+  const [frontendList, setFrontendList] = useState<FrontendNode[]>([]);
+  const [computeNodeList, setComputeNodeList] = useState<ComputeNode[]>([]);
+
+  const getData = async (path: string) => {
+    try {
+      const res = await api.get(path);
+      const data = await res?.json();
+      return data;
+    } catch (err) {
+      if (err instanceof Error) {
+        console.error(err);
+        setMessage(err.message);
+      }
+    }
+  };
 
   useEffect(() => {
-    const getFrontends = async () => {
-      const frontends = await getClusterInfoFrontend();
-      return frontends;
-    };
-    getFrontends()
-      .then((res) => setFrontendList(res))
-      .catch((e) => {
-        message.current.error(e.toString());
-        console.error(e);
-      });
-  }, []);
+    getData(clusterComputeNodePath).then((res: ComputeNode[]) => setComputeNodeList(res));
+    getData(clusterFrontendPath).then((res: FrontendNode[]) => setFrontendList(res));
 
-  useEffect(() => {
-    const getComputeNodes = async () => {
-      const computeNodes = await getClusterInfoComputeNode();
-      return computeNodes;
-    };
-    getComputeNodes()
-      .then((res) => setComputeNodeList(res))
-      .catch((e) => {
-        message.current.error(e.toString());
-        console.error(e);
-      });
+    return () => setMessage("");
   }, []);
 
   return (
     <Stack>
-      <Message ref={message} vertical="top" horizontal="center" />
+      {message ? <Message severity="error" content={message} /> : null}
       <Stack justifyContent="center" alignItems="flex-start" mt={4}>
         <Typography variant="subtitle1" color="initial">
           Frontend

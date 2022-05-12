@@ -1,4 +1,4 @@
 export interface Host {
-  host: String;
-  port: Number;
+  host: string;
+  port: number;
 }

@@ -3,7 +3,7 @@ interface ColumnType {
   isNullable: Boolean;
 }
 
-interface ColumnDesc {
+export interface ColumnDesc {
   columnType: ColumnType;
   name: String;
   columnId?: Number;
