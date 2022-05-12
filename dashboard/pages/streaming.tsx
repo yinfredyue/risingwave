@@ -56,7 +56,6 @@ const Streaming: NextPage = () => {
   return (
     <Stack>
       {message ? <Message severity="error" content={message} /> : null}
-
       {actorProtoList?.length && actorProtoList[0].actors ? (
         <StreamingView data={actorProtoList} mvList={mvList} />
       ) : (
