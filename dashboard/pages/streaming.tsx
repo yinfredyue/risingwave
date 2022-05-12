@@ -15,7 +15,6 @@
  *
  */
 import StreamingView from "../components/StreamingView";
-import NoData from "../components/NoData";
 import Message from "../components/Message";
 import { useEffect, useState } from "react";
 import Stack from "@mui/material/Stack";
@@ -23,6 +22,7 @@ import type { NextPage } from "next";
 import api from "./api/api";
 import { Actors } from "./api/interfaces/Actor";
 import { MaterializedView } from "./api/interfaces/MaterializedView";
+import NoData from "../components/NoData";
 
 const Streaming: NextPage = () => {
   const actorsPath = "api/actors";
@@ -55,13 +55,13 @@ const Streaming: NextPage = () => {
 
   return (
     <Stack>
+      {message ? <Message severity="error" content={message} /> : null}
+
       {actorProtoList?.length && actorProtoList[0].actors ? (
         <StreamingView data={actorProtoList} mvList={mvList} />
       ) : (
         <NoData />
       )}
-
-      {message ? <Message severity="error" content={message} /> : null}
     </Stack>
   );
 };

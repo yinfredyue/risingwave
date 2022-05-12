@@ -1,9 +1,7 @@
-import React, { useEffect } from "react";
+import React from "react";
 import Stack from "@mui/material/Stack";
-import Button from "@mui/material/Button";
 import Snackbar from "@mui/material/Snackbar";
 import MuiAlert, { AlertColor, AlertProps } from "@mui/material/Alert";
-import Slide, { SlideProps } from "@mui/material/Slide";
 
 interface Message {
   severity: AlertColor;
@@ -24,11 +22,7 @@ export default function SnackBar({
 }: Message) {
   const [open, setOpen] = React.useState(true);
 
-  const handleClick = () => {
-    setOpen(true);
-  };
-
-  const handleClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
+  const handleClose = (_event?: React.SyntheticEvent | Event, _reason?: string) => {
     setOpen(false);
   };
 

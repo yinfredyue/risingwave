@@ -14,12 +14,20 @@
  * limitations under the License.
  *
  */
-export default function NoData() {
+type Color = {
+  color: string;
+};
+
+export default function StatusLamp({ color }: Color) {
   return (
-    <>
-      <div>
-        <span style={{ fontWeight: "lighter" }}>No data presented.</span>
-      </div>
-    </>
-  )
+    <div
+      style={{
+        width: "8px",
+        height: "8px",
+        backgroundColor: color,
+        margin: "3px",
+        borderRadius: "4px",
+      }}
+    ></div>
+  );
 }

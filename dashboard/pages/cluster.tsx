@@ -17,7 +17,6 @@
 import type { NextPage } from "next";
 import React, { useEffect } from "react";
 import { useState } from "react";
-import NoData from "../components/NoData";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
@@ -33,17 +32,18 @@ import api from "./api/api";
 import { FrontendNode } from "./api/interfaces/FrontendNode";
 import { ComputeNode } from "./api/interfaces/ComputeNode";
 import Message from "../components/Message";
+import NoData from "../components/NoData";
 
 type TableNode = FrontendNode | ComputeNode;
 
 type TableProps = {
-  data: TableNode[] | [];
+  data: TableNode[];
 };
 
 const NodeTable = ({ data }: TableProps) => {
   return (
     <Box sx={{ width: "100%", maxWidth: 1000 }}>
-      {data?.length !== 0 ? (
+      {data?.length ? (
         <TableContainer component={Paper}>
           <Table size="small">
             <TableHead>
