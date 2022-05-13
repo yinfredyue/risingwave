@@ -1,0 +1,3 @@
+/* case misaligned result types */
+create table t (v1 int);
+select (case when v1=1 then 1 when v1=2 then 2 else true end) from t;

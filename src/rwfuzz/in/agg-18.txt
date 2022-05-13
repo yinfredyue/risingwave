@@ -1,0 +1,2 @@
+create table t(v1 int, v2 int, v3 int);
+select v1, sum(v2 + v3) / count(v2 + v3) + max(v1) as agg from t group by v1;

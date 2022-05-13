@@ -1,0 +1,3 @@
+/* having with non-group column */
+create table t (v1 real not null, v2 int);
+select 1 from t group by v1 having v2 > 5;

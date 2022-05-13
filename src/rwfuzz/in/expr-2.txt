@@ -1,0 +1,2 @@
+/* bind typed literal */
+SELECT bool 't'

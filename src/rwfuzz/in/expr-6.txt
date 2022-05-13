@@ -1,0 +1,2 @@
+create table t ();
+select (((((false is not true) is true) is not false) is false) is not null) is null from t;

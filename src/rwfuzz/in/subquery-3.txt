@@ -1,0 +1,2 @@
+create table t (v1 bigint, v2 double precision);
+select v1 from (select v2, v1 as v3 from t) where v2 > 1;

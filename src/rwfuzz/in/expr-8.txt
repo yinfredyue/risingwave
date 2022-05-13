@@ -1,0 +1,2 @@
+/* in-list with aligned types */
+SELECT 1::real in (3, 1.0, 2);

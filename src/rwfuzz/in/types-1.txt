@@ -1,0 +1,8 @@
+values (''::numeric(20));
+values (''::float);
+values (''::float(24));
+values (''::float(25));
+values (''::float(53));
+values (''::float(54));
+values (''::timestamp with time zone);
+values (''::time with time zone);

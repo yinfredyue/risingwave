@@ -1,0 +1,2 @@
+/* in-list with misaligned types */
+SELECT true in (3, 1.0, 2);

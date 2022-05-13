@@ -1,0 +1,2 @@
+create table t(v1 int, v2 int, v3 int);
+select min(v1) + max(v2) * count(v3) as agg from t;

@@ -1,0 +1,3 @@
+create table t1 (v1 int, v2 float);
+create table t2 (v3 int, v4 numeric, v5 bigint);
+select * from t1, t2 where t1.v1 = t2.v3;

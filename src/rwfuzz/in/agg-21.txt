@@ -1,0 +1,3 @@
+/* having with agg call */
+create table t (v1 real not null);
+select 1 from t having sum(v1) > 5;

@@ -1,0 +1,2 @@
+create table t (v1 bigint, v2 double precision);
+select * from t order by 1+1;

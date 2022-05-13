@@ -1,0 +1,3 @@
+/* merge and then eliminate */
+create table t (v1 bigint, v2 double precision);
+select a1 as v1, a2 as v2 from (select v1 as a1, v2 as a2 from t);

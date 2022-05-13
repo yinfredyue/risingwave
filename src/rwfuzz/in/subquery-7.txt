@@ -1,0 +1,3 @@
+/* joins */
+create table t (v1 bigint, v2 double precision);
+select * from (select * from t), t;

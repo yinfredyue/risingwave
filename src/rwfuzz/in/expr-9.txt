@@ -1,0 +1,2 @@
+/* not in-list with aligned types */
+SELECT 1::real not in (3, 1.0, 2);

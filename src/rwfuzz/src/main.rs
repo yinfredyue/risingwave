@@ -3,6 +3,7 @@ use risingwave_frontend::planner::Planner;
 use risingwave_frontend::session::{OptimizerContext, OptimizerContextRef};
 use risingwave_frontend::FrontendOpts;
 use risingwave_sqlparser::ast::Statement;
+use risingwave_sqlparser::parser::Parser;
 
 #[macro_use]
 extern crate afl;
@@ -12,7 +13,7 @@ fn main() {
         let session = frontend.session_ref();
 
         if let Ok(s) = std::str::from_utf8(data) {
-            if let Ok(mut statements) = risingwave_sqlparser::parser::Parser::parse_sql(s) {
+            if let Ok(mut statements) = Parser::parse_sql(s) {
                 for stmt in statements {
                     let context = OptimizerContext::new(session.clone());
                     if matches!(
@@ -37,7 +38,6 @@ fn main() {
 
                         let logical_plan = planner.plan(bound);
                         if let Ok(mut logical_plan) = logical_plan {
-                            logical_plan.gen_optimized_logical_plan();
                             logical_plan.gen_batch_query_plan();
                             logical_plan.gen_create_mv_plan("test".to_string());
                         }

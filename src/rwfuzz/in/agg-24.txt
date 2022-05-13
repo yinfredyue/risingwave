@@ -1,0 +1,3 @@
+/* distinct without agg */
+create table t (v1 int, v2 int);
+select distinct v1 from t;

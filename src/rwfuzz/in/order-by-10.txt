@@ -1,0 +1,3 @@
+/* order by expression that would be valid in select list */
+create table t (x int, y int, z int);
+select x, y from t order by x + y, z;

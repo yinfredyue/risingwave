@@ -1,0 +1,3 @@
+/* alias more columns than available */
+create table t (v1 bigint, v2 double precision);
+select * from (select * from t) as tt(a, b, c) join t on a=v1;

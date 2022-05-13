@@ -1,0 +1,2 @@
+create table t(v1 int, v2 int);
+select sum(v1), v1 from t group by v2, v2;

@@ -1,0 +1,1 @@
+select position(replace('1','1','2'),'123') where '12' like '%1';

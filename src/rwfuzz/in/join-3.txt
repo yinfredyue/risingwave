@@ -1,0 +1,4 @@
+create table t1 (v1 int, v2 int);
+create table t2 (v1 int, v2 int);
+create table t3 (v1 int, v2 int);
+select t1.v1 as t1_v1, t1.v2 as t1_v2, t2.v1 as t2_v1, t2.v2 as t2_v2, t3.v1 as t3_v1, t3.v2 as t3_v2 from t1 join t2 on (t1.v1 = t2.v1) join t3 on (t2.v2 = t3.v2);

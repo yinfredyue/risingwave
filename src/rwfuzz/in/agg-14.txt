@@ -1,0 +1,4 @@
+/* test logical_agg with complex group expression */
+/* should complain about nested agg call */
+create table t(v1 int, v2 int);
+select avg(sum(v1 + v2)) from t group by v1 + v2;
