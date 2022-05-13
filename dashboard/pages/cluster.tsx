@@ -15,68 +15,14 @@
  *
  */
 import type { NextPage } from "next";
-import React, { useEffect } from "react";
-import { useState } from "react";
-import Box from "@mui/material/Box";
+import React, { useEffect, useState } from "react";
+import api from "@api/api";
+import Message from "@components/Message";
+import NodeTable from "@components/NodeTable";
+import { FrontendNode } from "@interfaces/FrontendNode";
+import { ComputeNode } from "@interfaces/ComputeNode";
 import Stack from "@mui/material/Stack";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
-import Paper from "@mui/material/Paper";
-import StatusLamp from "../components/StatusLamp";
 import Typography from "@mui/material/Typography";
-import api from "./api/api";
-import { FrontendNode } from "./api/interfaces/FrontendNode";
-import { ComputeNode } from "./api/interfaces/ComputeNode";
-import Message from "../components/Message";
-import NoData from "../components/NoData";
-
-type TableNode = FrontendNode | ComputeNode;
-
-type TableProps = {
-  data: TableNode[];
-};
-
-const NodeTable = ({ data }: TableProps) => {
-  return (
-    <Box sx={{ width: "100%", maxWidth: 1000 }}>
-      {data?.length ? (
-        <TableContainer component={Paper}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>ID</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Host</TableCell>
-                <TableCell>Post</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data?.map((row, i) => (
-                <TableRow key={i}>
-                  <TableCell>{row.id}</TableCell>
-                  <TableCell sx={{ color: "green" }}>
-                    <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-                      <StatusLamp color="green" />
-                      Running
-                    </div>
-                  </TableCell>
-                  <TableCell>{row.host.host}</TableCell>
-                  <TableCell>{row.host.port}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      ) : (
-        <NoData />
-      )}
-    </Box>
-  );
-};
 
 const Cluster: NextPage = () => {
   const clusterFrontendPath = "api/clusters/0";

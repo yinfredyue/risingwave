@@ -17,8 +17,7 @@
 import Image from "next/image";
 import { useRouter } from "next/router";
 
-import React from "react";
-import { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { styled, useTheme } from "@mui/material/styles";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
@@ -42,24 +41,25 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 
 import { capitalize } from "../lib/str";
 import Typography from "@mui/material/Typography";
+import { Items, NavItems } from "@interfaces/Items";
 
 interface AppBarProps extends MuiAppBarProps {
   open?: boolean;
-  drawerWidth?: number;
-  mainPadding?: number;
+  drawerwidth?: number;
+  mainpadding?: number;
 }
 
 const AppBar = styled(MuiAppBar, {
   shouldForwardProp: (prop) => prop !== "open",
-})<AppBarProps>(({ theme, open, drawerWidth }) => ({
+})<AppBarProps>(({ theme, open, drawerwidth }) => ({
   zIndex: theme.zIndex.drawer + 1,
   transition: theme.transitions.create(["width", "margin"], {
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
   }),
   ...(open && {
-    marginLeft: drawerWidth,
-    width: `calc(100% - ${drawerWidth}px)`,
+    marginLeft: drawerwidth,
+    width: `calc(100% - ${drawerwidth}px)`,
     transition: theme.transitions.create(["width", "margin"], {
       easing: theme.transitions.easing.sharp,
       duration: theme.transitions.duration.enteringScreen,
@@ -68,16 +68,16 @@ const AppBar = styled(MuiAppBar, {
 }));
 
 const Main = styled("main", { shouldForwardProp: (prop) => prop !== "open" })<AppBarProps>(
-  ({ theme, open, drawerWidth, mainPadding }) => ({
+  ({ theme, open, drawerwidth, mainpadding }) => ({
     height: "100%",
     width: "100%",
     flexGrow: 1,
-    padding: `${mainPadding}px`,
+    padding: mainpadding,
     transition: theme.transitions.create("margin", {
       easing: theme.transitions.easing.sharp,
       duration: theme.transitions.duration.leavingScreen,
     }),
-    marginLeft: `-${drawerWidth}px`,
+    marginLeft: `-${drawerwidth}px`,
     ...(open && {
       transition: theme.transitions.create("margin", {
         easing: theme.transitions.easing.easeOut,
@@ -97,59 +97,53 @@ const DrawerHeader = styled("div")<AppBarProps>(({ theme }) => ({
   justifyContent: "space-between",
 }));
 
-const NavBarItem = (props) => {
+const NavBarItem = ({ text, icon, currentPage, setCurrentPage }: NavItems) => {
   const router = useRouter();
 
   return (
     <ListItemButton
-      key={props.text}
-      selected={props.currentPage === props.text}
-      onClick={() => router.push(props.text)}
+      key={text}
+      selected={currentPage === text}
+      onClick={() => {
+        setCurrentPage(text);
+        router.push(text);
+      }}
     >
       <Stack direction="row" alignItems="center" justifyContent="center">
-        <ListItemIcon>{props.icon}</ListItemIcon>
-        <span style={{ fontSize: "15px" }}>{capitalize(props.text)}</span>
+        <ListItemIcon>{icon}</ListItemIcon>
+        <span style={{ fontSize: "15px" }}>{capitalize(text)}</span>
       </Stack>
     </ListItemButton>
   );
 };
 
-export default function Layout(props) {
+export default function Layout(props: any) {
+  const router = useRouter();
   const theme = useTheme();
   const [open, setOpen] = useState(true);
   const [currentPage, setCurrentPage] = useState(props.currentPage ? props.currentPage : " ");
-  const handleDrawerOpen = () => {
-    setOpen(true);
-  };
 
   const handleDrawerClose = () => {
     setOpen(false);
   };
 
-  const WrapNavItem = (props) => (
-    <NavBarItem
-      text={props.text}
-      icon={props.icon}
-      currentPage={currentPage}
-      setCurrentPage={setCurrentPage}
-    />
-  );
-
   return (
     <Box sx={{ display: "flex", height: "100vh", width: "100vw" }}>
       <CssBaseline />
-      <AppBar open={open} drawerWidth={240}>
+      <AppBar open={open} drawerwidth={240}>
         <Toolbar>
           <IconButton
+            edge="start"
             color="inherit"
             aria-label="open drawer"
-            onClick={handleDrawerOpen}
-            edge="start"
+            onClick={() => setOpen(true)}
             sx={{ mr: 2, ...(open && { display: "none" }) }}
           >
             <MenuIcon />
           </IconButton>
-          <div>{capitalize(currentPage)}</div>
+          <Typography component="h1" variant="h6">
+            {capitalize(currentPage)}
+          </Typography>
         </Toolbar>
       </AppBar>
       <Drawer
@@ -166,17 +160,27 @@ export default function Layout(props) {
         open={open}
       >
         <DrawerHeader>
-          <Stack direction="column" alignItems="center" justifyContent="center">
-            <Stack direction="row" alignItems="center" justifyItems="center" spacing={2}>
+          <Stack direction="column" spacing={1} ml={1} mt={1}>
+            <Stack
+              direction="row"
+              alignItems="flex-end"
+              spacing={1}
+              onClick={() => router.push("/")}
+              sx={{ cursor: "pointer" }}
+            >
               <Image src="/singularitydata.svg" width={32} height={32} alt="logo" />
               <Typography variant="subtitle1" color="primary">
                 RisingWave
               </Typography>
             </Stack>
-            <div>
-              <span style={{ fontSize: "13px" }}>Dashboard </span>
-              <span style={{ fontSize: "13px" }}>v0.0.1-alpha</span>
-            </div>
+            <Stack direction="row" spacing={1} alignItems="center" justifyItems="center">
+              <Typography variant="subtitle2" color="secondary">
+                Dashboard
+              </Typography>
+              <Typography variant="subtitle2" color="secondary">
+                v0.0.1-alpha
+              </Typography>
+            </Stack>
           </Stack>
           <IconButton onClick={handleDrawerClose}>
             {theme.direction === "ltr" ? <ChevronLeftIcon /> : <ChevronRightIcon />}
@@ -184,15 +188,30 @@ export default function Layout(props) {
         </DrawerHeader>
         <Divider />
         <List>
-          <WrapNavItem text="cluster" icon={<ViewComfyIcon fontSize="small" />} />
-          <WrapNavItem text="streaming" icon={<DoubleArrowIcon fontSize="small" />} />
+          <NavBarItem
+            text="cluster"
+            icon={<ViewComfyIcon fontSize="small" />}
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+          />
+          <NavBarItem
+            text="streaming"
+            icon={<DoubleArrowIcon fontSize="small" />}
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+          />
         </List>
         <Divider />
         <List>
-          <WrapNavItem text="about" icon={<InfoIcon fontSize="small" />} />
+          <NavBarItem
+            text="about"
+            icon={<InfoIcon fontSize="small" />}
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+          />
         </List>
       </Drawer>
-      <Main open={open} mainPadding={30}>
+      <Main open={open} mainpadding={30}>
         <div style={{ height: "68px" }}></div>
         <div style={{ width: "calc(100vw - 275px)", height: "calc(100% - 68px)" }}>
           {props.children}

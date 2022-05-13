@@ -17,17 +17,26 @@
 import "../styles/global.css";
 
 import type { AppProps } from "next/app";
-import Layout from "../components/Layout";
+import Layout from "@components/Layout";
 import Head from "next/head";
+import { createTheme, ThemeProvider } from "@mui/material/styles";
 
 export default function MyApp({ Component, pageProps }: AppProps) {
+  const theme = createTheme({
+    palette: {
+      mode: "light",
+    },
+  });
+
   return (
-    <Layout>
-      <Head>
-        <title>Dashboard | RisingWave</title>
-        <link rel="icon" href="/singularitydata.svg" />
-      </Head>
-      <Component {...pageProps} />
-    </Layout>
+    <ThemeProvider theme={theme}>
+      <Layout>
+        <Head>
+          <title>Dashboard | RisingWave</title>
+          <link rel="icon" href="/singularitydata.svg" />
+        </Head>
+        <Component {...pageProps} />
+      </Layout>
+    </ThemeProvider>
   );
 }
