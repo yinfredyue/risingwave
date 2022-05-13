@@ -58,7 +58,7 @@ impl SessionManager for LocalFrontend {
 }
 
 impl LocalFrontend {
-    pub async fn new(opts: FrontendOpts) -> Self {
+    pub fn new(opts: FrontendOpts) -> Self {
         let env = FrontendEnv::mock();
         Self { opts, env }
     }

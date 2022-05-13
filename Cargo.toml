@@ -16,6 +16,8 @@ members = [
   "src/prost/helpers",
   "src/risedevtool",
   "src/rpc_client",
+  "src/rwfuzz"
+,
   "src/source",
   "src/sqlparser",
   "src/sqlparser/test_runner",
@@ -28,8 +30,7 @@ members = [
   "src/utils/memcomparable",
   "src/utils/pgwire",
   "src/utils/value-encoding",
-  "src/workspace-hack",
-]
+  "src/workspace-hack"]
 
 [profile.bench]
 opt-level = 3
