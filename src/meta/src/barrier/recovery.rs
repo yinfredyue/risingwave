@@ -264,11 +264,7 @@ where
 
             async move {
                 tokio_retry::Retry::spawn(retry_strategy, || async {
-                    let client = self
-                        .env
-                        .stream_clients()
-                        .get(worker_node)
-                        .await?;
+                    let client = self.env.stream_clients().get(worker_node).await?;
                     debug!("force stop actors: {}", worker_node.id);
                     client
                         .to_owned()

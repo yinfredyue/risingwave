@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp::{Ordering};
+use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet, VecDeque};
 use std::iter::once;
-use std::sync::{Arc, atomic};
 use std::sync::atomic::AtomicBool;
+use std::sync::{atomic, Arc};
 use std::time::Duration;
 
 use futures::future::try_join_all;
 use itertools::Itertools;
-use log::debug;
 use risingwave_common::catalog::TableId;
 use risingwave_common::error::{ErrorCode, Result, RwError, ToRwResult};
 use risingwave_common::util::epoch::{Epoch, INVALID_EPOCH};
@@ -31,7 +30,7 @@ use risingwave_pb::common::WorkerType;
 use risingwave_pb::data::Barrier;
 use risingwave_pb::stream_service::{InjectBarrierRequest, InjectBarrierResponse};
 use smallvec::SmallVec;
-use tokio::sync::mpsc::{ UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, watch, RwLock};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
@@ -182,19 +181,17 @@ pub struct GlobalBarrierManager<S: MetaStore> {
     semaphore: Arc<RwLock<u32>>,
 }
 
-struct HeapNode{
-    prev_epoch : u64,
+struct HeapNode {
+    prev_epoch: u64,
     tx: Option<oneshot::Sender<()>>,
 }
 
 impl HeapNode {
-    fn new(prev_epoch: u64, tx: Option<oneshot::Sender<()>>) -> Self{
-        Self{
-            prev_epoch,
-            tx,
-        }
+    fn new(prev_epoch: u64, tx: Option<oneshot::Sender<()>>) -> Self {
+        Self { prev_epoch, tx }
     }
-    fn notify_wait(&mut self){
+
+    fn notify_wait(&mut self) {
         if let Some(tx) = self.tx.take() {
             tx.send(()).ok();
         }
@@ -202,7 +199,7 @@ impl HeapNode {
 }
 
 impl Eq for HeapNode {}
-impl PartialEq for HeapNode{
+impl PartialEq for HeapNode {
     fn eq(&self, other: &Self) -> bool {
         other.prev_epoch == self.prev_epoch
     }
@@ -214,7 +211,10 @@ impl PartialOrd for HeapNode {
     }
 }
 
-impl Ord for HeapNode where Self: PartialOrd {
+impl Ord for HeapNode
+where
+    Self: PartialOrd,
+{
     fn cmp(&self, other: &HeapNode) -> Ordering {
         self.partial_cmp(other).unwrap()
     }
@@ -254,7 +254,7 @@ where
             epoch_heap: Arc::new(RwLock::new(BinaryHeap::new())),
             wait_recovery: Arc::new(AtomicBool::new(false)),
             abort_command: Arc::new(RwLock::new(vec![])),
-            semaphore:Arc::new(RwLock::new(0)),
+            semaphore: Arc::new(RwLock::new(0)),
         }
     }
 
@@ -364,12 +364,12 @@ where
             // Get a barrier to send.
             let (command, notifiers) = self.scheduled_barriers.pop_or_default().await;
 
-            match command{
-                Command::Plain(..)=>{},
-                _=>{
+            match command {
+                Command::Plain(..) => {}
+                _ => {
                     let mut semaphore = self.semaphore.write().await;
                     *semaphore += 1;
-                },
+                }
             }
 
             let info = self.resolve_actor_info(command.creating_table_id()).await;
@@ -385,7 +385,7 @@ where
             let new_epoch = Epoch::now();
             let prev_epoch = Epoch::from(last_epoch);
             last_epoch = new_epoch.0;
-            //debug!("new_epoch{:?},prev_epoch{:?},command:{:?}",new_epoch,prev_epoch,command);
+            // debug!("new_epoch{:?},prev_epoch{:?},command:{:?}",new_epoch,prev_epoch,command);
             assert!(
                 new_epoch > prev_epoch,
                 "new{:?},prev{:?}",
@@ -406,7 +406,7 @@ where
                 let (wait_tx, wait_rx) = oneshot::channel();
                 heap.write()
                     .await
-                    .push(HeapNode::new(prev_epoch.0,Some(wait_tx)));
+                    .push(HeapNode::new(prev_epoch.0, Some(wait_tx)));
 
                 let env = env.clone();
                 let command_ctx = CommandContext::new(
@@ -430,13 +430,13 @@ where
                 )
                 .await;
 
-                //debug!("over,new_epoch{:?}",new_epoch);
-                match command{
-                    Command::Plain(..)=>{},
-                    _=>{
+                // debug!("over,new_epoch{:?}",new_epoch);
+                match command {
+                    Command::Plain(..) => {}
+                    _ => {
                         let mut semaphore = semaphore.write().await;
                         *semaphore -= 1;
-                    },
+                    }
                 }
                 match result {
                     Ok(responses) => {
@@ -467,7 +467,7 @@ where
                     }
                 }
                 heap.write().await.pop();
-                if let Some(mut next_heap_node) = heap.write().await.peek_mut(){
+                if let Some(mut next_heap_node) = heap.write().await.peek_mut() {
                     next_heap_node.notify_wait();
                 }
             });
@@ -482,7 +482,7 @@ where
         heap: Arc<RwLock<BinaryHeap<HeapNode>>>,
         hummock_manager: HummockManagerRef<S>,
         wait_recovery: Arc<AtomicBool>,
-        wait_rx:oneshot::Receiver<()>,
+        wait_rx: oneshot::Receiver<()>,
     ) -> Result<Vec<InjectBarrierResponse>> {
         let timer = metrics.barrier_latency.start_timer();
 
@@ -556,7 +556,7 @@ where
                     // TODO(chi): add distributed tracing
                     span: vec![],
                 };
-                //debug!("inject_barrier to cn {:?}", barrier);
+                // debug!("inject_barrier to cn {:?}", barrier);
                 let env = env.clone();
                 async move {
                     let mut client = env.stream_clients().get(node).await?;
