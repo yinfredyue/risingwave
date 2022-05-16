@@ -220,8 +220,12 @@ impl SstableStore {
             Ok(Box::new(block))
         };
 
-        // In case of failpoints tests, we disable reading from cache
-        let policy = if fail::has_failpoints() {
+        let disable_cache: fn() -> bool = || {
+            fail_point!("disable_block_cache", |_| true);
+            false
+        };
+
+        let policy = if disable_cache() {
             ReadCachePolicy::Disable
         } else {
             policy
