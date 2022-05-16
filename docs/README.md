@@ -16,6 +16,8 @@ This directory contains RisingWave design documents that are intended to be used
 
 ## Contribution Guide
 
+To learn about how to contribute to RisingWave, please see our [Contribution Guidelines]().
+
 ## Images
 
 We recommend that you use [draw.io](https://app.diagrams.net/) to draw illustrations and export as SVG images, with "include a copy of my diagram" selected for further editing.
