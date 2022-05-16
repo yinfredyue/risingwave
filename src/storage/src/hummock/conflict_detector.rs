@@ -70,6 +70,10 @@ impl ConflictDetector {
                     }
                     x > &(epoch)
                 });
+<<<<<<< HEAD
+=======
+                return;
+>>>>>>> main
             }
         }
     }
@@ -253,6 +257,7 @@ mod test {
         detector.archive_epoch(233);
         assert!(detector.epoch_history.get(&233).unwrap().is_none());
         detector.set_watermark(233);
+        assert!(detector.epoch_history.get(&233).is_none());
     }
 
     #[test]
