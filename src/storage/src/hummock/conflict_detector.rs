@@ -70,10 +70,7 @@ impl ConflictDetector {
                     }
                     x > &(epoch)
                 });
-<<<<<<< HEAD
-=======
                 return;
->>>>>>> main
             }
         }
     }

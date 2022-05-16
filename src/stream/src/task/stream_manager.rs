@@ -17,9 +17,9 @@ use std::sync::Arc;
 
 use futures::channel::mpsc::{channel, Receiver};
 use itertools::Itertools;
-use parking_lot::{Mutex, RwLock};
 use madsim::collections::{HashMap, HashSet};
 use madsim::task::JoinHandle;
+use parking_lot::{Mutex, RwLock};
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_common::try_match_expand;
 use risingwave_common::util::addr::{is_local_address, HostAddr};

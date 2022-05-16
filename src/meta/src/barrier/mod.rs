@@ -62,7 +62,7 @@ enum BarrierSendResult {
         SmallVec<[Notifier; 1]>,
         Vec<InjectBarrierResponse>,
     ),
-    Err(Epoch,RwError, bool),
+    Err(Epoch, RwError, bool),
 }
 
 /// A buffer or queue for scheduling barriers.
@@ -457,7 +457,7 @@ where
                             is_over = true;
                         }
                         barrier_send_tx_clone
-                            .send(BarrierSendResult::Err(prev_epoch,e, is_over))
+                            .send(BarrierSendResult::Err(prev_epoch, e, is_over))
                             .unwrap();
                     }
                 }
