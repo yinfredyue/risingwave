@@ -1,5 +1,5 @@
 import { Dispatcher } from "./Dispatcher";
-import { Nodes } from "./Node";
+import { Node, Nodes } from "./Node";
 
 export interface Actor {
   actorId: number;

@@ -85,7 +85,8 @@ export function FiveColor(index: number) {
   return five[index % five.length];
 }
 
+const s = Math.random() * 100;
+
 export function TwoGradient(index: number) {
-  const s = Math.random() * 100;
   return twoGradient[(Math.round(s) + index) % two.length];
 }

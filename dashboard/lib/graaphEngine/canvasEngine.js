@@ -24,7 +24,7 @@ fabric.Object.prototype.needsItsOwnCache = () => false;
 
 export class DrawElement {
   /**
-   * @param {{svgElement: d3.Selection<any, any, any, any>}} props 
+   * @param {{svgElement: d3.Selection<any, any, any, any>}} props
    */
   constructor(props) {
     /**
@@ -35,7 +35,7 @@ export class DrawElement {
       props.engine.canvas.add(props.canvasElement);
       props.canvasElement.on("mouse:down", (e) => {
         console.log(e);
-      })
+      });
     }
 
     this.eventHandler = new Map();
@@ -94,73 +94,82 @@ export class DrawElement {
 
 export class Group extends DrawElement {
   /**
-   * @param {{engine: CanvasEngine}} props 
+   * @param {{engine: CanvasEngine}} props
    */
   constructor(props) {
     super(props);
 
     this.appendFunc = {
-      "g": this._appendGroup,
-      "circle": this._appendCircle,
-      "rect": this._appendRect,
-      "text": this._appendText,
-      "path": this._appendPath,
-      "polygon": this._appendPolygan,
-    }
+      g: this._appendGroup,
+      circle: this._appendCircle,
+      rect: this._appendRect,
+      text: this._appendText,
+      path: this._appendPath,
+      polygon: this._appendPolygan,
+    };
 
     this.basicSetting = {
-      engine: props.engine
-    }
+      engine: props.engine,
+    };
   }
 
   _appendGroup = () => {
     return new Group(this.basicSetting);
-  }
+  };
 
   _appendCircle = () => {
     return new Circle({
-      ...this.basicSetting, ...{
-        canvasElement: new fabric.Circle({ selectable: false, hoverCursor: "pointer" })
-      }
+      ...this.basicSetting,
+      ...{
+        canvasElement: new fabric.Circle({ selectable: false, hoverCursor: "pointer" }),
+      },
     });
-  }
+  };
 
   _appendRect = () => {
     return new Rectangle({
-      ...this.basicSetting, ...{
-        canvasElement: new fabric.Rect({ selectable: false, hoverCursor: "pointer" })
-      }
+      ...this.basicSetting,
+      ...{
+        canvasElement: new fabric.Rect({ selectable: false, hoverCursor: "pointer" }),
+      },
     });
-  }
+  };
 
   _appendText = () => {
-    return (content) => new Text({
-      ...this.basicSetting, ...{
-        canvasElement: new fabric.Text(content || "undefined", { selectable: false, textAlign: "justify-center" })
-      }
-    });
-  }
+    return (content) =>
+      new Text({
+        ...this.basicSetting,
+        ...{
+          canvasElement: new fabric.Text(content || "undefined", {
+            selectable: false,
+            textAlign: "justify-center",
+          }),
+        },
+      });
+  };
 
   _appendPath = () => {
-    return (d) => new Path({
-      ...this.basicSetting, ...{
-        canvasElement: new fabric.Path(d, { selectable: false })
-      }
-    });
-  }
+    return (d) =>
+      new Path({
+        ...this.basicSetting,
+        ...{
+          canvasElement: new fabric.Path(d, { selectable: false }),
+        },
+      });
+  };
 
   _appendPolygan = () => {
     return new Polygan(this.basicSetting);
-  }
+  };
 
   append = (type) => {
     return this.appendFunc[type]();
-  }
+  };
 }
 
 export class Rectangle extends DrawElement {
   /**
-   * @param {{g: fabric.Group}} props 
+   * @param {{g: fabric.Group}} props
    */
   constructor(props) {
     super(props);
@@ -189,7 +198,7 @@ export class Rectangle extends DrawElement {
 
 export class Circle extends DrawElement {
   /**
-   * @param {{svgElement: d3.Selection<SVGCircleElement, any, any, any>}} props 
+   * @param {{svgElement: d3.Selection<SVGCircleElement, any, any, any>}} props
    */
   constructor(props) {
     super(props);
@@ -222,10 +231,10 @@ export class Circle extends DrawElement {
 
 export class Text extends DrawElement {
   /**
-   * @param {{svgElement: d3.Selection<d3.Selection<any, any, any, any>, any, null, undefined>}} props 
+   * @param {{svgElement: d3.Selection<d3.Selection<any, any, any, any>, any, null, undefined>}} props
    */
   constructor(props) {
-    super(props)
+    super(props);
     this.props = props;
   }
 
@@ -251,9 +260,7 @@ export class Text extends DrawElement {
     return this;
   }
 
-  getWidth() {
-
-  }
+  getWidth() {}
 }
 
 export class Polygan extends DrawElement {
@@ -271,13 +278,12 @@ export class Path extends DrawElement {
     super._afterPosition();
   }
 
-
   _attrMap(key, value) {
     if (key === "fill") {
       return ["fill", value === "none" ? false : value];
     }
     if (key === "stroke-width") {
-      this.props.canvasElement.set("top", this.props.canvasElement.get("top") - value / 2)
+      this.props.canvasElement.set("top", this.props.canvasElement.get("top") - value / 2);
       return ["strokeWidth", value];
     }
     if (key === "stroke-dasharray") {
@@ -291,7 +297,6 @@ export class Path extends DrawElement {
     }
     return [key, value];
   }
-
 }
 
 // TODO: Use rbtree
@@ -304,7 +309,7 @@ class CordMapper {
     let rtn = new Set();
     for (let [k, s] of this.map.entries()) {
       if (start <= k && k <= end) {
-        s.forEach(v => rtn.add(v));
+        s.forEach((v) => rtn.add(v));
       }
     }
     return rtn;
@@ -343,11 +348,11 @@ class GridMapper {
     let xs = this.xMap.rangeQuery(this._getKey(minX), this._getKey(maxX));
     let ys = this.yMap.rangeQuery(this._getKey(minY), this._getKey(maxY));
     let rtn = new Set();
-    xs.forEach(e => {
+    xs.forEach((e) => {
       if (ys.has(e)) {
         rtn.add(e);
       }
-    })
+    });
     return rtn;
   }
 }
@@ -371,8 +376,8 @@ export class CanvasEngine {
     this.canvasElementToDrawElement = new Map();
 
     let that = this;
-    canvas.on('mouse:wheel', function (opt) {
-      var evt = opt.e
+    canvas.on("mouse:wheel", function (opt) {
+      var evt = opt.e;
       if (evt.ctrlKey === true) {
         var delta = opt.e.deltaY;
         var zoom = canvas.getZoom();
@@ -383,7 +388,6 @@ export class CanvasEngine {
         that._refreshView();
         evt.preventDefault();
         evt.stopPropagation();
-
       } else {
         that.moveCamera(-evt.deltaX, -evt.deltaY);
         evt.preventDefault();
@@ -391,7 +395,7 @@ export class CanvasEngine {
       }
     });
 
-    canvas.on('mouse:down', function (opt) {
+    canvas.on("mouse:down", function (opt) {
       var evt = opt.e;
       this.isDragging = true;
       this.selection = false;
@@ -401,7 +405,7 @@ export class CanvasEngine {
       that._handleClickEvent(opt.target);
     });
 
-    canvas.on('mouse:move', function (opt) {
+    canvas.on("mouse:move", function (opt) {
       if (this.isDragging) {
         var e = opt.e;
         that.moveCamera(e.clientX - this.lastPosX, e.clientY - this.lastPosY);
@@ -409,7 +413,7 @@ export class CanvasEngine {
         this.lastPosY = e.clientY;
       }
     });
-    canvas.on('mouse:up', function (opt) {
+    canvas.on("mouse:up", function (opt) {
       this.setViewportTransform(this.viewportTransform);
       this.isDragging = false;
       this.selection = true;
@@ -418,8 +422,8 @@ export class CanvasEngine {
 
   /**
    * Move the current view point.
-   * @param {number} deltaX 
-   * @param {number} deltaY 
+   * @param {number} deltaX
+   * @param {number} deltaY
    */
   async moveCamera(deltaX, deltaY) {
     this.canvas.setZoom(this.canvas.getZoom()); // essential for rendering (seems like a bug)
@@ -431,7 +435,7 @@ export class CanvasEngine {
 
   /**
    * Invoke the click hander of an object.
-   * @param {fabric.Object} target 
+   * @param {fabric.Object} target
    */
   async _handleClickEvent(target) {
     if (target === null) {
@@ -445,14 +449,14 @@ export class CanvasEngine {
   }
 
   /**
-   * Set the objects in the current view point visible. 
+   * Set the objects in the current view point visible.
    * And set other objects not visible.
    */
   async _refreshView() {
     const padding = 50; // Make the rendering area a little larger.
     let vpt = this.canvas.viewportTransform;
     let zoom = this.canvas.getZoom();
-    let cameraWidth = this.width
+    let cameraWidth = this.width;
     let cameraHeight = this.height;
     let minX = -vpt[4] - padding;
     let maxX = -vpt[4] + cameraWidth + padding;
@@ -460,7 +464,7 @@ export class CanvasEngine {
     let maxY = -vpt[5] + cameraHeight + padding;
     let visibleSet = this.gridMapper.areaQuery(minX / zoom, maxX / zoom, minY / zoom, maxY / zoom);
 
-    this.canvas.getObjects().forEach(e => {
+    this.canvas.getObjects().forEach((e) => {
       if (visibleSet.has(e)) {
         e.visible = true;
       } else {
@@ -472,10 +476,10 @@ export class CanvasEngine {
   }
 
   /**
-   * Register an element to the engine. This should 
+   * Register an element to the engine. This should
    * be called when a DrawElement instance is added
    * to the canvas.
-   * @param {DrawElement} ele 
+   * @param {DrawElement} ele
    */
   _addDrawElement(ele) {
     let canvasElement = ele.props.canvasElement;
@@ -486,7 +490,7 @@ export class CanvasEngine {
       canvasElement.top,
       canvasElement.top + canvasElement.height,
       canvasElement
-    )
+    );
   }
 
   /**
@@ -510,7 +514,7 @@ export class CanvasEngine {
 
   /**
    * Move current view point to the object specified by
-   * the selector. The selector is the class of the 
+   * the selector. The selector is the class of the
    * target object for now.
    * @param {string} selector The class of the target object
    */
@@ -539,7 +543,7 @@ export class CanvasEngine {
    */
   resetCamera() {
     let zoom = this.canvas.getZoom();
-    zoom *= 0.999; 
+    zoom *= 0.999;
     this.canvas.setZoom(zoom);
     let vpt = this.canvas.viewportTransform;
     vpt[4] = 0;
@@ -559,15 +563,15 @@ export class CanvasEngine {
 
   /**
    * Resize the canvas. This is called when the browser size
-   * is changed, such that the canvas can fix the current 
-   * size of the browser. 
-   * 
+   * is changed, such that the canvas can fix the current
+   * size of the browser.
+   *
    * Note that the outter div box of the canvas will be set
-   * according to the parameters. However, the width and 
+   * according to the parameters. However, the width and
    * height of the canvas is double times of the parameters.
    * This is the feature of fabric.js to keep the canvas
    * in high resolution all the time.
-   * 
+   *
    * @param {number} width the width of the canvas
    * @param {number} height the height of the canvas
    */
