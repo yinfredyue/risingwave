@@ -220,7 +220,7 @@ export default function Layout({ children }: LayoutProps) {
       </Drawer>
       <Main open={open} mainpadding={30}>
         <div style={{ height: "68px" }}></div>
-        <div style={{ width: "calc(100vw - 275px)", height: "calc(100% - 68px)" }}>{children}</div>
+        <div style={{ width: "100%", height: "calc(100% - 68px)" }}>{children}</div>
       </Main>
     </Box>
   );

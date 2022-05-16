@@ -14,24 +14,24 @@
  * limitations under the License.
  *
  */
-export function iter(n, step) {
+export function iter(n: number, step: Function) {
   for (let i = 0; i < n; ++i) {
     step(i);
   }
 }
 
-export function newNumberArray(length){
-  let rtn = [];
+export function newNumberArray(length: number) {
+  const rtn: number[] = [];
   iter(length, () => {
     rtn.push(0);
-  })
+  });
   return rtn;
 }
 
 export function newMatrix(n) {
-  let rtn = [];
+  const rtn: number[][] = [];
   iter(n, () => {
     rtn.push([]);
-  })
+  });
   return rtn;
 }

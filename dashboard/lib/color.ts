@@ -60,8 +60,8 @@ const twoGradient = [
   ["#FFE785", "#E0C75F"],
   ["#FF94FB", "#E06BDC"],
   ["#DA99FF", "#B66FE0"],
-  ["#8F93FF", "#666AE0"]
-]
+  ["#8F93FF", "#666AE0"],
+];
 
 const five = [
   ["#A8936C", "#F5D190", "#8B84F5", "#9AA84A", "#E1F578"],
@@ -74,17 +74,18 @@ const five = [
   ["#94A877", "#D2F5A2", "#F596B6", "#56A88C", "#89F5D0"],
   ["#A8A072", "#F5E79A", "#CD8DF5", "#5DA851", "#92F582"],
   ["#A89176", "#F5CD9F", "#92A3F5", "#A8A554", "#F5F087"],
-  ["#A8726A", "#F59B8E", "#83ECF5", "#A88948", "#F5CB76"]
+  ["#A8726A", "#F59B8E", "#83ECF5", "#A88948", "#F5CB76"],
 ];
-export function TwoColor(index) {
+
+export function TwoColor(index: number) {
   return two[index % two.length];
 }
 
-export function FiveColor(index) {
+export function FiveColor(index: number) {
   return five[index % five.length];
 }
 
-let s = Math.random() * 100;
-export function TwoGradient(index) {
+export function TwoGradient(index: number) {
+  const s = Math.random() * 100;
   return twoGradient[(Math.round(s) + index) % two.length];
 }

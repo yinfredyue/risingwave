@@ -16,12 +16,11 @@
  */
 import createView, { computeNodeAddrToSideColor } from "../lib/streamPlan/streamChartHelper";
 import { useEffect, useRef, useState } from "react";
-import styled from "@emotion/styled";
 import LocationSearchingIcon from "@mui/icons-material/LocationSearching";
 import CircularProgress from "@mui/material/CircularProgress";
 import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { Stack, Tabs, Tab, Button } from "@mui/material";
+import { Stack, Tabs, Tab, Box } from "@mui/material";
 import {
   Tooltip,
   FormControl,
@@ -34,68 +33,19 @@ import {
   IconButton,
   Autocomplete,
   TextField,
-  FormControlLabel,
   Switch,
-  Divider,
 } from "@mui/material";
 import { CanvasEngine } from "../lib/graaphEngine/canvasEngine";
 import useWindowSize from "../hook/useWindowSize";
 import { Close } from "@mui/icons-material";
-import SyntaxHighlighter from "react-syntax-highlighter";
-import { stackoverflowDark } from "react-syntax-highlighter/dist/cjs/styles/hljs";
-
-const SvgBox = styled("div")(() => ({
-  padding: "10px",
-  borderRadius: "20px",
-  boxShadow: "5px 5px 10px #ebebeb, -5px -5px 10px #ffffff",
-  position: "relative",
-  marginBottom: "100px",
-  height: "100%",
-  width: "100%",
-}));
-
-const SvgBoxCover = styled("div")(() => ({
-  position: "absolute",
-  zIndex: "6",
-}));
-
-const ToolBoxTitle = styled("div")(() => ({
-  fontSize: "15px",
-  fontWeight: 700,
-}));
-
-const PopupBox = styled("div")({
-  width: "100%",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  backgroundColor: "white",
-  borderRadius: "20px",
-});
-
-const PopupBoxHeader = styled("div")({
-  padding: "10px",
-  display: "flex",
-  flexDirection: "row",
-  justifyContent: "end",
-  alignItems: "center",
-  backgroundColor: "#1976D2",
-  borderTopRightRadius: "20px",
-  borderTopLeftRadius: "20px",
-  height: "50px",
-});
-
-const generateMessageTraceLink = (actorId) => {
-  return `http://localhost:16680/search?service=compute&tags=%7B%22actor_id%22%3A%22${actorId}%22%2C%22msg%22%3A%22chunk%22%7D`;
-};
-
-const generateEpochTraceLink = (actorId) => {
-  return `http://localhost:16680/search?service=compute&tags=%7B%22actor_id%22%3A%22${actorId}%22%2C%22epoch%22%3A%22-1%22%7D`;
-};
+import { SvgBox, SvgBoxCover } from "./SvgBox";
+import { ToolBoxTitle } from "./ToolBox";
+import JsonView from "./JsonView";
+import { ActorInfoView } from "./ActorInfoView";
 
 export default function StreamingView(props) {
-  const data = props.data || [];
-  const mvList = props.mvList || [];
+  const { data } = props;
+  const { mvList } = props;
   const actorList = data.map((x) => x.node);
 
   const [nodeJson, setNodeJson] = useState("");
@@ -232,14 +182,14 @@ export default function StreamingView(props) {
   };
 
   const initGraph = (shownActorIdList) => {
-    let newEngine = new CanvasEngine(
+    const newEngine = new CanvasEngine(
       "c",
       canvasRef.current.clientHeight,
       canvasRef.current.clientWidth
     );
     setEngine(newEngine);
     resizeCanvas();
-    let newView = createView(
+    const newView = createView(
       newEngine,
       data,
       onNodeClick,
@@ -300,86 +250,51 @@ export default function StreamingView(props) {
   return (
     <SvgBox>
       <SvgBoxCover style={{ right: "10px", top: "10px", width: "500px" }}>
-        <PopupBox
-          style={{
-            display: showInfoPane ? "block" : "none",
-            height:
-              canvasOutterBox && canvasOutterBox.current
-                ? canvasOutterBox.current.clientHeight - 100
-                : 500,
-          }}
-        >
-          <PopupBoxHeader>
-            <IconButton onClick={() => setShowInfoPane(false)}>
-              <Close sx={{ color: "white" }} />
-            </IconButton>
-          </PopupBoxHeader>
-          <Tabs value={tabValue} onChange={onTabChange} aria-label="basic tabs example">
-            <Tab label="Info" id={0} />
-            <Tab label="Raw JSON" id={1} />
-          </Tabs>
-          <div
-            style={{
-              display: tabValue === 0 ? "flex" : "none",
-              flexDirection: "column",
-              padding: "10px",
-              width: "100%",
-              height: "calc(100% - 160px)",
-              overflow: "auto",
-            }}
+        {showInfoPane ? (
+          <Stack
+            alignItems="center"
+            width="100%"
+            bgcolor="#fafafa"
+            borderRadius={4}
+            boxShadow="5px 5px 10px #ebebeb, -5px -5px 10px #ffffff"
+            height={canvasOutterBox?.current ? canvasOutterBox.current.clientHeight - 100 : 500}
           >
-            {actor &&
-              actor.representedActorList.map((a, i) => (
-                <Stack
-                  key={i}
-                  direction="column"
-                  justifyContent="center"
-                  spacing={1}
-                  style={{ width: "100%", marginBottom: "30px" }}
-                >
-                  <div style={{ fontSize: "15px", color: "#1976D2" }}>Actor {a.actorId}</div>
-                  <a
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    href={generateMessageTraceLink(a.actorId)}
-                  >
-                    <Button variant="outlined">Trace Message of Actor #{a.actorId}</Button>
-                  </a>
-                  <a
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    href={generateEpochTraceLink(a.actorId)}
-                  >
-                    <Button variant="outlined">
-                      Trace Epoch {"-1"} of Actor #{a.actorId}
-                    </Button>
-                  </a>
-                </Stack>
-              ))}
-          </div>
-          <div
-            style={{
-              display: tabValue === 1 ? "block" : "none",
-              height: "calc(100% - 160px)",
-              overflow: "auto",
-            }}
-          >
-            <SyntaxHighlighter
-              language="json"
-              style={stackoverflowDark}
-              wrapLines={true}
-              showLineNumbers={true}
+            <Stack
+              p={2}
+              width="100%"
+              height="50px"
+              direction="row"
+              alignItems="center"
+              justifyContent="end"
+              backgroundColor="#1a76d2"
+              borderRadius="20px 20px 0 0"
             >
-              {nodeJson}
-            </SyntaxHighlighter>
-          </div>
-        </PopupBox>
+              <IconButton onClick={() => setShowInfoPane(false)}>
+                <Close sx={{ color: "white" }} />
+              </IconButton>
+            </Stack>
+            <Stack
+              dirction="row"
+              bgcolor="white"
+              width="100%"
+              justifyContent="center"
+              alignItems="center"
+            >
+              <Tabs value={tabValue} onChange={onTabChange} aria-label="basic tabs example">
+                <Tab label="Info" id={0} />
+                <Tab label="Raw JSON" id={1} />
+              </Tabs>
+            </Stack>
+            {tabValue === 0 ? <ActorInfoView actor={actor} /> : null}
+            {tabValue === 1 ? <JsonView nodeJson={nodeJson} /> : null}
+          </Stack>
+        ) : null}
       </SvgBoxCover>
-      <SvgBoxCover className="noselect" style={{ display: "flex", flexDirection: "column" }}>
-        {/* Select actor */}
-        <ToolBoxTitle>Select a worker node</ToolBoxTitle>
+
+      <Stack className="noselect" zIndex={6} position="absolute">
+        <ToolBoxTitle> Select a worker node </ToolBoxTitle>
         <FormControl sx={{ m: 1, minWidth: 300 }}>
-          <InputLabel>Worker Node</InputLabel>
+          <InputLabel> Worker Node </InputLabel>
           <Select
             value={selectedWorkerNode || "Show All"}
             label="Woker Node"
@@ -388,11 +303,11 @@ export default function StreamingView(props) {
             <MenuItem value="Show All" key="all">
               Show All
             </MenuItem>
-            {actorList.map((x, index) => {
+            {actorList.map((x, idx) => {
               return (
                 <MenuItem
                   value={x}
-                  key={index}
+                  key={idx}
                   sx={{ display: "flex", flexDirection: "row", alignItems: "center" }}
                 >
                   {x.type}&nbsp;{" "}
@@ -410,17 +325,16 @@ export default function StreamingView(props) {
               );
             })}
           </Select>
-          <FormHelperText>Select an Actor</FormHelperText>
+          <FormHelperText> Select an Actor </FormHelperText>
         </FormControl>
 
-        {/* Search box */}
-        <ToolBoxTitle>Search</ToolBoxTitle>
-        <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+        <ToolBoxTitle> Search </ToolBoxTitle>
+        <Stack direction="row" alignItems="center">
           <FormControl sx={{ m: 1, minWidth: 120 }}>
-            <InputLabel>Type</InputLabel>
+            <InputLabel> Type </InputLabel>
             <Select value={searchType} label="Type" onChange={onSearchTypeChange}>
-              <MenuItem value="Actor">Actor</MenuItem>
-              <MenuItem value="Fragment">Fragment</MenuItem>
+              <MenuItem value="Actor"> Actor </MenuItem>
+              <MenuItem value="Fragment"> Fragment </MenuItem>
             </Select>
           </FormControl>
           <Input
@@ -437,35 +351,29 @@ export default function StreamingView(props) {
               </InputAdornment>
             }
           />
-        </div>
+        </Stack>
 
-        {/* Search box */}
-        <ToolBoxTitle>Filter materialized view</ToolBoxTitle>
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <ToolBoxTitle> Filter materialized view </ToolBoxTitle>
+        <Stack>
           <FormControl sx={{ m: 1, width: 300 }}>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "row",
-                alignItems: "center",
-                marginBottom: "10px",
-              }}
-            >
-              <div>
-                <InputLabel>Mode</InputLabel>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+              <Box>
+                <InputLabel> Mode </InputLabel>
                 <Select
                   sx={{ width: 140 }}
                   value={filterMode}
                   label="Mode"
                   onChange={onFilterModeChange}
                 >
-                  <MenuItem value="Single View">Single View</MenuItem>
-                  <MenuItem value="Chain View">Chain View</MenuItem>
+                  <MenuItem value="Single View"> Single View </MenuItem>
+                  <MenuItem value="Chain View"> Chain View </MenuItem>
                 </Select>
-              </div>
-              <div style={{ marginLeft: "20px" }}>Full Graph</div>
-              <Switch defaultChecked value={showFullGraph} onChange={onFullGraphSwitchChange} />
-            </div>
+              </Box>
+              <Stack direction="row" alignItems="center" ml={1}>
+                <Box> Full Graph </Box>
+                <Switch defaultChecked value={showFullGraph} onChange={onFullGraphSwitchChange} />
+              </Stack>
+            </Stack>
             <Autocomplete
               isOptionEqualToValue={(option, value) => {
                 return option.tableId === value.tableId;
@@ -480,35 +388,39 @@ export default function StreamingView(props) {
               renderInput={(param) => <TextField {...param} label="Materialized View" />}
             />
           </FormControl>
-        </div>
-      </SvgBoxCover>
+        </Stack>
+      </Stack>
 
       <SvgBoxCover style={{ right: "10px", bottom: "10px", cursor: "pointer" }}>
         <Stack direction="row" spacing={2}>
           <Tooltip title="Reset">
-            <div onClick={() => onReset()}>
+            <Box onClick={() => onReset()}>
               <LocationSearchingIcon color="action" />
-            </div>
+            </Box>
           </Tooltip>
 
           <Tooltip title="refresh">
             {!refreshing ? (
-              <div onClick={() => onRefresh()}>
+              <Box onClick={() => onRefresh()}>
                 <RefreshIcon color="action" />
-              </div>
+              </Box>
             ) : (
               <CircularProgress />
             )}
           </Tooltip>
         </Stack>
       </SvgBoxCover>
-      <div
+
+      <Box
         ref={canvasOutterBox}
-        style={{ zIndex: 5, width: "100%", height: "100%", overflow: "auto" }}
+        width="100%"
+        height="100%"
+        zIndex={5}
+        overflow="auto"
         className="noselect"
       >
         <canvas ref={canvasRef} id="c" width={1000} height={1000} style={{ cursor: "pointer" }} />
-      </div>
+      </Box>
     </SvgBox>
   );
 }
