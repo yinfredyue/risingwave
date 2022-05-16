@@ -1,6 +1,8 @@
+import { ReactNode } from "react";
+
 export interface Items {
   text: string;
-  icon: any;
+  icon: ReactNode;
 }
 
 export interface NavItems extends Items {

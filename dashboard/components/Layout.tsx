@@ -14,34 +14,33 @@
  * limitations under the License.
  *
  */
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/router";
 
-import React, { useEffect, useState } from "react";
-import { styled, useTheme } from "@mui/material/styles";
 import Box from "@mui/material/Box";
+import List from "@mui/material/List";
 import Stack from "@mui/material/Stack";
 import Drawer from "@mui/material/Drawer";
-import CssBaseline from "@mui/material/CssBaseline";
 import Toolbar from "@mui/material/Toolbar";
-import List from "@mui/material/List";
 import Divider from "@mui/material/Divider";
+import MenuIcon from "@mui/icons-material/Menu";
+import InfoIcon from "@mui/icons-material/Info";
 import IconButton from "@mui/material/IconButton";
+import Typography from "@mui/material/Typography";
+import CssBaseline from "@mui/material/CssBaseline";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import { styled, useTheme } from "@mui/material/styles";
+import ListItemButton from "@mui/material/ListItemButton";
+import ViewComfyIcon from "@mui/icons-material/ViewComfy";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import DoubleArrowIcon from "@mui/icons-material/DoubleArrow";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import MuiAppBar, { AppBarProps as MuiAppBarProps } from "@mui/material/AppBar";
 
-import MenuIcon from "@mui/icons-material/Menu";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import DoubleArrowIcon from "@mui/icons-material/DoubleArrow";
-import ViewComfyIcon from "@mui/icons-material/ViewComfy";
-import InfoIcon from "@mui/icons-material/Info";
-
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemIcon from "@mui/material/ListItemIcon";
-
 import { capitalize } from "../lib/str";
-import Typography from "@mui/material/Typography";
-import { Items, NavItems } from "@interfaces/Items";
+import { NavItems } from "@interfaces/Items";
+import { LayoutProps } from "@interfaces/LayoutProps";
 
 interface AppBarProps extends MuiAppBarProps {
   open?: boolean;
@@ -117,11 +116,19 @@ const NavBarItem = ({ text, icon, currentPage, setCurrentPage }: NavItems) => {
   );
 };
 
-export default function Layout(props: any) {
+export default function Layout({ children }: LayoutProps) {
   const router = useRouter();
   const theme = useTheme();
   const [open, setOpen] = useState(true);
-  const [currentPage, setCurrentPage] = useState(props.currentPage ? props.currentPage : " ");
+  const [currentPage, setCurrentPage] = useState("");
+
+  useEffect(() => {
+    if (router.pathname !== "/") {
+      setCurrentPage(router.pathname.slice(1));
+    } else {
+      setCurrentPage("Home");
+    }
+  }, [router]);
 
   const handleDrawerClose = () => {
     setOpen(false);
@@ -213,9 +220,7 @@ export default function Layout(props: any) {
       </Drawer>
       <Main open={open} mainpadding={30}>
         <div style={{ height: "68px" }}></div>
-        <div style={{ width: "calc(100vw - 275px)", height: "calc(100% - 68px)" }}>
-          {props.children}
-        </div>
+        <div style={{ width: "calc(100vw - 275px)", height: "calc(100% - 68px)" }}>{children}</div>
       </Main>
     </Box>
   );
