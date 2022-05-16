@@ -15,9 +15,9 @@
 #![allow(clippy::mutable_key_type)]
 #![allow(dead_code)]
 
-use std::collections::BTreeMap;
 use std::vec::Drain;
 
+use madsim::collections::BTreeMap;
 use risingwave_common::array::Row;
 use risingwave_common::catalog::ColumnId;
 use risingwave_common::error::Result;
@@ -296,7 +296,7 @@ impl<S: StateStore> ManagedTopNBottomNState<S> {
             let column_ids = (0..self.data_types.len() as i32)
                 .map(ColumnId::from)
                 .collect::<Vec<_>>();
-            let bytes = serialize_pk_and_row(&pk_buf, &row, &column_ids)?;
+            let bytes = serialize_pk_and_row_state(&pk_buf, &row, &column_ids)?;
             for (key, value) in bytes {
                 match value {
                     // TODO(Yuanxin): Implement value meta
@@ -368,7 +368,7 @@ mod tests {
         )
     }
 
-    #[tokio::test]
+    #[madsim::test]
     async fn test_managed_top_n_bottom_n_state() {
         let data_types = vec![DataType::Varchar, DataType::Int64];
         let order_types = vec![OrderType::Descending, OrderType::Ascending];

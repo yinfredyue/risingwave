@@ -14,7 +14,6 @@
 
 use std::collections::HashSet;
 use std::iter::Map;
-use std::sync::Arc;
 use std::time::Duration;
 
 use futures::future::try_join_all;
@@ -28,7 +27,6 @@ use risingwave_pb::stream_service::{
     BroadcastActorInfoTableRequest, BuildActorsRequest, ForceStopActorsRequest, SyncSourcesRequest,
     UpdateActorsRequest,
 };
-use tokio::sync::RwLock;
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use uuid::Uuid;
 
@@ -58,24 +56,15 @@ where
     }
 
     /// Recovery the whole cluster from the latest epoch.
-    pub(crate) async fn recovery(
-        &self,
-        prev_epoch: Epoch,
-        prev_command: Option<Arc<RwLock<Vec<Command>>>>,
-    ) -> RecoveryResult {
+    pub(crate) async fn recovery(&self, prev_epoch: Epoch) -> RecoveryResult {
         // Abort buffered schedules, they might be dirty already.
         self.scheduled_barriers.abort().await;
-
-        // clean up the previous command dirty data.
-        if let Some(prev_command) = prev_command {
-            self.clean_up(prev_command).await;
-        }
 
         debug!("recovery start!");
         let retry_strategy = Self::get_retry_strategy();
         let (new_epoch, responses) = tokio_retry::Retry::spawn(retry_strategy, || async {
             let info = self.resolve_actor_info(None).await;
-            let mut new_epoch = Epoch::now();
+            let mut new_epoch = prev_epoch.next();
 
             // Reset all compute nodes, stop and drop existing actors.
             self.reset_compute_nodes(&info, &prev_epoch, &new_epoch)
@@ -98,7 +87,7 @@ where
             }
 
             let prev_epoch = new_epoch;
-            new_epoch = Epoch::now();
+            new_epoch = prev_epoch.next();
             // checkpoint, used as init barrier to initialize all executors.
             let command_ctx = CommandContext::new(
                 self.fragment_manager.clone(),
@@ -135,23 +124,6 @@ where
                 .flat_map(|r| r.finished_create_mviews)
                 .collect(),
         );
-    }
-
-    /// Clean up previous command dirty data. Currently, we only need to handle table fragments info
-    /// for `CreateMaterializedView`. For `DropMaterializedView`, since we already response fail to
-    /// frontend and the actors will be rebuild by follow recovery process, it's okay to retain
-    /// it.
-    async fn clean_up(&self, prev_command: Arc<RwLock<Vec<Command>>>) {
-        while let Some(command) = prev_command.write().await.pop() {
-            if let Some(table_id) = command.creating_table_id() {
-                let retry_strategy = Self::get_retry_strategy();
-                tokio_retry::Retry::spawn(retry_strategy, || async {
-                    self.fragment_manager.drop_table_fragments(&table_id).await
-                })
-                .await
-                .expect("Retry clean up until success");
-            }
-        }
     }
 
     /// Sync all sources in compute nodes, the local source manager in compute nodes may be dirty

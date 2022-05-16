@@ -62,7 +62,7 @@ enum BarrierSendResult {
         SmallVec<[Notifier; 1]>,
         Vec<InjectBarrierResponse>,
     ),
-    Err(Command, RwError, bool),
+    Err(Epoch,RwError, bool),
 }
 
 /// A buffer or queue for scheduling barriers.
@@ -176,8 +176,6 @@ pub struct GlobalBarrierManager<S: MetaStore> {
 
     wait_recovery: Arc<AtomicBool>,
 
-    abort_command: Arc<RwLock<Vec<Command>>>,
-
     semaphore: Arc<RwLock<u32>>,
 }
 
@@ -253,7 +251,6 @@ where
             env,
             epoch_heap: Arc::new(RwLock::new(BinaryHeap::new())),
             wait_recovery: Arc::new(AtomicBool::new(false)),
-            abort_command: Arc::new(RwLock::new(vec![])),
             semaphore: Arc::new(RwLock::new(0)),
         }
     }
@@ -278,12 +275,12 @@ where
         if self.enable_recovery {
             // handle init, here we simply trigger a recovery process to achieve the consistency. We
             // may need to avoid this when we have more state persisted in meta store.
-            let new_epoch = Epoch::now();
+            let new_epoch = state.prev_epoch.next();
             assert!(new_epoch > state.prev_epoch);
             state.prev_epoch = new_epoch;
 
             let (new_epoch, actors_to_finish, finished_create_mviews) =
-                self.recovery(state.prev_epoch, None).await;
+                self.recovery(state.prev_epoch).await;
             unfinished.add(new_epoch.0, actors_to_finish, vec![]);
             for finished in finished_create_mviews {
                 unfinished.finish_actors(finished.epoch, once(finished.actor_id));
@@ -315,15 +312,14 @@ where
                         state.prev_epoch = new_epoch;
 
                         }
-                        Some(BarrierSendResult::Err(command,e,isover)) => {
+                        Some(BarrierSendResult::Err(prev_epoch,e,isover)) => {
                             if self.enable_recovery {
                                 // if not over , need wait all err barrier
                                 self.wait_recovery.store(true,atomic::Ordering::SeqCst);
-                                self.abort_command.write().await.push(command);
                                 if isover{
                                     // If failed, enter recovery mode.
                                     let (new_epoch, actors_to_finish, finished_create_mviews) =
-                                    self.recovery(state.prev_epoch, Some(self.abort_command.clone())).await;
+                                    self.recovery(prev_epoch).await;
                                     unfinished = UnfinishedNotifiers::default();
                                     unfinished.add(new_epoch.0, actors_to_finish, vec![]);
                                     for finished in finished_create_mviews {
@@ -334,7 +330,6 @@ where
                                     last_epoch = new_epoch.0;
 
                                     self.wait_recovery.store(false,atomic::Ordering::SeqCst);
-                                    self.abort_command.write().await.clear();
                                 }
                             } else {
                                 panic!("failed to execute barrier: {:?}", e);
@@ -382,8 +377,8 @@ where
                 notifiers.iter_mut().for_each(Notifier::notify_collected);
                 continue;
             }
-            let new_epoch = Epoch::now();
             let prev_epoch = Epoch::from(last_epoch);
+            let new_epoch = prev_epoch.next();
             last_epoch = new_epoch.0;
             // debug!("new_epoch{:?},prev_epoch{:?},command:{:?}",new_epoch,prev_epoch,command);
             assert!(
@@ -462,7 +457,7 @@ where
                             is_over = true;
                         }
                         barrier_send_tx_clone
-                            .send(BarrierSendResult::Err(command, e, is_over))
+                            .send(BarrierSendResult::Err(prev_epoch,e, is_over))
                             .unwrap();
                     }
                 }

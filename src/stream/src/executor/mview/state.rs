@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
-
+use madsim::collections::HashMap;
 use risingwave_common::array::Row;
 use risingwave_common::catalog::ColumnId;
 use risingwave_common::error::Result;
@@ -86,7 +85,7 @@ impl<S: StateStore> ManagedMViewState<S> {
         for (arrange_keys, cells) in self.cache.drain() {
             let row = cells.into_option();
             let arrange_key_buf = serialize_pk(&arrange_keys, &self.key_serializer)?;
-            let bytes = serialize_pk_and_row(&arrange_key_buf, &row, &self.column_ids)?;
+            let bytes = serialize_pk_and_row_state(&arrange_key_buf, &row, &self.column_ids)?;
 
             // We compute vnode on arrange keys in materialized view since materialized views are
             // grouped by arrange keys.
@@ -113,7 +112,7 @@ mod tests {
 
     use super::*;
 
-    #[tokio::test]
+    #[madsim::test]
     async fn test_mview_state() {
         // Only assert pk and columns can be successfully put/delete/flush,
         // and the amount of rows is expected.
