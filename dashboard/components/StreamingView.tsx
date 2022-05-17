@@ -14,7 +14,7 @@
  * limitations under the License.
  *
  */
-import { LegacyRef, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import LocationSearchingIcon from "@mui/icons-material/LocationSearching";
 import CircularProgress from "@mui/material/CircularProgress";
 import SearchIcon from "@mui/icons-material/Search";
@@ -204,6 +204,8 @@ export default function StreamingView({ data, mvList }: Props) {
       );
       setEngine(newEngine);
       resizeCanvas();
+      console.log(selectedWorkerNode);
+
       const newView = createView(
         newEngine,
         data,
@@ -312,11 +314,7 @@ export default function StreamingView({ data, mvList }: Props) {
         <ToolBoxTitle> Select a worker node </ToolBoxTitle>
         <FormControl sx={{ m: 1, minWidth: 300 }}>
           <InputLabel> Worker Node </InputLabel>
-          <Select
-            value={selectedWorkerNode || "Show All"}
-            label="Woker Node"
-            onChange={onWorkerNodeSelect}
-          >
+          <Select value={selectedWorkerNode} label="Woker Node" onChange={onWorkerNodeSelect}>
             <MenuItem value="Show All" key="all">
               Show All
             </MenuItem>

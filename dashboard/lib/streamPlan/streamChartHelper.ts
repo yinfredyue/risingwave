@@ -19,18 +19,20 @@ import * as color from "../color";
 import { getConnectedComponent, treeBfs } from "../algo";
 import { cloneDeep, max } from "lodash";
 import { newNumberArray } from "../util";
-import StreamPlanParser, { Actor } from "./parser";
-import { Group } from "../graaphEngine/canvasEngine";
+import StreamPlanParser from "./parser";
+import { CanvasEngine, Group } from "../graaphEngine/canvasEngine";
+import { NodeOperator, WorkerNode } from "@interfaces/Node";
+import { ActorInfo } from "@interfaces/Actor";
 // Actor constant
-// 
+//
 // =======================================================
-//                  ^ 
+//                  ^
 //                  | actorBoxPadding
 //                  v
-//        --┌───────────┐      
-//        | │      node │                                          
-//        | │<--->radius│>───────\        
-//        | │           │        │        
+//        --┌───────────┐
+//        | │      node │
+//        | │<--->radius│>───────\
+//        | │           │        │
 //        | └───────────┘        │
 //        |                      │
 //        | ┌───────────┐        │         ┌───────────┐
@@ -40,9 +42,9 @@ import { Group } from "../graaphEngine/canvasEngine";
 //        | └───────────┘        │         └───────────┘
 //        |                      │
 //        | ┌───────────┐        │
-//        | │      node │        │      
+//        | │      node │        │
 //        | │<--->radius│>───────/
-//        | │           │                      
+//        | │           │
 //       ---└───────────┘
 //          |-----------------heightUnit---------------|
 //
@@ -63,7 +65,7 @@ const gapBetweenRow = 100 * SCALE_FACTOR;
 const gapBetweenLayer = 300 * SCALE_FACTOR;
 const gapBetweenFlowChart = 500 * SCALE_FACTOR;
 const outgoingLinkStrokeWidth = 20 * SCALE_FACTOR;
-const outgoingLinkBgStrokeWidth = 40 *  SCALE_FACTOR;
+const outgoingLinkBgStrokeWidth = 40 * SCALE_FACTOR;
 
 // Draw linking effect
 const bendGap = 50 * SCALE_FACTOR; // try example at: http://bl.ocks.org/d3indepth/b6d4845973089bc1012dec1674d3aff8
@@ -77,11 +79,8 @@ const outGoingLinkBgColor = "#eee";
  * Construct an id for a link in actor box.
  * You may use this method to query and get the svg element
  * of the link.
- * @param {{id: number}} node1 a node (operator) in an actor box
- * @param {{id: number}} node2 a node (operator) in an actor box
- * @returns {string} The link id
  */
-function constructInternalLinkId(node1, node2) {
+function constructInternalLinkId(node1: NodeOperator, node2: NodeOperator) {
   return "node-" + (node1.id > node2.id ? node1.id + "-" + node2.id : node2.id + "-" + node1.id);
 }
 
@@ -89,21 +88,17 @@ function constructInternalLinkId(node1, node2) {
  * Construct an id for a node (operator) in an actor box.
  * You may use this method to query and get the svg element
  * of the link.
- * @param {{id: number}} node a node (operator) in an actor box 
- * @returns {string} The node id
  */
-function constructOperatorNodeId(node) {
+function constructOperatorNodeId(node: NodeOperator) {
   return "node-" + node.id;
 }
 
-function hashIpv4Index(addr) {
-  let [ip, port] = addr.split(":");
-  let s = "";
-  ip.split(".").map(x => s += x);
-  return Number(s + port);
+function hashIpv4Index(addr: string) {
+  const ip = [...addr].filter((x) => !isNaN(+x)).join("");
+  return +ip;
 }
 
-export function computeNodeAddrToSideColor(addr) {
+export function computeNodeAddrToSideColor(addr: string) {
   return color.TwoGradient(hashIpv4Index(addr))[1];
 }
 
@@ -113,35 +108,46 @@ export function computeNodeAddrToSideColor(addr) {
  *   2. Get the layout for operators in each actor box
  *   3. Draw all actor boxes
  *   4. Draw link between actor boxes
- * 
- * 
+ *
+ *
  * Dependencies
- *   layoutActorBox         <- dagLayout         <- drawActorBox      <- drawFlow 
+ *   layoutActorBox         <- dagLayout         <- drawActorBox      <- drawFlow
  *   [ The layout of the ]     [ The layout of ]    [ Draw an actor ]    [ Draw many actors   ]
  *   [ operators in an   ]     [ actors in a   ]    [ in specified  ]    [ and links between  ]
  *   [ actor.            ]     [ stram plan    ]    [ place         ]    [ them.              ]
  *
  */
 export class StreamChartHelper {
-
+  topGroup: Group;
+  onNodeClick: Function;
+  onActorClick: Function;
+  selectedWokerNode: string;
+  selectedWokerNodeStr: string;
+  streamPlan: StreamPlanParser;
   /**
-   * 
+   *
    * @param {Group} g The group element in canvas engine
    * @param {*} data The raw response from the meta node
    * @param {(e, node) => void} onNodeClick The callback function trigged when a node is click
    * @param {(e, actor) => void} onActorClick
-   * @param {{type: string, node: {host: {host: string, port: number}}, id?: number}} selectedWokerNode
-   * @param {Array<number>} shownActorIdList
+   * @param {string} selectedWokerNode
+   * @param {number[]} shownActorIdList
    */
-  constructor(g, data, onNodeClick, onActorClick, selectedWokerNode, shownActorIdList) {
+  constructor(
+    g: Group,
+    data: any,
+    onNodeClick: Function,
+    onActorClick: Function,
+    selectedWokerNode: string,
+    shownActorIdList: number[]
+  ) {
     this.topGroup = g;
     this.streamPlan = new StreamPlanParser(data, shownActorIdList);
     this.onNodeClick = onNodeClick;
     this.onActorClick = onActorClick;
     this.selectedWokerNode = selectedWokerNode;
-    this.selectedWokerNodeStr = this.selectedWokerNode ? selectedWokerNode.host.host + ":" + selectedWokerNode.host.port : "Show All";
+    this.selectedWokerNodeStr = selectedWokerNode;
   }
-
 
   getMvTableIdToSingleViewActorList() {
     return this.streamPlan.mvTableIdToSingleViewActorList;
@@ -151,38 +157,39 @@ export class StreamChartHelper {
     return this.streamPlan.mvTableIdToChainViewActorList;
   }
 
-  /**
-   * @param {Actor} actor 
-   * @returns 
-   */
-  isInSelectedActor(actor) {
-    if (this.selectedWokerNodeStr === "Show All") { // show all
+  isInSelectedActor(actor: ActorInfo) {
+    if (this.selectedWokerNodeStr === "Show All") {
       return true;
     } else {
       return actor.representedWorkNodes.has(this.selectedWokerNodeStr);
     }
   }
 
-  _mainColor(actor) {
-    let addr = actor.representedWorkNodes.has(this.selectedWokerNodeStr) ? this.selectedWokerNodeStr : actor.computeNodeAddress;
-    return color.TwoGradient(hashIpv4Index(addr))[0];
-  }
-
-  _sideColor(actor) {
-    let addr = actor.representedWorkNodes.has(this.selectedWokerNodeStr) ? this.selectedWokerNodeStr : actor.computeNodeAddress;
+  _mainColor(actor: ActorInfo) {
+    const addr = actor.representedWorkNodes.has(this.selectedWokerNodeStr)
+      ? this.selectedWokerNodeStr
+      : actor.computeNodeAddress;
     return color.TwoGradient(hashIpv4Index(addr))[1];
   }
 
-  _operatorColor = (actor, operator) => {
-    return this.isInSelectedActor(actor) && operator.type === "mviewNode" ? this._mainColor(actor) : "#eee";
-  }
-  _actorBoxBackgroundColor = (actor) => {
-    return this.isInSelectedActor(actor) ? this._sideColor(actor) : "#eee";
-  }
-  _actorOutgoinglinkColor = (actor) => {
-    return this.isInSelectedActor(actor) ? this._mainColor(actor) : "#fff";
+  _sideColor(actor: ActorInfo) {
+    const addr = actor.representedWorkNodes.has(this.selectedWokerNodeStr)
+      ? this.selectedWokerNodeStr
+      : actor.computeNodeAddress;
+    return color.TwoGradient(hashIpv4Index(addr))[1];
   }
 
+  _operatorColor = (actor: ActorInfo, operator: WorkerNode) => {
+    return this.isInSelectedActor(actor) && operator.type === "mviewNode"
+      ? this._mainColor(actor)
+      : "#eee";
+  };
+  _actorBoxBackgroundColor = (actor: ActorInfo) => {
+    return this.isInSelectedActor(actor) ? this._sideColor(actor) : "#eee";
+  };
+  _actorOutgoinglinkColor = (actor: ActorInfo) => {
+    return this.isInSelectedActor(actor) ? this._mainColor(actor) : "#fff";
+  };
 
   //
   // A simple DAG layout algorithm.
@@ -197,21 +204,21 @@ export class StreamChartHelper {
   // Row 1                   |
   //                         |
   // Row 2             (Y)---/
-  //       Layer 1 | Layer 2 | Layer 3 
+  //       Layer 1 | Layer 2 | Layer 3
   // -------------------------------------------------------
   // Example 2: (A)-(B) is not valid.
   // Row 0   (X)   /---------\   (Z)
   //               |         |
   // Row 1   (A)---/   (Y)   |-->(B)
-  //       
-  //       Layer 1 | Layer 2 | Layer 3 
+  //
+  //       Layer 1 | Layer 2 | Layer 3
   // -------------------------------------------------------
   // Example 3: (C)-(Z) is not valid
   // Row 0   (X)             /-->(Z)
   //                         |
   // Row 1   (C)-------------/
-  //       
-  //        Layer 1 | Layer 2 | Layer 3  
+  //
+  //        Layer 1 | Layer 2 | Layer 3
   // -------------------------------------------------------
   // Note that the layer of each node can be different
   // For example:
@@ -226,7 +233,7 @@ export class StreamChartHelper {
   //       Layer 0 | Layer 1 | Layer 2 | Layer 3 | Layer 4 |
   /**
    * Topological sort
-   * @param {Array<Node>} nodes An array of node: {nextNodes: [...]} 
+   * @param {Array<Node>} nodes An array of node: {nextNodes: [...]}
    * @returns {Map<Node, [number, number]>} position of each node
    */
   dagLayout(nodes) {
@@ -254,7 +261,7 @@ export class StreamChartHelper {
         sorted.unshift(n.node);
       }
       return n.g;
-    }
+    };
     for (let node of nodes) {
       let dagNode = { node: node, temp: false, perm: false, isInput: true, isOutput: true };
       node2dagNode.set(node, dagNode);
@@ -267,7 +274,7 @@ export class StreamChartHelper {
         maxLayer = g;
       }
     }
-    // use the bottom up strategy to construct generation number 
+    // use the bottom up strategy to construct generation number
     // makes the generation number of root node the samllest
     // to make the computation easier, need to flip it back.
     for (let node of _nodes) {
@@ -279,7 +286,7 @@ export class StreamChartHelper {
     for (let i = 0; i < maxLayer + 1; ++i) {
       layers.push({
         nodes: [],
-        occupyRow: new Set()
+        occupyRow: new Set(),
       });
     }
     let node2Layer = new Map();
@@ -295,17 +302,19 @@ export class StreamChartHelper {
     const putNodeInPosition = (node, row) => {
       node2Row.set(node, row);
       layers[node2Layer.get(node)].occupyRow.add(row);
-    }
+    };
 
-    const occupyLine = (ls, le, r) => { // layer start, layer end, row
+    const occupyLine = (ls, le, r) => {
+      // layer start, layer end, row
       for (let i = ls; i <= le; ++i) {
         layers[i].occupyRow.add(r);
       }
-    }
+    };
 
     const hasOccupied = (layer, row) => layers[layer].occupyRow.has(row);
 
-    const isStraightLineOccupied = (ls, le, r) => { // layer start, layer end, row
+    const isStraightLineOccupied = (ls, le, r) => {
+      // layer start, layer end, row
       if (r < 0) {
         return false;
       }
@@ -315,7 +324,7 @@ export class StreamChartHelper {
         }
       }
       return false;
-    }
+    };
 
     for (let node of nodes) {
       node.nextNodes.sort((a, b) => node2Layer.get(b) - node2Layer.get(a));
@@ -323,15 +332,14 @@ export class StreamChartHelper {
 
     for (let layer of layers) {
       for (let node of layer.nodes) {
-        if (!node2Row.has(node)) { // checking node is not placed.
+        if (!node2Row.has(node)) {
+          // checking node is not placed.
           for (let nextNode of node.nextNodes) {
             if (node2Row.has(nextNode)) {
               continue;
             }
             let r = -1;
-            while (isStraightLineOccupied(node2Layer.get(node), node2Layer.get(nextNode), ++r)) {
-              ;
-            }
+            while (isStraightLineOccupied(node2Layer.get(node), node2Layer.get(nextNode), ++r)) {}
             putNodeInPosition(node, r);
             putNodeInPosition(nextNode, r);
             occupyLine(node2Layer.get(node) + 1, node2Layer.get(nextNode) - 1, r);
@@ -339,9 +347,7 @@ export class StreamChartHelper {
           }
           if (!node2Row.has(node)) {
             let r = -1;
-            while (hasOccupied(node2Layer.get(node), ++r)) {
-              ;
-            }
+            while (hasOccupied(node2Layer.get(node), ++r)) {}
             putNodeInPosition(node, r);
           }
         }
@@ -359,9 +365,7 @@ export class StreamChartHelper {
           }
           // check lowest available position
           r = -1;
-          while (isStraightLineOccupied(node2Layer.get(node) + 1, node2Layer.get(nextNode), ++r)) {
-            ;
-          }
+          while (isStraightLineOccupied(node2Layer.get(node) + 1, node2Layer.get(nextNode), ++r)) {}
           putNodeInPosition(nextNode, r);
           occupyLine(node2Layer.get(node) + 1, node2Layer.get(nextNode) - 1, r);
         }
@@ -416,7 +420,7 @@ export class StreamChartHelper {
       node.width = requiredWidth > 0 ? requiredWidth : widthUnit;
 
       return node.width;
-    }
+    };
 
     getRequiredWidth(rootNode, 0);
 
@@ -431,7 +435,7 @@ export class StreamChartHelper {
         nextNode.y = tmpY + nextNode.width / 2;
         tmpY += nextNode.width;
       }
-    })
+    });
 
     // calculate box size
     let minX = Infinity;
@@ -459,9 +463,9 @@ export class StreamChartHelper {
 
   /**
    * @param {{
-   *   g: Group, 
-   *   rootNode: {id: any, nextNodes: []}, 
-   *   nodeColor: string, 
+   *   g: Group,
+   *   rootNode: {id: any, nextNodes: []},
+   *   nodeColor: string,
    *   strokeColor?: string,
    *   baseX?: number,
    *   baseY?: number
@@ -474,8 +478,7 @@ export class StreamChartHelper {
    * @param {number} props.baseY [optinal] The y coordination of the lef-top corner. default: 0
    * @returns {Group} The group element of this tree
    */
-   drawActorBox(props) {
-
+  drawActorBox(props) {
     if (props.g === undefined) {
       throw Error("Invalid Argument: Target group cannot be undefined.");
     }
@@ -495,18 +498,18 @@ export class StreamChartHelper {
 
     const onNodeClicked = (e, node, actor) => {
       this.onNodeClick && this.onNodeClick(e, node, actor);
-    }
+    };
 
     const onActorClick = (e, actor) => {
       this.onActorClick && this.onActorClick(e, actor);
-    }
+    };
 
     /**
-     * @param {Group} g actor box group 
+     * @param {Group} g actor box group
      * @param {number} x top-right corner of the label
      * @param {number} y top-right corner of the label
-     * @param {Array<number>} actorIds 
-     * @param {string} color 
+     * @param {Array<number>} actorIds
+     * @param {string} color
      * @returns {number} width of this label
      */
     const drawActorIdLabel = (g, x, y, actorIds, color) => {
@@ -516,15 +519,15 @@ export class StreamChartHelper {
       // let height = fontSize + 2 * padding;
       let gap = 30;
       // let polygon = g.append("polygon");
-      let textEle = g.append("text")(actorStr)
+      let textEle = g
+        .append("text")(actorStr)
         .attr("font-size", fontSize)
         .position(x - padding - 5, y + padding);
       let width = textEle.getWidth() + 2 * padding;
       // polygon.attr("points", `${x},${y} ${x - width - gap},${y}, ${x - width},${y + height}, ${x},${y + height}`)
       //   .attr("fill", color);
       return width + gap;
-    }
-
+    };
 
     // draw box
     group.attr("id", "actor-" + actor.actorId);
@@ -540,38 +543,50 @@ export class StreamChartHelper {
       .attr("stroke-width", actorBoxStroke)
       .on("click", (e) => onActorClick(e, actor));
 
-    group.append("text")(`Fragment ${actor.fragmentId}`)
+    group
+      .append("text")(`Fragment ${actor.fragmentId}`)
       .position(baseX, baseY - actorBoxStroke - fontSize)
       .attr("font-size", fontSize);
-
 
     // draw compute node label
     let computeNodeToActorIds = new Map();
     for (let representedActor of actor.representedActorList) {
       if (computeNodeToActorIds.has(representedActor.computeNodeAddress)) {
-        computeNodeToActorIds.get(representedActor.computeNodeAddress).push(representedActor.actorId)
+        computeNodeToActorIds
+          .get(representedActor.computeNodeAddress)
+          .push(representedActor.actorId);
       } else {
         computeNodeToActorIds.set(representedActor.computeNodeAddress, [representedActor.actorId]);
       }
     }
     let labelStartX = baseX + actorBoxStroke;
     for (let [addr, actorIds] of computeNodeToActorIds.entries()) {
-      let w = drawActorIdLabel(group, labelStartX, baseY + boxHeight, actorIds, color.TwoGradient(hashIpv4Index(addr))[1]);
+      let w = drawActorIdLabel(
+        group,
+        labelStartX,
+        baseY + boxHeight,
+        actorIds,
+        color.TwoGradient(hashIpv4Index(addr))[1]
+      );
       labelStartX -= w;
     }
-
-
 
     // draw links
     const linkData = [];
     treeBfs(rootNode, (c) => {
       for (let nextNode of c.nextNodes) {
-        linkData.push({ sourceNode: c, nextNode: nextNode, source: [c.x, c.y], target: [nextNode.x, nextNode.y] });
+        linkData.push({
+          sourceNode: c,
+          nextNode: nextNode,
+          source: [c.x, c.y],
+          target: [nextNode.x, nextNode.y],
+        });
       }
     });
     const linkGen = d3.linkHorizontal();
     for (let link of linkData) {
-      group.append("path")(linkGen(link))
+      group
+        .append("path")(linkGen(link))
         .attr("stroke-dasharray", `${internalLinkStrokeWidth / 2},${internalLinkStrokeWidth / 2}`)
         // .attr("d", linkGen(link))
         .attr("fill", "none")
@@ -584,33 +599,35 @@ export class StreamChartHelper {
 
     // draw nodes
     treeBfs(rootNode, (node) => {
-      node.d3Selection = group.append("circle")
+      node.d3Selection = group
+        .append("circle")
         .init(node.x, node.y, operatorNodeRadius)
         .attr("id", constructOperatorNodeId(node))
-        .attr('stroke', strokeColor)
-        .attr('fill', this._operatorColor(actor, node))
-        .style('cursor', 'pointer')
-        .style('stroke-width', operatorNodeStrokeWidth)
-        .on("click", (e) => onNodeClicked(e, node, actor))
-      group.append("text")(node.type ? node.type : node.dispatcherType)
+        .attr("stroke", strokeColor)
+        .attr("fill", this._operatorColor(actor, node))
+        .style("cursor", "pointer")
+        .style("stroke-width", operatorNodeStrokeWidth)
+        .on("click", (e) => onNodeClicked(e, node, actor));
+      group
+        .append("text")(node.type ? node.type : node.dispatcherType)
         .position(node.x, node.y + operatorNodeRadius + 10)
         .attr("font-size", fontSize);
-    })
+    });
 
     return {
       g: group,
       x: baseX - boxWidth - actorBoxPadding,
       y: baseY - boxHeight / 2 - actorBoxPadding,
       width: boxWidth + actorBoxPadding * 2,
-      height: boxHeight + actorBoxPadding * 2
+      height: boxHeight + actorBoxPadding * 2,
     };
   }
   /**
-   * 
+   *
    * @param {{
-   *   g: Group, 
-   *   actorDagList: Array, 
-   *   baseX?: number, 
+   *   g: Group,
+   *   actorDagList: Array,
+   *   baseX?: number,
    *   baseY?: number
    * }} props
    * @param {Group} props.g The target group contains this group.
@@ -621,7 +638,6 @@ export class StreamChartHelper {
    * @returns {{group: Group, width: number, height: number}} The size of the flow
    */
   drawFlow(props) {
-
     if (props.g === undefined) {
       throw Error("Invalid Argument: Target group cannot be undefined.");
     }
@@ -667,7 +683,7 @@ export class StreamChartHelper {
         rtn += rowGap[i] + gapBetweenRow;
       }
       return rtn;
-    })
+    });
     layer2x = layer2x.map((_, l) => {
       if (l === 0) {
         return 0;
@@ -677,8 +693,7 @@ export class StreamChartHelper {
         rtn += layerGap[i] + gapBetweenLayer;
       }
       return rtn;
-    })
-
+    });
 
     // Draw fragment (represent by one actor)
     const group = g.append("g");
@@ -699,7 +714,7 @@ export class StreamChartHelper {
         y: baseY + row2y[actor.row],
         strokeColor: "white",
         linkColor: "white",
-      })
+      });
       actorBoxList.push(actorBox);
     }
 
@@ -712,24 +727,22 @@ export class StreamChartHelper {
         [start[0] + compensation + actorBoxPadding + connectionGap + bendGap, end[1]],
         [start[0] + compensation + actorBoxPadding + connectionGap + bendGap, start[1]],
         [start[0] + compensation + actorBoxPadding + connectionGap, start[1]],
-        start
+        start,
       ]);
       return pathStr;
-    }
+    };
 
     let linkData = [];
     for (let actor of actors) {
       for (let outputNode of actor.output) {
-        linkData.push(
-          {
-            actor: actor,
-            d: getLinkBetweenPathStr(
-              [actor.rootNode.x, actor.rootNode.y],
-              [outputNode.x, outputNode.y],
-              layerGap[actor.layer] - actor.boxWidth
-            )
-          }
-        )
+        linkData.push({
+          actor: actor,
+          d: getLinkBetweenPathStr(
+            [actor.rootNode.x, actor.rootNode.y],
+            [outputNode.x, outputNode.y],
+            layerGap[actor.layer] - actor.boxWidth
+          ),
+        });
       }
     }
 
@@ -756,12 +769,10 @@ export class StreamChartHelper {
         .attr("layer", "back");
     }
 
-
     // calculate box size
     let width = 0;
     let height = 0;
     for (let actorBox of actorBoxList) {
-
       let biggestX = actorBox.x - baseX + actorBox.width;
       let biggestY = actorBox.y - baseY + actorBox.height;
       width = max([biggestX, width]);
@@ -772,14 +783,14 @@ export class StreamChartHelper {
     return {
       g: group,
       width: width,
-      height: height
+      height: height,
     };
   }
 
   /**
    * A flow is an extracted connected component of actors of
    * the raw response from the meta node. This method will first
-   * merge actors in the same fragment using some identifier 
+   * merge actors in the same fragment using some identifier
    * (currently it is the id of the operator before the dispatcher).
    * And then use `drawFlow()` to draw each connected component.
    */
@@ -803,8 +814,9 @@ export class StreamChartHelper {
     for (let actor of fragmentRepresentedActors) {
       for (let outputActorNode of actor.output) {
         let outputDagNode = dagNodeMap.get(outputActorNode.actorId);
-        if(outputDagNode){ // the output actor node is in a represented actor
-          dagNodeMap.get(actor.actorId).nextNodes.push(outputDagNode)
+        if (outputDagNode) {
+          // the output actor node is in a represented actor
+          dagNodeMap.get(actor.actorId).nextNodes.push(outputDagNode);
         }
       }
     }
@@ -821,25 +833,39 @@ export class StreamChartHelper {
         g: g,
         baseX: baseX,
         baseY: y,
-        actorDagList: actorDagList
-      })
-      y += (flowChart.height + gapBetweenFlowChart);
+        actorDagList: actorDagList,
+      });
+      y += flowChart.height + gapBetweenFlowChart;
     }
   }
 }
 
 /**
- * create a graph view based on raw input from the meta node, 
+ * create a graph view based on raw input from the meta node,
  * and append the svg component to the giving svg group.
- * @param {Group} g The parent group contain the graph. 
+ * @param {Group} g The parent group contain the graph.
  * @param {any} data Raw response from the meta node. e.g. [{node: {...}, actors: {...}}, ...]
  * @param {(clickEvent, node, actor) => void} onNodeClick callback when a node (operator) is clicked.
  * @param {{type: string, node: {host: {host: string, port: number}}, id?: number}} selectedWokerNode
  * @returns {StreamChartHelper}
  */
-export default function createView(engine, data, onNodeClick, onActorClick, selectedWokerNode, shownActorIdList) {
+export default function createView(
+  engine: CanvasEngine,
+  data: any,
+  onNodeClick: Function,
+  onActorClick: Function,
+  selectedWokerNode: string,
+  shownActorIdList: number[]
+) {
   console.log(shownActorIdList, "shownActorList");
-  let streamChartHelper = new StreamChartHelper(engine.topGroup, data, onNodeClick, onActorClick, selectedWokerNode, shownActorIdList);
+  const streamChartHelper = new StreamChartHelper(
+    engine.topGroup,
+    data,
+    onNodeClick,
+    onActorClick,
+    selectedWokerNode,
+    shownActorIdList
+  );
   streamChartHelper.drawManyFlow();
   return streamChartHelper;
 }

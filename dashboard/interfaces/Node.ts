@@ -26,6 +26,17 @@ export interface Node {
   parallelUnits: ParallelUnit[];
 }
 
+export interface NodeOperator {
+  id: number;
+}
+
+// for stream chart helper
+export interface WorkerNode {
+  type: string;
+  host: Host;
+  id?: number;
+}
+
 export interface DataType {
   typeName: string;
   isNullable: boolean;

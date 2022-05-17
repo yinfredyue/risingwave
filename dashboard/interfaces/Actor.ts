@@ -43,6 +43,7 @@ interface StreamNode {
   y: number;
 }
 
+// for stream chart helper
 export interface ActorInfo {
   row: number;
   layer: number;
@@ -54,5 +55,5 @@ export interface ActorInfo {
   // rootNode: Dispatcher;
   computeNodeAddress: string;
   representedActorList: ActorInfo[];
-  representedWorkNodes: Set<ActorInfo>;
+  representedWorkNodes: Set<string>;
 }

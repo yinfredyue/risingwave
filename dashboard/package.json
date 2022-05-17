@@ -24,6 +24,8 @@
     "@babel/core": "^7.17.10",
     "@testing-library/jest-dom": "^5.16.2",
     "@testing-library/react": "^12.1.2",
+    "@types/d3": "^7.1.0",
+    "@types/lodash": "^4.14.182",
     "@types/node": "^17.0.32",
     "@types/react": "^18.0.9",
     "@types/react-dom": "^18.0.3",
