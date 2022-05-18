@@ -12,28 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::ops::AddAssign;
 use std::sync::Arc;
 
 use futures_async_stream::try_stream;
 use risingwave_common::array::column::Column;
-use risingwave_common::array::{ArrayBuilder, DataChunk, I32ArrayBuilder};
+use risingwave_common::array::{Array, ArrayBuilder, DataChunk};
 use risingwave_common::catalog::Schema;
 use risingwave_common::error::RwError;
+use risingwave_common::types::Scalar;
 use risingwave_common::util::chunk_coalesce::DEFAULT_CHUNK_BUFFER_SIZE;
 
 use crate::executor2::{BoxedDataChunkStream, Executor2};
 
-pub struct GenerateSeriesI32Executor2 {
-    start: i32,
-    stop: i32,
-    step: i32,
+pub struct GenerateSeriesI32Executor2<T: Array, S: Array> {
+    start: T::OwnedItem,
+    stop: T::OwnedItem,
+    step: S::OwnedItem,
 
     schema: Schema,
     identity: String,
 }
 
-impl GenerateSeriesI32Executor2 {
-    pub fn new(start: i32, stop: i32, step: i32, schema: Schema, identity: String) -> Self {
+impl<T: Array, S: Array> GenerateSeriesI32Executor2<T, S> {
+    pub fn new(
+        start: T::OwnedItem,
+        stop: T::OwnedItem,
+        step: S::OwnedItem,
+        schema: Schema,
+        identity: String,
+    ) -> Self {
         Self {
             start,
             stop,
@@ -44,7 +52,11 @@ impl GenerateSeriesI32Executor2 {
     }
 }
 
-impl Executor2 for GenerateSeriesI32Executor2 {
+impl<T: Array, S: Array> Executor2 for GenerateSeriesI32Executor2<T, S>
+where
+    T::OwnedItem: PartialOrd<T::OwnedItem>,
+    T::OwnedItem: for<'a> AddAssign<S::RefItem<'a>>,
+{
     fn schema(&self) -> &Schema {
         &self.schema
     }
@@ -58,24 +70,33 @@ impl Executor2 for GenerateSeriesI32Executor2 {
     }
 }
 
-impl GenerateSeriesI32Executor2 {
+impl<T, S> GenerateSeriesI32Executor2<T, S>
+where
+    T: Array,
+    S: Array,
+    T::OwnedItem: PartialOrd<T::OwnedItem>,
+    T::OwnedItem: for<'a> AddAssign<S::RefItem<'a>>,
+{
     #[try_stream(boxed, ok = DataChunk, error = RwError)]
     async fn do_execute(self: Box<Self>) {
         let Self {
             start, stop, step, ..
         } = *self;
 
-        let mut rest_rows = ((stop - start) / step + 1) as usize;
+        // let mut rest_rows = ((stop - start) / step + 1) as usize;
         let mut cur = start;
 
         // Simulate a do-while loop.
-        while rest_rows > 0 {
-            let chunk_size = rest_rows.min(DEFAULT_CHUNK_BUFFER_SIZE);
-            let mut builder = I32ArrayBuilder::new(chunk_size)?;
+        while cur <= stop {
+            let chunk_size = DEFAULT_CHUNK_BUFFER_SIZE;
+            let mut builder = T::Builder::new(chunk_size)?;
 
             for _ in 0..chunk_size {
-                builder.append(Some(cur)).unwrap();
-                cur += self.step;
+                if cur > stop {
+                    break;
+                }
+                builder.append(Some(cur.as_scalar_ref())).unwrap();
+                cur += step.as_scalar_ref();
             }
 
             let arr = builder.finish()?;
@@ -83,8 +104,6 @@ impl GenerateSeriesI32Executor2 {
             let chunk: DataChunk = DataChunk::builder().columns(columns).build();
 
             yield chunk;
-
-            rest_rows -= chunk_size;
         }
     }
 }
@@ -92,7 +111,7 @@ impl GenerateSeriesI32Executor2 {
 #[cfg(test)]
 mod tests {
     use futures::StreamExt;
-    use risingwave_common::array::{Array, ArrayImpl};
+    use risingwave_common::array::{Array, ArrayImpl, I32Array};
     use risingwave_common::catalog::{Field, Schema};
     use risingwave_common::try_match_expand;
     use risingwave_common::types::DataType;
@@ -107,7 +126,7 @@ mod tests {
     }
 
     async fn generate_series_test_case(start: i32, stop: i32, step: i32) {
-        let executor = Box::new(GenerateSeriesI32Executor2 {
+        let executor = Box::new(GenerateSeriesI32Executor2::<I32Array, I32Array> {
             start,
             stop,
             step,

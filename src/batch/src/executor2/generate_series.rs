@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use futures_async_stream::try_stream;
-use risingwave_common::array::{Array, DataChunk};
+use risingwave_common::array::{Array, DataChunk, I32Array};
 use risingwave_common::catalog::{Field, Schema};
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_common::types::DataType;
@@ -87,7 +87,7 @@ impl BoxedExecutor2Builder for GenerateSeriesExecutor2Wrapper {
                 if let (Some(start), Some(stop), Some(step)) = (start, stop, step) {
                     let schema = Schema::new(vec![Field::unnamed(DataType::Int32)]);
 
-                    let input = Box::new(GenerateSeriesI32Executor2::new(
+                    let input = Box::new(GenerateSeriesI32Executor2::<I32Array, I32Array>::new(
                         start,
                         stop,
                         step,
