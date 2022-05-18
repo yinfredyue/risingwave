@@ -22,7 +22,7 @@ import { newNumberArray } from "../util";
 import StreamPlanParser from "./parser";
 import { CanvasEngine, Group } from "../graaphEngine/canvasEngine";
 import { NodeOperator, WorkerNode } from "@interfaces/Node";
-import { ActorInfo } from "@interfaces/Actor";
+import { ActorInfo, Actors } from "@interfaces/Actor";
 // Actor constant
 //
 // =======================================================
@@ -121,16 +121,16 @@ export class StreamChartHelper {
   topGroup: Group;
   onNodeClick: Function;
   onActorClick: Function;
-  selectedWokerNode: string;
-  selectedWokerNodeStr: string;
+  selectedWorkerNode: string;
+  selectedWorkerNodeStr: string;
   streamPlan: StreamPlanParser;
   /**
    *
    * @param {Group} g The group element in canvas engine
-   * @param {*} data The raw response from the meta node
+   * @param {Actors[]} data The raw response from the meta node
    * @param {(e, node) => void} onNodeClick The callback function trigged when a node is click
-   * @param {(e, actor) => void} onActorClick
-   * @param {string} selectedWokerNode
+   * @param {(e, actor) => void} onActorClick The callback function trigged when an actor is click
+   * @param {string} selectedWorkerNode The selectedWorkerNode
    * @param {number[]} shownActorIdList
    */
   constructor(
@@ -138,15 +138,15 @@ export class StreamChartHelper {
     data: any,
     onNodeClick: Function,
     onActorClick: Function,
-    selectedWokerNode: string,
-    shownActorIdList: number[]
+    selectedWorkerNode: string,
+    shownActorIdList: number[] | null
   ) {
     this.topGroup = g;
     this.streamPlan = new StreamPlanParser(data, shownActorIdList);
     this.onNodeClick = onNodeClick;
     this.onActorClick = onActorClick;
-    this.selectedWokerNode = selectedWokerNode;
-    this.selectedWokerNodeStr = selectedWokerNode;
+    this.selectedWorkerNode = selectedWorkerNode;
+    this.selectedWorkerNodeStr = selectedWorkerNode;
   }
 
   getMvTableIdToSingleViewActorList() {
@@ -158,23 +158,23 @@ export class StreamChartHelper {
   }
 
   isInSelectedActor(actor: ActorInfo) {
-    if (this.selectedWokerNodeStr === "Show All") {
+    if (this.selectedWorkerNodeStr === "Show All") {
       return true;
     } else {
-      return actor.representedWorkNodes.has(this.selectedWokerNodeStr);
+      return actor.representedWorkNodes.has(this.selectedWorkerNodeStr);
     }
   }
 
   _mainColor(actor: ActorInfo) {
-    const addr = actor.representedWorkNodes.has(this.selectedWokerNodeStr)
-      ? this.selectedWokerNodeStr
+    const addr = actor.representedWorkNodes.has(this.selectedWorkerNodeStr)
+      ? this.selectedWorkerNodeStr
       : actor.computeNodeAddress;
     return color.TwoGradient(hashIpv4Index(addr))[1];
   }
 
   _sideColor(actor: ActorInfo) {
-    const addr = actor.representedWorkNodes.has(this.selectedWokerNodeStr)
-      ? this.selectedWokerNodeStr
+    const addr = actor.representedWorkNodes.has(this.selectedWorkerNodeStr)
+      ? this.selectedWorkerNodeStr
       : actor.computeNodeAddress;
     return color.TwoGradient(hashIpv4Index(addr))[1];
   }
@@ -184,9 +184,11 @@ export class StreamChartHelper {
       ? this._mainColor(actor)
       : "#eee";
   };
+
   _actorBoxBackgroundColor = (actor: ActorInfo) => {
     return this.isInSelectedActor(actor) ? this._sideColor(actor) : "#eee";
   };
+
   _actorOutgoinglinkColor = (actor: ActorInfo) => {
     return this.isInSelectedActor(actor) ? this._mainColor(actor) : "#fff";
   };
@@ -801,7 +803,7 @@ export class StreamChartHelper {
 
     g.attr("id", "");
 
-    let fragmentRepresentedActors = this.streamPlan.fragmentRepresentedActors;
+    const fragmentRepresentedActors = this.streamPlan.fragmentRepresentedActors;
     // get dag layout of these actors
     let dagNodeMap = new Map();
     for (let actor of fragmentRepresentedActors) {
@@ -843,19 +845,14 @@ export class StreamChartHelper {
 /**
  * create a graph view based on raw input from the meta node,
  * and append the svg component to the giving svg group.
- * @param {Group} g The parent group contain the graph.
- * @param {any} data Raw response from the meta node. e.g. [{node: {...}, actors: {...}}, ...]
- * @param {(clickEvent, node, actor) => void} onNodeClick callback when a node (operator) is clicked.
- * @param {{type: string, node: {host: {host: string, port: number}}, id?: number}} selectedWokerNode
- * @returns {StreamChartHelper}
  */
 export default function createView(
   engine: CanvasEngine,
-  data: any,
+  data: Actors[],
   onNodeClick: Function,
   onActorClick: Function,
   selectedWokerNode: string,
-  shownActorIdList: number[]
+  shownActorIdList: number[] | null
 ) {
   console.log(shownActorIdList, "shownActorList");
   const streamChartHelper = new StreamChartHelper(

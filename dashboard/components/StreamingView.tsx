@@ -87,7 +87,9 @@ export default function StreamingView({ data, mvList }: Props) {
   };
 
   const getEngine = () => {
-    return engineRef.current!;
+    if (engineRef.current) {
+      return engineRef.current;
+    }
   };
 
   const setView = (v: StreamChartHelper) => {
@@ -179,7 +181,7 @@ export default function StreamingView({ data, mvList }: Props) {
   };
 
   const onReset = () => {
-    getEngine().resetCamera();
+    getEngine()?.resetCamera();
   };
 
   const onRefresh = async () => {
@@ -187,31 +189,25 @@ export default function StreamingView({ data, mvList }: Props) {
   };
 
   const resizeCanvas = () => {
-    if (canvasOutterBox.current) {
-      getEngine()?.resize(
-        canvasOutterBox.current.clientWidth,
-        canvasOutterBox.current.clientHeight
-      );
+    const canvasCur = canvasOutterBox.current;
+    if (canvasCur?.clientWidth && canvasCur.clientHeight) {
+      getEngine()?.resize(canvasCur.clientWidth, canvasCur.clientHeight);
     }
   };
 
-  const initGraph = (shownActorIdList: any) => {
-    if (canvasRef.current?.clientHeight && canvasRef.current.clientWidth) {
-      const newEngine = new CanvasEngine(
-        "c",
-        canvasRef.current?.clientHeight,
-        canvasRef.current?.clientWidth
-      );
+  const initGraph = (shownActorIdList: number[] | null) => {
+    const cur = canvasRef.current;
+    if (cur?.clientHeight && cur?.clientWidth) {
+      console.log("initing graph");
+      const newEngine = new CanvasEngine("c", cur.clientHeight, cur.clientWidth);
       setEngine(newEngine);
       resizeCanvas();
-      console.log(selectedWorkerNode);
-
       const newView = createView(
         newEngine,
         data,
         onNodeClick,
         onActorClick,
-        selectedWorkerNode === "Show All" ? null : selectedWorkerNode,
+        selectedWorkerNode,
         shownActorIdList
       );
       setView(newView);
@@ -238,7 +234,7 @@ export default function StreamingView({ data, mvList }: Props) {
       mvTableIdToChainViewActorList ||
         setMvTableIdToChainViewActorList(getView().getMvTableIdToChainViewActorList());
       return () => {
-        getEngine().cleanGraph();
+        getEngine()?.cleanGraph();
       };
     }
   }, [selectedWorkerNode, showFullGraph]);
@@ -259,7 +255,7 @@ export default function StreamingView({ data, mvList }: Props) {
       if (canvasRef.current) {
         initGraph(shownActorIdList);
         return () => {
-          getEngine().cleanGraph();
+          getEngine()?.cleanGraph();
         };
       }
     }

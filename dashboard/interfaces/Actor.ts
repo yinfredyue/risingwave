@@ -26,7 +26,7 @@ export interface Actor {
 
 export interface Actors {
   node: Node;
-  actors: Actors[];
+  actors: Actor[];
 }
 
 interface StreamNode {

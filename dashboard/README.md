@@ -35,14 +35,28 @@ sqllogictest -p 4566 './e2e_test/v2/streaming/*.slt'
 
 Install Dependencies.
 
+npm:
+
 ```bash
 npm i
+```
+
+pnpm:
+
+```bash
+pnpm i
 ```
 
 The website will be served at port 3000.
 
 ```bash
 npm run dev
+```
+
+pnpm:
+
+```bash
+pnpm dev
 ```
 
 ## Test with RisingWave meta node
