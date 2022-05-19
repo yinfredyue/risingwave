@@ -847,7 +847,7 @@ export class StreamChartHelper {
  * and append the svg component to the giving svg group.
  */
 export default function createView(
-  engine: CanvasEngine,
+  engine: CanvasEngine | null,
   data: Actors[],
   onNodeClick: Function,
   onActorClick: Function,

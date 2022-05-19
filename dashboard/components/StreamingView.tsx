@@ -14,15 +14,7 @@
  * limitations under the License.
  *
  */
-import {
-  ChangeEvent,
-  SyntheticEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useCallback,
-} from "react";
+import { ChangeEvent, SyntheticEvent, useEffect, useRef, useState, useCallback } from "react";
 import LocationSearchingIcon from "@mui/icons-material/LocationSearching";
 import CircularProgress from "@mui/material/CircularProgress";
 import SearchIcon from "@mui/icons-material/Search";
@@ -185,8 +177,6 @@ export default function StreamingView({ data, mvList }: Props) {
   };
 
   const locateToCurrentMviewActor = (actorIdList: number[] | null) => {
-    console.log(actorIdList);
-
     if (actorIdList?.length) {
       locateTo(`actor-${actorIdList[0]}`);
     }
@@ -198,24 +188,6 @@ export default function StreamingView({ data, mvList }: Props) {
 
   const onRefresh = async () => {
     window.location.reload();
-  };
-
-  const initGraph = (shownActorIdList: number[] | null) => {
-    const cur = canvasOutterBox.current;
-    if (cur?.clientHeight && cur?.clientWidth) {
-      const canvasEngine = new CanvasEngine("c", cur.clientHeight, cur.clientWidth);
-      setCanvasEngine(canvasEngine);
-
-      const newView = createView(
-        canvasEngine,
-        data,
-        onNodeClick,
-        onActorClick,
-        selectedWorkerNode,
-        shownActorIdList
-      );
-      setChartHelper(newView);
-    }
   };
 
   useEffect(() => {
@@ -232,61 +204,58 @@ export default function StreamingView({ data, mvList }: Props) {
         selectedWorkerNode,
         null
       );
+      setMvTableIdToChainViewActorList(newView.getMvTableIdToChainViewActorList());
+      setMvTableIdToSingleViewActorList(newView.getMvTableIdToSingleViewActorList());
       setChartHelper(newView);
     }
+
+    return () => {
+      canvasEngine?.cleanGraph();
+    };
   }, []);
 
+  // TODO: resize handler that can shrink the outter box
   useEffect(() => {
     const canvasCur = canvasOutterBox.current;
     if (canvasCur?.clientWidth && canvasCur?.clientHeight) {
       canvasEngine?.resize(canvasCur.clientWidth, canvasCur.clientHeight);
     }
-  }, [canvasEngine, windowSize]);
+  }, [windowSize]);
 
-  // useEffect(() => {
-  //   // TODO: debounce
-  //   locateSearchPosition();
-  // }, [searchType, searchContent]);
-
-  // render the full graph
-  // useEffect(() => {
-  //   if (showFullGraph && canvasRef.current) {
-  //     console.log("rendering full graph");
-
-  //     initGraph(null);
-  //     if (chartHelper) {
-  //       mvTableIdToSingleViewActorList ||
-  //         setMvTableIdToSingleViewActorList(chartHelper.getMvTableIdToSingleViewActorList());
-  //       mvTableIdToChainViewActorList ||
-  //         setMvTableIdToChainViewActorList(chartHelper.getMvTableIdToChainViewActorList());
-  //     }
-  //   }
-  //   return () => {
-  //     canvasEngine?.cleanGraph();
-  //   };
-  // }, [showFullGraph]);
-
-  // TODO: locate and render partial graph on mview query
   useEffect(() => {
-    console.log("worker-node: ", selectedWorkerNode);
-
     if (selectedMvTableId && mvTableIdToChainViewActorList && mvTableIdToSingleViewActorList) {
-      console.log("workernode effect? ", selectedWorkerNode);
       const shownActorIdList =
-        (filterMode === "Chain View"
+        (filterMode.includes("chain")
           ? mvTableIdToChainViewActorList
           : mvTableIdToSingleViewActorList
         ).get(selectedMvTableId) || [];
+
       if (!showFullGraph && canvasRef.current) {
         // rerender graph if it is a partial graph
-        initGraph(shownActorIdList);
+        canvasEngine?.canvas?.clear();
+        const newView = createView(
+          canvasEngine,
+          data,
+          onNodeClick,
+          onActorClick,
+          selectedWorkerNode,
+          shownActorIdList
+        );
+        setChartHelper(newView);
       }
       locateToCurrentMviewActor(shownActorIdList);
+      if (!showFullGraph) {
+        canvasEngine?.resetCamera();
+      }
     }
-    // return () => {
-    //   canvasEngine?.cleanGraph();
-    // };
-  }, [selectedWorkerNode, filterMode, selectedMvTableId, showFullGraph]);
+  }, [
+    selectedWorkerNode,
+    filterMode,
+    selectedMvTableId,
+    showFullGraph,
+    mvTableIdToChainViewActorList,
+    mvTableIdToSingleViewActorList,
+  ]);
 
   return (
     <SvgBox>
@@ -385,7 +354,7 @@ export default function StreamingView({ data, mvList }: Props) {
               <Box>
                 <InputLabel> Mode </InputLabel>
                 <Select
-                  sx={{ width: 140 }}
+                  sx={{ my: 1, width: 140 }}
                   value={filterMode}
                   label="Mode"
                   onChange={onFilterModeChange}
