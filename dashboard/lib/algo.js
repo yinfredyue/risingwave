@@ -25,18 +25,17 @@ import { newMatrix } from "./util";
  * return true if you want to stop to traverse its next nodes.
  */
 export function treeBfs(root, step) {
-  let bfsList = [root];
-  while (bfsList.length !== 0) {
-    let c = bfsList.shift();
+  const queue = [root];
+  while (queue.length) {
+    const c = queue.shift();
 
     if (!step(c)) {
-      for (let nextNode of c.nextNodes) {
-        bfsList.push(nextNode);
+      for (const nextNode of c.nextNodes) {
+        queue.push(nextNode);
       }
     }
   }
 }
-
 
 /**
  * Traverse a graph from a random node, and do
@@ -44,7 +43,7 @@ export function treeBfs(root, step) {
  * Every node will be visted only once.
  * @param {{nextNodes: []}} root A random node in the graph
  * @param {(node: any) => boolean} step callback when a node is visited.
- * @param {string} [neighborListKey="nextNodes"] 
+ * @param {string} [neighborListKey="nextNodes"]
  * return true if you want to stop traverse its next nodes
  */
 export function graphBfs(root, step, neighborListKey) {
@@ -65,24 +64,22 @@ export function graphBfs(root, step, neighborListKey) {
   }
 }
 
-
 /**
  * Group nodes in the same connected component. The method will not
  * change the input. The output contains the original references.
- * @param {Array<{nextNodes: []}>} nodes 
- * @returns {Array<Array<any>>} A list of groups containing 
+ * @param {Array<{nextNodes: []}>} nodes
+ * @returns {Array<Array<any>>} A list of groups containing
  * nodes in the same connected component
  */
 export function getConnectedComponent(nodes) {
-
   let node2shellNodes = new Map();
 
   for (let node of nodes) {
     let shellNode = {
       val: node,
       nextNodes: [],
-      g: -1
-    }
+      g: -1,
+    };
     node2shellNodes.set(node, shellNode);
   }
 
@@ -103,7 +100,7 @@ export function getConnectedComponent(nodes) {
     if (shellNode.g === -1) {
       shellNode.g = cnt++;
       graphBfs(shellNode, (c) => {
-        c.g = shellNode.g
+        c.g = shellNode.g;
       });
     }
   }

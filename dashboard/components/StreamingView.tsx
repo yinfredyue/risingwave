@@ -176,16 +176,6 @@ export default function StreamingView({ data, mvList }: Props) {
     setShowFullGraph(v);
   };
 
-  const locateToCurrentMviewActor = (actorIdList: number[] | null) => {
-    if (actorIdList?.length) {
-      locateTo(`actor-${actorIdList[0]}`);
-    }
-  };
-
-  const onReset = () => {
-    canvasEngine?.resetCamera();
-  };
-
   const onRefresh = async () => {
     window.location.reload();
   };
@@ -229,23 +219,31 @@ export default function StreamingView({ data, mvList }: Props) {
           ? mvTableIdToChainViewActorList
           : mvTableIdToSingleViewActorList
         ).get(selectedMvTableId) || [];
+      locateTo(`actor-${shownActorIdList[0]}`);
 
-      if (!showFullGraph && canvasRef.current) {
+      if (showFullGraph) {
+        const newView = createView(
+          canvasEngine!,
+          data,
+          onNodeClick,
+          onActorClick,
+          selectedWorkerNode,
+          null
+        );
+        setChartHelper(newView);
+      } else {
         // rerender graph if it is a partial graph
         canvasEngine?.canvas?.clear();
         const newView = createView(
-          canvasEngine,
+          canvasEngine!,
           data,
           onNodeClick,
           onActorClick,
           selectedWorkerNode,
           shownActorIdList
         );
-        setChartHelper(newView);
-      }
-      locateToCurrentMviewActor(shownActorIdList);
-      if (!showFullGraph) {
         canvasEngine?.resetCamera();
+        setChartHelper(newView);
       }
     }
   }, [
@@ -386,7 +384,7 @@ export default function StreamingView({ data, mvList }: Props) {
       <SvgBoxCover style={{ right: "10px", bottom: "10px", cursor: "pointer" }}>
         <Stack direction="row" spacing={2}>
           <Tooltip title="Reset">
-            <Box onClick={() => onReset()}>
+            <Box onClick={() => canvasEngine?.resetCamera()}>
               <LocationSearchingIcon color="action" />
             </Box>
           </Tooltip>

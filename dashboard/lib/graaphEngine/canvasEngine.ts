@@ -420,7 +420,9 @@ export class CanvasEngine {
       this.selection = false;
       this.lastPosX = e.clientX;
       this.lastPosY = e.clientY;
-      this._handleClickEvent(opt.target!);
+      if (opt.target) {
+        this._handleClickEvent(opt.target);
+      }
     });
 
     canvas.on("mouse:move", (opt) => {

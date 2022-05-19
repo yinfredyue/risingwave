@@ -803,13 +803,17 @@ export class StreamChartHelper {
 
     g.attr("id", "");
 
+    // Set<ActorInfo>
     const fragmentRepresentedActors = this.streamPlan.fragmentRepresentedActors;
+
     // get dag layout of these actors
-    let dagNodeMap = new Map();
-    for (let actor of fragmentRepresentedActors) {
+    const dagNodeMap = new Map();
+    for (const actor of fragmentRepresentedActors) {
+      // actor.rootNode.actorId {operatorId}
       actor.rootNode.actorId = actor.actorId;
       treeBfs(actor.rootNode, (node) => {
         node.actorId = actor.actorId;
+        return false;
       });
       dagNodeMap.set(actor.actorId, { id: actor.actorId, nextNodes: [], actor: actor });
     }
@@ -847,14 +851,13 @@ export class StreamChartHelper {
  * and append the svg component to the giving svg group.
  */
 export default function createView(
-  engine: CanvasEngine | null,
+  engine: CanvasEngine,
   data: Actors[],
   onNodeClick: Function,
   onActorClick: Function,
   selectedWokerNode: string,
   shownActorIdList: number[] | null
 ) {
-  console.log(shownActorIdList, "shownActorList");
   const streamChartHelper = new StreamChartHelper(
     engine.topGroup,
     data,
