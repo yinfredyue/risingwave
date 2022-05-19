@@ -315,7 +315,6 @@ where
                         Some(BarrierSendResult::Err(prev_epoch,e,isover)) => {
                             if self.enable_recovery {
                                 // if not over , need wait all err barrier
-                                self.wait_recovery.store(true,atomic::Ordering::SeqCst);
                                 if isover{
                                     // If failed, enter recovery mode.
                                     let (new_epoch, actors_to_finish, finished_create_mviews) =
@@ -426,13 +425,6 @@ where
                 .await;
 
                 // debug!("over,new_epoch{:?}",new_epoch);
-                match command {
-                    Command::Plain(..) => {}
-                    _ => {
-                        let mut semaphore = semaphore.write().await;
-                        *semaphore -= 1;
-                    }
-                }
                 match result {
                     Ok(responses) => {
                         // Notify about collected first.
@@ -461,9 +453,12 @@ where
                             .unwrap();
                     }
                 }
-                heap.write().await.pop();
-                if let Some(mut next_heap_node) = heap.write().await.peek_mut() {
-                    next_heap_node.notify_wait();
+                match command {
+                    Command::Plain(..) => {}
+                    _ => {
+                        let mut semaphore = semaphore.write().await;
+                        *semaphore -= 1;
+                    }
                 }
             });
         }
@@ -510,11 +505,16 @@ where
                         .await?;
                 }
                 Err(_) => {
+                    wait_recovery.store(true, atomic::Ordering::SeqCst);
                     hummock_manager
                         .abort_epoch(command_context.prev_epoch.0)
                         .await?;
                 }
             };
+        }
+        heap.write().await.pop();
+        if let Some(mut next_heap_node) = heap.write().await.peek_mut() {
+            next_heap_node.notify_wait();
         }
         let responses = result?;
 
