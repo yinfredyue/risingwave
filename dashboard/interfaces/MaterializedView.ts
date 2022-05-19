@@ -27,3 +27,8 @@ export interface MaterializedView {
   associatedSourceId?: number;
   dependentRelations?: number[];
 }
+
+export interface SelectedMateralizedView {
+  label: string;
+  tableId: number;
+}

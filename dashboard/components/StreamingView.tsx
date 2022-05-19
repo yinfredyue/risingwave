@@ -14,7 +14,15 @@
  * limitations under the License.
  *
  */
-import { useEffect, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  SyntheticEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import LocationSearchingIcon from "@mui/icons-material/LocationSearching";
 import CircularProgress from "@mui/material/CircularProgress";
 import SearchIcon from "@mui/icons-material/Search";
@@ -32,6 +40,7 @@ import {
   Autocomplete,
   TextField,
   Switch,
+  Typography,
 } from "@mui/material";
 import Select, { SelectChangeEvent } from "@mui/material/Select";
 import JsonView from "@components/JsonView";
@@ -48,6 +57,8 @@ import useWindowSize from "hook/useWindowSize";
 import { MaterializedView } from "@interfaces/MaterializedView";
 import { ActorInfo, Actors } from "@interfaces/Actor";
 import Dots from "./Dots";
+import { SelectedMateralizedView } from "../interfaces/MaterializedView";
+import { debounce } from "lodash";
 
 type Props = {
   data: Actors[];
@@ -56,6 +67,7 @@ type Props = {
 
 export default function StreamingView({ data, mvList }: Props) {
   const actorList = data.map((x) => x.node);
+  const windowSize = useWindowSize();
 
   const [nodeJson, setNodeJson] = useState("");
   const [showInfoPane, setShowInfoPane] = useState(false);
@@ -76,52 +88,33 @@ export default function StreamingView({ data, mvList }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [tabValue, setTabValue] = useState(0);
   const [actor, setActor] = useState<ActorInfo | null>(null);
+  const [chartHelper, setChartHelper] = useState<StreamChartHelper | null>(null);
+  const [canvasEngine, setCanvasEngine] = useState<CanvasEngine | null>(null);
 
-  const engineRef = useRef<CanvasEngine | null>(null);
-  const viewRef = useRef<StreamChartHelper | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const canvasOutterBox = useRef<HTMLCanvasElement | null>(null);
-
-  const setEngine = (e: CanvasEngine) => {
-    engineRef.current = e;
-  };
-
-  const getEngine = () => {
-    if (engineRef.current) {
-      return engineRef.current;
-    }
-  };
-
-  const setView = (v: StreamChartHelper) => {
-    viewRef.current = v;
-  };
-
-  const getView = () => {
-    return viewRef.current!;
-  };
+  const canvasOutterBox = useRef<HTMLDivElement | null>(null);
 
   const exprNode = (actorNode: any) => (({ input, ...o }) => o)(actorNode);
 
-  const locateTo = (selector: string) => {
-    getEngine()?.locateTo(selector);
-  };
+  const locateTo = useCallback(
+    (selector: string) => {
+      canvasEngine?.locateTo(selector);
+    },
+    [canvasEngine]
+  );
 
   const onTabChange = (_: any, v: any) => {
     setTabValue(v);
   };
 
-  const locateSearchPosition = () => {
-    let type = searchType === "Operator" ? "Node" : searchType;
-    type = type.toLocaleLowerCase();
-
-    if (type === "actor") {
-      locateTo(`${type}-${searchContent}`);
+  const locateSearchPosition = useCallback(() => {
+    const type = searchType === "Operator" ? "Node" : searchType;
+    if (type.toLocaleLowerCase() === "actor") {
+      locateTo(`actor-${searchContent}`);
+    } else if (type.toLocaleLowerCase() === "fragment") {
+      locateTo(`fragment-${searchContent}`);
     }
-
-    if (type === "fragment") {
-      locateTo(`${type}-${searchContent}`);
-    }
-  };
+  }, [searchType, locateTo, searchContent]);
 
   const onNodeClick = (_e: any, node: any, actor: any) => {
     setActor(actor);
@@ -147,119 +140,152 @@ export default function StreamingView({ data, mvList }: Props) {
   };
 
   const onWorkerNodeSelect = (e: SelectChangeEvent) => {
-    setSelectedWorkerNode(e.target.value as string);
+    setSelectedWorkerNode(e.target.value);
   };
 
-  const onSearchTypeChange = (e: any) => {
+  const onSearchTypeChange = (e: SelectChangeEvent) => {
     setSearchType(e.target.value);
   };
 
-  const onSearchButtonClick = (_e: any) => {
+  const onSearchButtonClick = () => {
     locateSearchPosition();
   };
 
-  const onSearchBoxChange = (e: any) => {
-    setSearchContent(e.target.value);
+  const searchHandler = useCallback(
+    debounce((_type: string, _content: string) => {
+      const type = _type === "Operator" ? "Node" : _type;
+      if (type.toLocaleLowerCase() === "actor") {
+        locateTo(`actor-${_content}`);
+      } else if (type.toLocaleLowerCase() === "fragment") {
+        locateTo(`fragment-${_content}`);
+      }
+    }, 300),
+    []
+  );
+
+  useEffect(() => {
+    if (searchContent) {
+      searchHandler(searchType, searchContent);
+    }
+  }, [searchType, searchContent]);
+
+  const onSelectMvChange = (
+    _e: SyntheticEvent<Element, Event>,
+    v: SelectedMateralizedView | null
+  ) => {
+    setSelectedMvTableId(v?.tableId || null);
   };
 
-  const onSelectMvChange = (_e: any, v: any) => {
-    setSelectedMvTableId(v === null ? null : v.tableId);
-  };
-
-  const onFilterModeChange = (e: any) => {
+  const onFilterModeChange = (e: SelectChangeEvent<string>) => {
     setFilterMode(e.target.value);
   };
 
-  const onFullGraphSwitchChange = (_e: any, v: any) => {
+  const onFullGraphSwitchChange = (_e: ChangeEvent<HTMLInputElement>, v: boolean) => {
     setShowFullGraph(v);
   };
 
-  const locateToCurrentMviewActor = (actorIdList: any) => {
-    if (actorIdList.length !== 0) {
+  const locateToCurrentMviewActor = (actorIdList: number[] | null) => {
+    console.log(actorIdList);
+
+    if (actorIdList?.length) {
       locateTo(`actor-${actorIdList[0]}`);
     }
   };
 
   const onReset = () => {
-    getEngine()?.resetCamera();
+    canvasEngine?.resetCamera();
   };
 
   const onRefresh = async () => {
     window.location.reload();
   };
 
-  const resizeCanvas = () => {
-    const canvasCur = canvasOutterBox.current;
-    if (canvasCur?.clientWidth && canvasCur.clientHeight) {
-      getEngine()?.resize(canvasCur.clientWidth, canvasCur.clientHeight);
-    }
-  };
-
   const initGraph = (shownActorIdList: number[] | null) => {
-    const cur = canvasRef.current;
+    const cur = canvasOutterBox.current;
     if (cur?.clientHeight && cur?.clientWidth) {
-      console.log("initing graph");
-      const newEngine = new CanvasEngine("c", cur.clientHeight, cur.clientWidth);
-      setEngine(newEngine);
-      resizeCanvas();
+      const canvasEngine = new CanvasEngine("c", cur.clientHeight, cur.clientWidth);
+      setCanvasEngine(canvasEngine);
+
       const newView = createView(
-        newEngine,
+        canvasEngine,
         data,
         onNodeClick,
         onActorClick,
         selectedWorkerNode,
         shownActorIdList
       );
-      setView(newView);
+      setChartHelper(newView);
     }
   };
 
-  const windowSize = useWindowSize();
+  useEffect(() => {
+    const cur = canvasOutterBox.current;
+    if (cur?.clientWidth && cur?.clientHeight) {
+      const canvasEngine = new CanvasEngine("c", cur.clientHeight, cur.clientWidth);
+      setCanvasEngine(canvasEngine);
+
+      const newView = createView(
+        canvasEngine,
+        data,
+        onNodeClick,
+        onActorClick,
+        selectedWorkerNode,
+        null
+      );
+      setChartHelper(newView);
+    }
+  }, []);
 
   useEffect(() => {
-    resizeCanvas();
-  }, [windowSize]);
+    const canvasCur = canvasOutterBox.current;
+    if (canvasCur?.clientWidth && canvasCur?.clientHeight) {
+      canvasEngine?.resize(canvasCur.clientWidth, canvasCur.clientHeight);
+    }
+  }, [canvasEngine, windowSize]);
 
-  useEffect(() => {
-    locateSearchPosition();
-  }, [searchType, searchContent]);
+  // useEffect(() => {
+  //   // TODO: debounce
+  //   locateSearchPosition();
+  // }, [searchType, searchContent]);
 
   // render the full graph
+  // useEffect(() => {
+  //   if (showFullGraph && canvasRef.current) {
+  //     console.log("rendering full graph");
+
+  //     initGraph(null);
+  //     if (chartHelper) {
+  //       mvTableIdToSingleViewActorList ||
+  //         setMvTableIdToSingleViewActorList(chartHelper.getMvTableIdToSingleViewActorList());
+  //       mvTableIdToChainViewActorList ||
+  //         setMvTableIdToChainViewActorList(chartHelper.getMvTableIdToChainViewActorList());
+  //     }
+  //   }
+  //   return () => {
+  //     canvasEngine?.cleanGraph();
+  //   };
+  // }, [showFullGraph]);
+
+  // TODO: locate and render partial graph on mview query
   useEffect(() => {
-    if (canvasRef.current && showFullGraph) {
-      initGraph(null);
+    console.log("worker-node: ", selectedWorkerNode);
 
-      mvTableIdToSingleViewActorList ||
-        setMvTableIdToSingleViewActorList(getView().getMvTableIdToSingleViewActorList());
-      mvTableIdToChainViewActorList ||
-        setMvTableIdToChainViewActorList(getView().getMvTableIdToChainViewActorList());
-      return () => {
-        getEngine()?.cleanGraph();
-      };
-    }
-  }, [selectedWorkerNode, showFullGraph]);
-
-  // locate and render partial graph on mview query
-  useEffect(() => {
-    if (selectedMvTableId === null) {
-      return;
-    }
-
-    const shownActorIdList =
-      (filterMode === "Chain View"
-        ? mvTableIdToChainViewActorList!
-        : mvTableIdToSingleViewActorList!
-      ).get(selectedMvTableId) || [];
-    if (!showFullGraph) {
-      // rerender graph if it is a partial graph
-      if (canvasRef.current) {
+    if (selectedMvTableId && mvTableIdToChainViewActorList && mvTableIdToSingleViewActorList) {
+      console.log("workernode effect? ", selectedWorkerNode);
+      const shownActorIdList =
+        (filterMode === "Chain View"
+          ? mvTableIdToChainViewActorList
+          : mvTableIdToSingleViewActorList
+        ).get(selectedMvTableId) || [];
+      if (!showFullGraph && canvasRef.current) {
+        // rerender graph if it is a partial graph
         initGraph(shownActorIdList);
-        return () => {
-          getEngine()?.cleanGraph();
-        };
       }
+      locateToCurrentMviewActor(shownActorIdList);
     }
-    locateToCurrentMviewActor(shownActorIdList);
+    // return () => {
+    //   canvasEngine?.cleanGraph();
+    // };
   }, [selectedWorkerNode, filterMode, selectedMvTableId, showFullGraph]);
 
   return (
@@ -312,13 +338,17 @@ export default function StreamingView({ data, mvList }: Props) {
           <InputLabel> Worker Node </InputLabel>
           <Select value={selectedWorkerNode} label="Woker Node" onChange={onWorkerNodeSelect}>
             <MenuItem value="Show All" key="all">
-              Show All
+              <Typography variant="subtitle1"> Show All </Typography>
             </MenuItem>
             {actorList.map((x, idx) => (
-              <MenuItem key={idx} value={x.host.host.concat(x.host.port.toString())}>
-                {x.type}&nbsp;{" "}
-                <span style={{ fontWeight: 700 }}>{x.host.host + ":" + x.host.port}</span>
-                <Dots bgcolor={computeNodeAddrToSideColor(x.host.host + ":" + x.host.port)} />
+              <MenuItem key={idx} value={x.host.host + ":" + x.host.port}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="subtitle1">{x.type}</Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                    {x.host.host + ":" + x.host.port}
+                  </Typography>
+                  <Dots bgcolor={computeNodeAddrToSideColor(x.host.host + ":" + x.host.port)} />
+                </Stack>
               </MenuItem>
             ))}
           </Select>
@@ -327,7 +357,7 @@ export default function StreamingView({ data, mvList }: Props) {
 
         <ToolBoxTitle> Search </ToolBoxTitle>
         <Stack direction="row" alignItems="center">
-          <FormControl sx={{ m: 1, minWidth: 120 }}>
+          <FormControl sx={{ p: 0, m: 1, minWidth: 120 }}>
             <InputLabel> Type </InputLabel>
             <Select value={searchType} label="Type" onChange={onSearchTypeChange}>
               <MenuItem value="Actor"> Actor </MenuItem>
@@ -336,7 +366,7 @@ export default function StreamingView({ data, mvList }: Props) {
           </FormControl>
           <Input
             sx={{ m: 1, width: 150 }}
-            onChange={onSearchBoxChange}
+            onChange={(e) => setSearchContent(e.target.value)}
             value={searchContent}
             endAdornment={
               <InputAdornment position="end">
@@ -370,16 +400,14 @@ export default function StreamingView({ data, mvList }: Props) {
               </Stack>
             </Stack>
             <Autocomplete
+              disablePortal
+              onChange={onSelectMvChange}
               isOptionEqualToValue={(option, value) => {
                 return option.tableId === value.tableId;
               }}
-              disablePortal
-              options={
-                mvList.map((mv) => {
-                  return { label: mv.name, tableId: mv.id };
-                }) || []
-              }
-              onChange={onSelectMvChange}
+              options={mvList.map((mv) => {
+                return { label: mv.name, tableId: mv.id };
+              })}
               renderInput={(param) => <TextField {...param} label="Materialized View" />}
             />
           </FormControl>

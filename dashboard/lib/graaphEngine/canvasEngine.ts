@@ -377,6 +377,7 @@ export class CanvasEngine {
   selection: boolean = false;
   lastPosX: number | undefined;
   lastPosY: number | undefined;
+
   /**
    * @param {string} canvasId The DOM id of the canvas
    * @param {number} height the height of the canvas
@@ -385,10 +386,10 @@ export class CanvasEngine {
   constructor(canvasId: string, height: number, width: number) {
     const canvas = new fabric.Canvas(canvasId);
     canvas.selection = false; // improve performance
+    canvas.setDimensions({ width: width, height: height });
 
     this.height = height;
     this.width = width;
-    this.canvas = canvas;
     this.clazzMap = new Map();
     this.topGroup = new Group({ engine: this });
     this.gridMapper = new GridMapper();
@@ -425,7 +426,7 @@ export class CanvasEngine {
     canvas.on("mouse:move", (opt) => {
       if (this.isDragging) {
         const e = opt.e;
-        this.moveCamera(e.clientX - this.lastPosX, e.clientY - this.lastPosY);
+        this.moveCamera(e.clientX - this.lastPosX!, e.clientY - this.lastPosY!);
         this.lastPosX = e.clientX;
         this.lastPosY = e.clientY;
       }
@@ -436,6 +437,8 @@ export class CanvasEngine {
       this.isDragging = false;
       this.selection = true;
     });
+
+    this.canvas = canvas;
   }
 
   /**
@@ -519,10 +522,10 @@ export class CanvasEngine {
    */
   classedElement(clazz: string, element: DrawElement, flag: boolean) {
     if (!flag) {
-      this.clazzMap.has(clazz) && this.clazzMap.get(clazz)!.delete(element);
+      this.clazzMap.has(clazz) && this.clazzMap.get(clazz)?.delete(element);
     } else {
       if (this.clazzMap.has(clazz)) {
-        this.clazzMap.get(clazz)!.add(element);
+        this.clazzMap.get(clazz)?.add(element);
       } else {
         this.clazzMap.set(clazz, new Set([element]));
       }
@@ -542,7 +545,9 @@ export class CanvasEngine {
       if (arr.length > 0) {
         const x = arr[0].props.canvasElement.get("left");
         const y = arr[0].props.canvasElement.get("top");
-        const scale = 0.6;
+        // TODO: remove d3 selection
+        console.log("d3 get left and top: ", x, y);
+        const scale = 1.0;
         this.canvas.setZoom(scale);
         const vpt = this.canvas.viewportTransform;
         if (vpt) {
@@ -575,8 +580,14 @@ export class CanvasEngine {
    * free memory. All objects in the canvas will be removed.
    */
   cleanGraph() {
-    console.log("clean called");
-    this.canvas?.dispose();
+    console.log("clean called", this.canvas);
+    try {
+      if (this.canvas._objects) {
+        this.canvas.dispose();
+      }
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   /**
@@ -596,6 +607,8 @@ export class CanvasEngine {
   resize(width: number, height: number) {
     this.width = width;
     this.height = height;
-    this.canvas.setDimensions({ width: this.width, height: this.height });
+    if (this.canvas.width && this.canvas.height) {
+      this.canvas.setDimensions({ width: this.width, height: this.height });
+    }
   }
 }

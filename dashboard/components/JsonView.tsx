@@ -17,7 +17,7 @@
 import React from "react";
 import { Box } from "@mui/material";
 import SyntaxHighlighter from "react-syntax-highlighter";
-import atomOneDarkReasonable from "react-syntax-highlighter/dist/esm/styles/hljs/atom-one-dark-reasonable";
+import atomOneDarkReasonable from "react-syntax-highlighter/dist/esm/styles/hljs";
 
 type Props = {
   nodeJson: string;
