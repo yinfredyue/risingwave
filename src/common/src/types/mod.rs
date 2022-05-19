@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{ErrorCode, Result, RwError};
 mod native_type;
-
+mod ops;
 mod scalar_impl;
 
 use std::fmt::{Debug, Display, Formatter};
@@ -43,6 +43,7 @@ pub use chrono_wrapper::{
 pub use decimal::Decimal;
 pub use interval::*;
 use itertools::Itertools;
+pub use ops::CheckedAdd;
 pub use ordered_float::IntoOrdered;
 use paste::paste;
 
@@ -92,17 +93,13 @@ impl From<&ProstDataType> for DataType {
             TypeName::Float => DataType::Float32,
             TypeName::Double => DataType::Float64,
             TypeName::Boolean => DataType::Boolean,
-            // TODO(TaoWu): Java frontend still interprets CHAR as a separate type.
-            // So to run e2e, we may return VARCHAR that mismatches with what Java frontend
-            // expected. Fix this when Java frontend fully deprecated.
-            TypeName::Varchar | TypeName::Char => DataType::Varchar,
+            TypeName::Varchar => DataType::Varchar,
             TypeName::Date => DataType::Date,
             TypeName::Time => DataType::Time,
             TypeName::Timestamp => DataType::Timestamp,
             TypeName::Timestampz => DataType::Timestampz,
             TypeName::Decimal => DataType::Decimal,
             TypeName::Interval => DataType::Interval,
-            TypeName::Symbol => DataType::Varchar,
             TypeName::Struct => {
                 let fields: Vec<DataType> = proto.field_type.iter().map(|f| f.into()).collect_vec();
                 DataType::Struct {
