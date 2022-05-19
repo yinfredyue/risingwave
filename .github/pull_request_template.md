@@ -15,3 +15,6 @@ Please explain **IN DETAIL** what the changes are in this PR and why they are ne
 - [ ] I have added necessary unit tests and integration tests
 
 ## Refer to a related PR or issue link (optional)
+
+## If the PR contains user-facing changes
+If the PR contains user-facing changes, please use the 'user-facing changes' label to indicate so. 
