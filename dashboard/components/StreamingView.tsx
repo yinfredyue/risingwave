@@ -213,8 +213,6 @@ export default function StreamingView({ data, mvList }: Props) {
   }, [windowSize]);
 
   useEffect(() => {
-    console.log(selectedWorkerNode);
-
     if (selectedMvTableId && mvTableIdToChainViewActorList && mvTableIdToSingleViewActorList) {
       const shownActorIdList =
         (filterMode.includes("chain")
@@ -247,6 +245,7 @@ export default function StreamingView({ data, mvList }: Props) {
         canvasEngine?.resetCamera();
         setChartHelper(newView);
       }
+      canvasEngine?._refreshView();
     }
   }, [
     selectedWorkerNode,

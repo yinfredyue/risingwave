@@ -22,25 +22,27 @@ fabric.Object.prototype.statefullCache = false;
 fabric.Object.prototype.noScaleCache = true;
 fabric.Object.prototype.needsItsOwnCache = () => false;
 
-type SVGElement = {
-  canvasElement: d3.Selection<any, any, any, any>;
-  engine: any;
+type Element = {
+  canvasElement?: any; // TODO: klass ?
+  engine: CanvasEngine;
 };
 
 export class DrawElement {
-  props: SVGElement;
+  canvasElement: any;
+  engine: CanvasEngine;
   eventHandler: Map<any, any>;
 
-  constructor(props: SVGElement) {
-    if (props.canvasElement) {
-      props.engine.canvas.add(props.canvasElement);
-      props.canvasElement.on("mouse:down", (e) => {
-        console.log("canvasElement", e);
+  constructor({ canvasElement, engine }: Element) {
+    if (canvasElement) {
+      engine.canvas.add(canvasElement);
+      canvasElement.on("mouse:down", (e: any) => {
+        console.log("canvasElement", e); // never trigger
       });
     }
 
-    this.props = props;
+    this.engine = engine;
     this.eventHandler = new Map();
+    this.canvasElement = canvasElement;
   }
 
   // TODO: this method is for migrating from d3.js to fabric.js.
@@ -54,21 +56,21 @@ export class DrawElement {
   attr(key: any, value: any) {
     const settings = this._attrMap(key, value);
     if (settings.length === 2) {
-      this.props.canvasElement?.set(settings[0], settings[1]);
+      this.canvasElement?.set(settings[0], settings[1]);
     }
     return this;
   }
 
   _afterPosition() {
-    const ele = this.props.canvasElement;
-    ele && this.props.engine._addDrawElement(this);
+    const ele = this.canvasElement;
+    ele && this.engine._addDrawElement(this);
   }
 
   // TODO: this method is for migrating from d3.js to fabric.js.
   // This should be replaced by a more suitable way.
   position(x: any, y: any) {
-    this.props.canvasElement?.set("left", x);
-    this.props.canvasElement?.set("top", y);
+    this.canvasElement?.set("left", x);
+    this.canvasElement?.set("top", y);
     this._afterPosition();
     return this;
   }
@@ -89,17 +91,24 @@ export class DrawElement {
   }
 
   classed(clazz: any, flag: any) {
-    this.props.engine.classedElement(clazz, this, flag);
+    this.engine.classedElement(clazz, this, flag);
     return this;
   }
 }
 
 export class Group extends DrawElement {
-  /**
-   * @param {{engine: CanvasEngine}} props
-   */
-  constructor(props) {
-    super(props);
+  basicSetting: Element;
+  appendFunc: {
+    g: () => Group;
+    circle: () => Circle;
+    rect: () => Rectangle;
+    text: () => (content: any) => Text;
+    path: () => (d: any) => Path;
+    polygon: () => Polygan;
+  };
+
+  constructor({ canvasElement, engine }: Element) {
+    super({ canvasElement, engine });
 
     this.appendFunc = {
       g: this._appendGroup,
@@ -111,7 +120,7 @@ export class Group extends DrawElement {
     };
 
     this.basicSetting = {
-      engine: props.engine,
+      engine: engine,
     };
   }
 
@@ -138,7 +147,7 @@ export class Group extends DrawElement {
   };
 
   _appendText = () => {
-    return (content) =>
+    return (content: any) =>
       new Text({
         ...this.basicSetting,
         ...{
@@ -388,16 +397,17 @@ export class CanvasEngine {
     canvas.selection = false; // improve performance
     canvas.setDimensions({ width: width, height: height });
 
-    this.height = height;
     this.width = width;
+    this.height = height;
     this.clazzMap = new Map();
     this.topGroup = new Group({ engine: this });
     this.gridMapper = new GridMapper();
     this.canvasElementToDrawElement = new Map();
 
+    // register mouse event
     canvas.on("mouse:wheel", (opt) => {
       const e = opt.e;
-      if (e.ctrlKey === true) {
+      if (e.ctrlKey) {
         const delta = opt.e.deltaY;
         let zoom = canvas.getZoom();
         zoom *= 0.999 ** delta;
@@ -471,15 +481,15 @@ export class CanvasEngine {
    */
   async _refreshView() {
     const padding = 50; // Make the rendering area a little larger.
-    const vpt = this.canvas.viewportTransform;
+    const viewPort = this.canvas.viewportTransform;
     const zoom = this.canvas.getZoom();
     const cameraWidth = this.width;
     const cameraHeight = this.height;
-    if (vpt) {
-      const minX = -vpt[4] - padding;
-      const maxX = -vpt[4] + cameraWidth + padding;
-      const minY = -vpt[5] - padding;
-      const maxY = -vpt[5] + cameraHeight + padding;
+    if (viewPort) {
+      const minX = -viewPort[4] - padding;
+      const maxX = -viewPort[4] + cameraWidth + padding;
+      const minY = -viewPort[5] - padding;
+      const maxY = -viewPort[5] + cameraHeight + padding;
       const visibleSet = this.gridMapper.areaQuery(
         minX / zoom,
         maxX / zoom,

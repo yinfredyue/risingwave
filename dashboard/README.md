@@ -13,6 +13,7 @@ dashborad/
 --node_modules/ (development dependencies)
 --out/ (generated static files)
 --components/ (React Component)
+--interfaces/ (Typescript interfaces)
 --lib/ (useful functions and classes)
 --pages/ (web pages)
 --public/ (static resources)
@@ -30,7 +31,7 @@ Start the RisingWave database.
 
 ```bash
 ./risedev d
-sqllogictest -p 4566 './e2e_test/v2/streaming/*.slt'
+sqllogictest -p 4566 './e2e_test/streaming/*.slt'
 ```
 
 Install Dependencies.

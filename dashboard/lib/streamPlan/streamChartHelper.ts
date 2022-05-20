@@ -135,7 +135,7 @@ export class StreamChartHelper {
    */
   constructor(
     g: Group,
-    data: any,
+    data: Actors[],
     onNodeClick: Function,
     onActorClick: Function,
     selectedWorkerNode: string,

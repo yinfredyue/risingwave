@@ -140,9 +140,7 @@ export default class StreamPlanParser {
   fragmentRepresentedActors: Set<any>;
   mvTableIdToSingleViewActorList: Map<any, any>;
   mvTableIdToChainViewActorList: Map<any, any>;
-  /**
-   * @param {Actors[]} data raw response from the meta node
-   */
+
   constructor(data: Actors[], shownActorList: number[] | null) {
     this.parsedActorList = [];
     this.actorId2Proto = new Map();
@@ -150,14 +148,15 @@ export default class StreamPlanParser {
     this.parsedActorMap = new Map();
     this.actorIdTomviewNodes = new Map();
     this.shownActorSet = new Set(shownActorList);
+    console.log(this.shownActorSet, "shoule be null");
 
-    for (const computeNodeData of data) {
-      for (const singleActorProto of computeNodeData.actors) {
+    for (const actor of data) {
+      for (const singleActorProto of actor.actors) {
         if (shownActorList && !this.shownActorSet.has(singleActorProto.actorId)) {
           continue;
         }
         const proto = {
-          computeNodeAddress: `${computeNodeData.node.host.host}:${computeNodeData.node.host.port}`,
+          computeNodeAddress: `${actor.node.host.host}:${actor.node.host.port}`,
           ...singleActorProto,
         };
         this.actorId2Proto.set(singleActorProto.actorId, proto);
@@ -183,8 +182,8 @@ export default class StreamPlanParser {
   }
 
   /**
-   * Randomly select a actor to represent its
-   * fragment, and append a property named `representedActorList`
+   * Randomly select a actor to represent its fragment,
+   * and append a property named `representedActorList`
    * to store all the other actors in the same fragement.
    *
    * Actors are degree of parallelism of a fragment, such that one of
@@ -195,8 +194,9 @@ export default class StreamPlanParser {
    */
   _constructRepresentedActorList() {
     const fragmentId2actorList = new Map();
-    let fragmentRepresentedActors = new Set();
-    for (let actor of this.parsedActorList) {
+    const fragmentRepresentedActors = new Set();
+
+    for (const actor of this.parsedActorList) {
       if (!fragmentId2actorList.has(actor.fragmentId)) {
         fragmentRepresentedActors.add(actor);
         fragmentId2actorList.set(actor.fragmentId, [actor]);

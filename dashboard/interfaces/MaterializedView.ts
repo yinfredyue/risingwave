@@ -23,7 +23,7 @@ export interface MaterializedView {
   orders: string[];
   columns: Column[];
   orderColumnIds: number[];
-  distributionKeys: number[];
+  distributionKeys?: number[];
   associatedSourceId?: number;
   dependentRelations?: number[];
 }
