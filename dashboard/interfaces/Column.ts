@@ -14,18 +14,15 @@
  * limitations under the License.
  *
  */
-interface ColumnType {
-  tyepName: String;
-  isNullable: Boolean;
-}
+import { DataType } from "./Node";
 
 export interface ColumnDesc {
-  columnType: ColumnType;
   name: String;
   columnId?: Number;
+  columnType: DataType;
 }
 
 export interface Column {
-  columnDesc: ColumnDesc;
   isHidden?: Boolean;
+  columnDesc: ColumnDesc;
 }

@@ -15,7 +15,7 @@
  *
  */
 export interface ParallelUnit {
-  workerNodeId: Number;
-  id?: Number;
-  type?: String;
+  workerNodeId: number;
+  id: number;
+  type?: string;
 }

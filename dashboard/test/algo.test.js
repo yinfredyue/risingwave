@@ -56,7 +56,8 @@ describe("Algo", () => {
     }
 
     // search
-    const _search = (l, r, d) => {// Layer, Row
+    const _search = (l, r, d) => {
+      // Layer, Row
       if (l > maxLayer || r > maxRow || r < 0) {
         return false;
       }
@@ -64,7 +65,7 @@ describe("Algo", () => {
         return m[l][r].id === d;
       }
       return _search(l + 1, r, d);
-    }
+    };
 
     const canReach = (node, nextNode) => {
       let pos = dagPositionMapper.get(node);
@@ -74,7 +75,7 @@ describe("Algo", () => {
         }
       }
       return false;
-    }
+    };
 
     //check all links
     let ok = true;
@@ -102,5 +103,5 @@ describe("Algo", () => {
     // console.log(s);
 
     expect(ok).toEqual(true);
-  })
-})
+  });
+});

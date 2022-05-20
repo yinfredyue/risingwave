@@ -14,14 +14,14 @@
  * limitations under the License.
  *
  */
-import { useEffect, useState } from "react";
-import Stack from "@mui/material/Stack";
-import type { NextPage } from "next";
 import api from "@api/api";
+import type { NextPage } from "next";
+import Stack from "@mui/material/Stack";
 import NoData from "@components/NoData";
 import Message from "@components/Message";
-import StreamingView from "@components/StreamingView";
 import { Actors } from "@interfaces/Actor";
+import { useEffect, useState } from "react";
+import StreamingView from "@components/StreamingView";
 import { MaterializedView } from "@interfaces/MaterializedView";
 
 const Streaming: NextPage = () => {

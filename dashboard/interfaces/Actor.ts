@@ -14,18 +14,20 @@
  * limitations under the License.
  *
  */
+import { ComputeNode } from "./ComputeNode";
 import { Dispatcher } from "./Dispatcher";
-import { Node, Nodes } from "./Node";
+import { OperatorNode } from "./Node";
 
 export interface Actor {
   actorId: number;
   fragmentId: number;
+  nodes: OperatorNode;
   dispatcher: Dispatcher[];
   upstreamActorId?: number[];
 }
 
 export interface Actors {
-  node: Node;
+  node: ComputeNode;
   actors: Actor[];
 }
 

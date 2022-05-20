@@ -855,7 +855,7 @@ export default function createView(
   data: Actors[],
   onNodeClick: Function,
   onActorClick: Function,
-  selectedWokerNode: string,
+  selectedWorkerNode: string,
   shownActorIdList: number[] | null
 ) {
   const streamChartHelper = new StreamChartHelper(
@@ -863,7 +863,7 @@ export default function createView(
     data,
     onNodeClick,
     onActorClick,
-    selectedWokerNode,
+    selectedWorkerNode,
     shownActorIdList
   );
   streamChartHelper.drawManyFlow();

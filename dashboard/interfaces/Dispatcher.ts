@@ -18,8 +18,8 @@ import { HashMapping } from "./HashMapping";
 
 export interface Dispatcher {
   type: string;
-  downstreamActorId?: number[];
+  dispatcherId?: string;
   columnIndices?: number[];
   hashMapping?: HashMapping;
-  dispatcherId?: string;
+  downstreamActorId?: number[];
 }
