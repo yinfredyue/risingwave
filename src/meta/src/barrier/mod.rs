@@ -176,7 +176,7 @@ pub struct GlobalBarrierManager<S: MetaStore> {
 
     wait_recovery: Arc<AtomicBool>,
 
-    semaphore: Arc<RwLock<u32>>,
+    wait_build_actor: Arc<AtomicBool>,
 }
 
 struct HeapNode {
@@ -251,7 +251,7 @@ where
             env,
             epoch_heap: Arc::new(RwLock::new(BinaryHeap::new())),
             wait_recovery: Arc::new(AtomicBool::new(false)),
-            semaphore: Arc::new(RwLock::new(0)),
+            wait_build_actor: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -344,13 +344,16 @@ where
                     if self.wait_recovery.load(atomic::Ordering::SeqCst){
                         continue;
                     }
+                    if self.wait_build_actor.load(atomic::Ordering::SeqCst){
+                        continue;
+                    }
                 }
                 // Wait for the minimal interval,
                 _ = min_interval.tick() => {
                     if self.wait_recovery.load(atomic::Ordering::SeqCst){
                         continue;
                     }
-                    if self.semaphore.read().await.gt(&0){
+                    if self.wait_build_actor.load(atomic::Ordering::SeqCst){
                         continue;
                     }
                 }
@@ -361,8 +364,7 @@ where
             match command {
                 Command::Plain(..) => {}
                 _ => {
-                    let mut semaphore = self.semaphore.write().await;
-                    *semaphore += 1;
+                    self.wait_build_actor.store(true, atomic::Ordering::SeqCst);
                 }
             }
 
@@ -394,7 +396,7 @@ where
             let heap = self.epoch_heap.clone();
             let hummock_manager = self.hummock_manager.clone();
             let wait_recovery = self.wait_recovery.clone();
-            let semaphore = self.semaphore.clone();
+            let wait_build_actor = self.wait_build_actor.clone();
 
             tokio::spawn(async move {
                 let (wait_tx, wait_rx) = oneshot::channel();
@@ -453,11 +455,14 @@ where
                             .unwrap();
                     }
                 }
+                heap.write().await.pop();
+                if let Some(mut next_heap_node) = heap.write().await.peek_mut() {
+                    next_heap_node.notify_wait();
+                }
                 match command {
                     Command::Plain(..) => {}
                     _ => {
-                        let mut semaphore = semaphore.write().await;
-                        *semaphore -= 1;
+                        wait_build_actor.store(false, atomic::Ordering::SeqCst);
                     }
                 }
             });
@@ -511,10 +516,6 @@ where
                         .await?;
                 }
             };
-        }
-        heap.write().await.pop();
-        if let Some(mut next_heap_node) = heap.write().await.peek_mut() {
-            next_heap_node.notify_wait();
         }
         let responses = result?;
 
