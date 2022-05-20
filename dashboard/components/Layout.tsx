@@ -108,9 +108,9 @@ const NavBarItem = ({ text, icon, currentPage, setCurrentPage }: NavItems) => {
         router.push(text);
       }}
     >
-      <Stack direction="row" alignItems="center" justifyContent="center">
+      <Stack direction="row" alignItems="center" justifyItems="center">
         <ListItemIcon>{icon}</ListItemIcon>
-        <span style={{ fontSize: "15px" }}>{capitalize(text)}</span>
+        <Typography variant="subtitle1">{capitalize(text)}</Typography>
       </Stack>
     </ListItemButton>
   );
@@ -148,9 +148,7 @@ export default function Layout({ children }: LayoutProps) {
           >
             <MenuIcon />
           </IconButton>
-          <Typography component="h1" variant="h6">
-            {capitalize(currentPage)}
-          </Typography>
+          <Typography variant="h6">{capitalize(currentPage)}</Typography>
         </Toolbar>
       </AppBar>
       <Drawer
@@ -167,26 +165,26 @@ export default function Layout({ children }: LayoutProps) {
         open={open}
       >
         <DrawerHeader>
-          <Stack direction="column" spacing={1} ml={1} mt={1}>
+          <Stack direction="column" ml={1} mt={1}>
             <Stack
               direction="row"
-              alignItems="flex-end"
+              alignItems="center"
               spacing={1}
               onClick={() => router.push("/")}
               sx={{ cursor: "pointer" }}
             >
-              <Image src="/singularitydata.svg" width={32} height={32} alt="logo" />
+              <Box m={1}>
+                <Image src="/singularitydata.svg" width={32} height={32} alt="logo" />
+              </Box>
               <Typography variant="subtitle1" color="primary">
                 RisingWave
               </Typography>
             </Stack>
-            <Stack direction="row" spacing={1} alignItems="center" justifyItems="center">
-              <Typography variant="subtitle2" color="secondary">
+            <Stack flexDirection="row">
+              <Typography variant="subtitle2" mx={1}>
                 Dashboard
               </Typography>
-              <Typography variant="subtitle2" color="secondary">
-                v0.0.1-alpha
-              </Typography>
+              <Typography variant="subtitle2">v0.0.1-alpha</Typography>
             </Stack>
           </Stack>
           <IconButton onClick={handleDrawerClose}>
