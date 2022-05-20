@@ -60,7 +60,7 @@ impl Default for MetaOpts {
     fn default() -> Self {
         Self {
             enable_recovery: false,
-            checkpoint_interval: Duration::from_millis(150),
+            checkpoint_interval: Duration::from_millis(100),
         }
     }
 }
