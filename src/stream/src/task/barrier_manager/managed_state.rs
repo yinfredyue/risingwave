@@ -54,19 +54,10 @@ impl ManagedBarrierState {
     /// Create a barrier manager state. This will be called only once.
     pub(super) fn new() -> Self {
         Self {
-            // inner: ManagedBarrierStateInner::Pending {
-            //     // TODO: specify last epoch
-            //     last_epoch: None,
-            // },
-            // finished_create_mviews: Default::default(),
             map: HashMap::new(),
             finished_create_mviews: Default::default(),
         }
     }
-
-    // fn inner_mut(&mut self) -> &mut ManagedBarrierStateInner {
-    //     &mut self.inner
-    // }
 
     /// Notify if we have collected barriers from all actor ids. The state must be `Issued`.
     fn may_notify(&mut self, curr_epoch: u64) {
@@ -82,7 +73,6 @@ impl ManagedBarrierState {
 
             let finished_create_mviews = std::mem::take(&mut self.finished_create_mviews);
 
-            // debug!("finished{:?}",finished_create_mviews);
             match inner {
                 Some(ManagedBarrierStateInner::Issued {
                     collect_notifier, ..
@@ -121,7 +111,6 @@ impl ManagedBarrierState {
             Some(ManagedBarrierStateInner::Issued {
                 remaining_actors, ..
             }) => {
-                // debug!("actor_id{:?},barrier{:?},set{:?}",actor_id,barrier,remaining_actors);
                 let exist = remaining_actors.remove(&actor_id);
                 assert!(exist);
                 self.may_notify(barrier.epoch.curr);
@@ -147,12 +136,10 @@ impl ManagedBarrierState {
     ) {
         match self.map.get(&barrier.epoch.curr) {
             Some(ManagedBarrierStateInner::Stashed { collected_actors }) => {
-                // debug!("stash_barrier{:?},set{:?}",barrier,collected_actors);
                 let remaining_actors = actor_ids_to_collect
                     .into_iter()
                     .filter(|a| !collected_actors.contains(a))
                     .collect();
-                // debug!("stash_barrier{:?},set{:?}",barrier,remaining_actors);
                 self.map.insert(
                     barrier.epoch.curr,
                     ManagedBarrierStateInner::Issued {
@@ -170,7 +157,6 @@ impl ManagedBarrierState {
             }
             None => {
                 let remaining_actors = actor_ids_to_collect.into_iter().collect();
-                // debug!("none_barrier{:?},set{:?}",barrier,remaining_actors);
                 self.map.insert(
                     barrier.epoch.curr,
                     ManagedBarrierStateInner::Issued {

@@ -381,7 +381,6 @@ where
             let prev_epoch = Epoch::from(last_epoch);
             let new_epoch = prev_epoch.next();
             last_epoch = new_epoch.0;
-            // debug!("new_epoch{:?},prev_epoch{:?},command:{:?}",new_epoch,prev_epoch,command);
             assert!(
                 new_epoch > prev_epoch,
                 "new{:?},prev{:?}",
@@ -552,7 +551,6 @@ where
                     // TODO(chi): add distributed tracing
                     span: vec![],
                 };
-                // debug!("inject_barrier to cn {:?}", barrier);
                 let env = env.clone();
                 async move {
                     let mut client = env.stream_clients().get(node).await?;
