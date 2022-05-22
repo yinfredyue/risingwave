@@ -74,7 +74,8 @@ pub struct LocalStreamManagerCore {
 
     /// Metrics of the stream manager
     streaming_metrics: Arc<StreamingMetrics>,
-
+    /// Metrics in tokio
+  //  tokio_metrics_monitors : std::collections::HashMap<ActorId, tokio_metrics::TaskMonitor>,
     /// The pool of compute clients.
     ///
     /// TODO: currently the client pool won't be cleared. Should remove compute clients when
@@ -358,8 +359,13 @@ impl LocalStreamManagerCore {
             mock_source: (Some(tx), Some(rx)),
             state_store,
             streaming_metrics,
+<<<<<<< HEAD
             compute_client_pool: ComputeClientPool::new(u64::MAX),
             config,
+=======
+     //       tokio_metrics_monitors: HashMap::new(),
+            compute_client_pool: ComputeClientPool::new(1024),
+>>>>>>> add tokio_metrics
         }
     }
 
@@ -627,13 +633,8 @@ impl LocalStreamManagerCore {
             )?;
 
             let dispatcher = self.create_dispatcher(executor, &actor.dispatcher, actor_id)?;
-            let actor = Actor::new(
-                dispatcher,
-                actor_id,
-                self.context.clone(),
-                self.streaming_metrics.clone(),
-                actor_context,
-            );
+            let actor = Actor::new(dispatcher, actor_id, self.context.clone());
+        //    let monitor = tokio_metrics::TaskMonitor::new();
             self.handles.insert(
                 actor_id,
                 tokio::spawn(async move {
@@ -641,9 +642,17 @@ impl LocalStreamManagerCore {
                     actor.run().await.expect("actor failed");
                 }),
             );
+    //       self.tokio_metrics_monitors.insert(actor_id, monitor);
         }
 
         Ok(())
+    }
+    pub fn take_all_handles2(&mut self) -> Result<HashMap<ActorId, ActorHandle>> {
+        Ok(std::mem::take(&mut self.handles))
+    }
+
+    pub fn take_all_handles2(&mut self) -> Result<HashMap<ActorId, ActorHandle>> {
+        Ok(std::mem::take(&mut self.handles))
     }
 
     pub fn take_all_handles(&mut self) -> Result<HashMap<ActorId, ActorHandle>> {
