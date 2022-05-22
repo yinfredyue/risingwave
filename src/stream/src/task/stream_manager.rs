@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+use core::time::Duration;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -74,8 +74,6 @@ pub struct LocalStreamManagerCore {
 
     /// Metrics of the stream manager
     streaming_metrics: Arc<StreamingMetrics>,
-    /// Metrics in tokio
-  //  tokio_metrics_monitors : std::collections::HashMap<ActorId, tokio_metrics::TaskMonitor>,
     /// The pool of compute clients.
     ///
     /// TODO: currently the client pool won't be cleared. Should remove compute clients when
@@ -360,10 +358,13 @@ impl LocalStreamManagerCore {
             state_store,
             streaming_metrics,
 <<<<<<< HEAD
+<<<<<<< HEAD
             compute_client_pool: ComputeClientPool::new(u64::MAX),
             config,
 =======
      //       tokio_metrics_monitors: HashMap::new(),
+=======
+>>>>>>> add schedule count
             compute_client_pool: ComputeClientPool::new(1024),
 >>>>>>> add tokio_metrics
         }
@@ -634,25 +635,36 @@ impl LocalStreamManagerCore {
 
             let dispatcher = self.create_dispatcher(executor, &actor.dispatcher, actor_id)?;
             let actor = Actor::new(dispatcher, actor_id, self.context.clone());
-        //    let monitor = tokio_metrics::TaskMonitor::new();
+            let monitor = tokio_metrics::TaskMonitor::new();
             self.handles.insert(
                 actor_id,
+<<<<<<< HEAD
                 tokio::spawn(async move {
+=======
+                madsim::task::spawn(monitor.instrument(async move {
+>>>>>>> add schedule count
                     // unwrap the actor result to panic on error
                     actor.run().await.expect("actor failed");
-                }),
+                })),
             );
-    //       self.tokio_metrics_monitors.insert(actor_id, monitor);
+            {
+                let actor_id_str = actor_id.to_string();
+                let metrics_monitor = monitor.clone();
+                let metrics = self.streaming_metrics.clone();
+                tokio::spawn(async move {
+                    for interval in metrics_monitor.intervals() {
+                        metrics
+                            .actor_schedule_count
+                            .with_label_values(&[&actor_id_str])
+                            .inc_by(interval.total_scheduled_count as u64);
+
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                    }
+                });
+            }
         }
 
         Ok(())
-    }
-    pub fn take_all_handles2(&mut self) -> Result<HashMap<ActorId, ActorHandle>> {
-        Ok(std::mem::take(&mut self.handles))
-    }
-
-    pub fn take_all_handles2(&mut self) -> Result<HashMap<ActorId, ActorHandle>> {
-        Ok(std::mem::take(&mut self.handles))
     }
 
     pub fn take_all_handles(&mut self) -> Result<HashMap<ActorId, ActorHandle>> {
