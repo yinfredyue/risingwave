@@ -23,6 +23,8 @@ import { Actors } from "@interfaces/Actor";
 import { useEffect, useState } from "react";
 import StreamingView from "@components/StreamingView";
 import { MaterializedView } from "@interfaces/MaterializedView";
+import actors from "./mock/actors.json";
+import materialized_view from "./mock/materialized_view.json";
 
 const Streaming: NextPage = () => {
   const actorsPath = "api/actors";
@@ -47,8 +49,10 @@ const Streaming: NextPage = () => {
   };
 
   useEffect(() => {
-    getData(actorsPath).then((res: Actors[]) => setActorProtoList(res));
-    getData(mViewsPath).then((res: MaterializedView[]) => setMvList(res));
+    setActorProtoList(actors);
+    setMvList(materialized_view);
+    // getData(actorsPath).then((res: Actors[]) => setActorProtoList(res));
+    // getData(mViewsPath).then((res: MaterializedView[]) => setMvList(res));
 
     return () => setMessage("");
   }, []);

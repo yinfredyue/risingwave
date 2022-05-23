@@ -23,20 +23,21 @@ fabric.Object.prototype.noScaleCache = true;
 fabric.Object.prototype.needsItsOwnCache = () => false;
 
 type Element = {
-  canvasElement?: any; // TODO: klass ?
+  canvasElement?: fabric.Object;
   engine: CanvasEngine;
 };
 
 export class DrawElement {
-  canvasElement: any;
+  canvasElement: fabric.Object | undefined;
   engine: CanvasEngine;
-  eventHandler: Map<any, any>;
+  eventHandler: Map<any, Function>;
 
   constructor({ canvasElement, engine }: Element) {
     if (canvasElement) {
       engine.canvas.add(canvasElement);
+      // TODO: remove
       canvasElement.on("mouse:down", (e: any) => {
-        console.log("canvasElement", e); // never trigger
+        console.log("canvasElement", e);
       });
     }
 
@@ -47,13 +48,13 @@ export class DrawElement {
 
   // TODO: this method is for migrating from d3.js to fabric.js.
   // This should be replaced by a more suitable way.
-  _attrMap(key: any, value: any) {
+  _attrMap(key: string, value: string | number) {
     return [key, value];
   }
 
   // TODO: this method is for migrating from d3.js to fabric.js.
   // This should be replaced by a more suitable way.
-  attr(key: any, value: any) {
+  attr(key: string, value: any) {
     const settings = this._attrMap(key, value);
     if (settings.length === 2) {
       this.canvasElement?.set(settings[0], settings[1]);
@@ -96,21 +97,23 @@ export class DrawElement {
   }
 }
 
+type FuncDispatcher = {
+  [key: string]: Function;
+  g: Function;
+  circle: Function;
+  rect: Function;
+  text: Function;
+  path: Function;
+  polygon: Function;
+};
+
 export class Group extends DrawElement {
-  basicSetting: Element;
-  appendFunc: {
-    g: () => Group;
-    circle: () => Circle;
-    rect: () => Rectangle;
-    text: () => (content: any) => Text;
-    path: () => (d: any) => Path;
-    polygon: () => Polygan;
-  };
+  dispatcher: FuncDispatcher;
 
   constructor({ canvasElement, engine }: Element) {
     super({ canvasElement, engine });
 
-    this.appendFunc = {
+    this.dispatcher = {
       g: this._appendGroup,
       circle: this._appendCircle,
       rect: this._appendRect,
@@ -118,89 +121,93 @@ export class Group extends DrawElement {
       path: this._appendPath,
       polygon: this._appendPolygan,
     };
-
-    this.basicSetting = {
-      engine: engine,
-    };
   }
 
   _appendGroup = () => {
-    return new Group(this.basicSetting);
+    const props: Element = {
+      engine: this.engine,
+    };
+    return new Group(props);
   };
 
   _appendCircle = () => {
-    return new Circle({
-      ...this.basicSetting,
-      ...{
-        canvasElement: new fabric.Circle({ selectable: false, hoverCursor: "pointer" }),
-      },
-    });
+    const props: Element = {
+      canvasElement: new fabric.Circle({ selectable: false, hoverCursor: "pointer" }),
+      engine: this.engine,
+    };
+    return new Circle(props);
   };
 
   _appendRect = () => {
-    return new Rectangle({
-      ...this.basicSetting,
-      ...{
-        canvasElement: new fabric.Rect({ selectable: false, hoverCursor: "pointer" }),
-      },
-    });
+    const props: Element = {
+      canvasElement: new fabric.Rect({ selectable: false, hoverCursor: "pointer" }),
+      engine: this.engine,
+    };
+    return new Rectangle(props);
   };
 
   _appendText = () => {
-    return (content: any) =>
-      new Text({
-        ...this.basicSetting,
-        ...{
-          canvasElement: new fabric.Text(content || "undefined", {
-            selectable: false,
-            textAlign: "justify-center",
-          }),
-        },
-      });
+    return (content: string) => {
+      // TODO: find a better way to rotate text
+      let rotation = -10;
+      if (content?.includes("Fragment") || content?.includes(",")) {
+        rotation = 0;
+      }
+
+      const props: Element = {
+        engine: this.engine,
+        canvasElement: new fabric.Text(content || "undefined", {
+          angle: rotation,
+          selectable: false,
+          textAlign: "left",
+        }),
+      };
+      return new Text(props);
+    };
   };
 
   _appendPath = () => {
-    return (d) =>
-      new Path({
-        ...this.basicSetting,
-        ...{
-          canvasElement: new fabric.Path(d, { selectable: false }),
-        },
-      });
+    return (d: string) => {
+      const props: Element = {
+        engine: this.engine,
+        canvasElement: new fabric.Path(d, { selectable: false }),
+      };
+      return new Path(props);
+    };
   };
 
   _appendPolygan = () => {
-    return new Polygan(this.basicSetting);
+    const props: Element = {
+      engine: this.engine,
+    };
+    return new Polygan(props);
   };
 
-  append = (type) => {
-    return this.appendFunc[type]();
+  append = (type: string) => {
+    return this.dispatcher[type]();
   };
 }
 
 export class Rectangle extends DrawElement {
-  /**
-   * @param {{g: fabric.Group}} props
-   */
-  constructor(props) {
-    super(props);
-    this.props = props;
+  constructor({ canvasElement, engine }: Element) {
+    super({ canvasElement, engine });
   }
 
-  init(x, y, width, height) {
-    let ele = this.props.canvasElement;
-    ele.set("left", x);
-    ele.set("top", y);
-    ele.set("width", width);
-    ele.set("height", height);
+  init(x: any, y: any, width: any, height: any) {
+    const ele = this.canvasElement;
+    ele?.set("left", x);
+    ele?.set("top", y);
+    ele?.set("width", width);
+    ele?.set("height", height);
     super._afterPosition();
     return this;
   }
 
-  _attrMap(key, value) {
+  // TODO:
+  _attrMap(key: string, value: string | number) {
     if (key === "rx") {
-      this.props.canvasElement.set("rx", value);
-      this.props.canvasElement.set("ry", value);
+      this.canvasElement?.set("rx", value);
+      this.canvasElement?.set("ry", value);
       return false;
     }
     return [key, value];
@@ -208,56 +215,50 @@ export class Rectangle extends DrawElement {
 }
 
 export class Circle extends DrawElement {
-  /**
-   * @param {{svgElement: d3.Selection<SVGCircleElement, any, any, any>}} props
-   */
-  constructor(props) {
-    super(props);
-    this.props = props;
+  radius: number;
+
+  constructor({ canvasElement, engine }: Element) {
+    super({ canvasElement, engine });
     this.radius = 0;
   }
 
-  init(x, y, r) {
-    this.props.canvasElement.set("left", x - r);
-    this.props.canvasElement.set("top", y - r);
-    this.props.canvasElement.set("radius", r);
+  init(x: number, y: number, r: number) {
+    this.canvasElement?.set("left", x - r);
+    this.canvasElement?.set("top", y - r);
+    this.canvasElement?.set("radius", r);
     super._afterPosition();
     return this;
   }
 
-  _attrMap(key, value) {
+  _attrMap(key: string, value: string | number) {
     if (key === "r") {
-      this.radius = value;
+      this.radius = +value;
       return ["radius", value];
     }
     if (key === "cx") {
-      return ["left", value - this.radius];
+      return ["left", +value - this.radius];
     }
     if (key === "cy") {
-      return ["top", value - this.radius];
+      return ["top", +value - this.radius];
     }
     return [key, value];
   }
 }
 
 export class Text extends DrawElement {
-  /**
-   * @param {{svgElement: d3.Selection<d3.Selection<any, any, any, any>, any, null, undefined>}} props
-   */
-  constructor(props) {
-    super(props);
-    this.props = props;
+  constructor({ canvasElement, engine }: Element) {
+    super({ canvasElement, engine });
   }
 
-  position(x, y) {
-    let e = this.props.canvasElement;
-    e.set("top", y);
-    e.set("left", x);
+  position(x: number, y: number) {
+    const e = this.canvasElement;
+    e?.set("top", y);
+    e?.set("left", x);
     super._afterPosition();
     return this;
   }
 
-  _attrMap(key, value) {
+  _attrMap(key: string, value: string | number) {
     if (key === "text-anchor") {
       return ["textAlign", value];
     }
@@ -267,7 +268,7 @@ export class Text extends DrawElement {
     return [key, value];
   }
 
-  text(content) {
+  text(_content: string) {
     return this;
   }
 
@@ -275,34 +276,34 @@ export class Text extends DrawElement {
 }
 
 export class Polygan extends DrawElement {
-  constructor(props) {
-    super(props);
-    this.props = props;
+  constructor({ canvasElement, engine }: Element) {
+    super({ canvasElement, engine });
   }
 }
 
 export class Path extends DrawElement {
-  constructor(props) {
-    super(props);
-    this.props = props;
+  strokeWidth: number;
+
+  constructor({ canvasElement, engine }: Element) {
+    super({ canvasElement, engine });
     this.strokeWidth = 1;
     super._afterPosition();
   }
 
-  _attrMap(key, value) {
+  _attrMap(key: string, value: string | number) {
     if (key === "fill") {
       return ["fill", value === "none" ? false : value];
     }
     if (key === "stroke-width") {
-      this.props.canvasElement.set("top", this.props.canvasElement.get("top") - value / 2);
+      this.canvasElement?.set("top", this.canvasElement?.get("top")! - +value / 2);
       return ["strokeWidth", value];
     }
     if (key === "stroke-dasharray") {
-      return ["strokeDashArray", value.split(",")];
+      return ["strokeDashArray", (value as string).split(",")];
     }
     if (key === "layer") {
       if (value === "back") {
-        this.props.canvasElement.canvas.sendToBack(this.props.canvasElement);
+        this.canvasElement?.canvas?.sendToBack(this.canvasElement);
       }
       return false;
     }
@@ -387,11 +388,6 @@ export class CanvasEngine {
   lastPosX: number | undefined;
   lastPosY: number | undefined;
 
-  /**
-   * @param {string} canvasId The DOM id of the canvas
-   * @param {number} height the height of the canvas
-   * @param {number} width the width of the canvas
-   */
   constructor(canvasId: string, height: number, width: number) {
     const canvas = new fabric.Canvas(canvasId);
     canvas.selection = false; // improve performance
@@ -453,9 +449,6 @@ export class CanvasEngine {
     this.canvas = canvas;
   }
 
-  /**
-   * Move the current view point.
-   */
   async moveCamera(deltaX: number, deltaY: number) {
     this.canvas.setZoom(this.canvas.getZoom()); // essential for rendering (seems like a bug)
     if (this.canvas.viewportTransform) {
@@ -514,7 +507,7 @@ export class CanvasEngine {
    * to the canvas.
    */
   _addDrawElement(ele: DrawElement) {
-    const canvasElement = ele.props.canvasElement;
+    const canvasElement = ele.canvasElement;
     this.canvasElementToDrawElement.set(canvasElement, ele);
     this.gridMapper.addObject(
       canvasElement.left,
@@ -555,8 +548,8 @@ export class CanvasEngine {
     if (selectorSet) {
       const arr = Array.from<DrawElement>(selectorSet);
       if (arr.length > 0) {
-        const x = arr[0].props.canvasElement.get("left");
-        const y = arr[0].props.canvasElement.get("top");
+        const x = arr[0].canvasElement.get("left");
+        const y = arr[0].canvasElement.get("top");
         // TODO: remove d3 selection
         console.log("d3 get left and top: ", x, y);
         const scale = 1.0;

@@ -1,0 +1,1436 @@
+[
+  {
+    "id": 1,
+    "name": "supplier",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "s_suppkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 2,
+          "name": "s_name"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 3,
+          "name": "s_address"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 4,
+          "name": "s_nationkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 5,
+          "name": "s_phone"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 6,
+          "name": "s_acctbal"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 7,
+          "name": "s_comment"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 0
+  },
+  {
+    "id": 3,
+    "name": "part",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "p_partkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 2,
+          "name": "p_name"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 3,
+          "name": "p_mfgr"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 4,
+          "name": "p_brand"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 5,
+          "name": "p_type"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 6,
+          "name": "p_size"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 7,
+          "name": "p_container"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 8,
+          "name": "p_retailprice"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 9,
+          "name": "p_comment"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 2
+  },
+  {
+    "id": 5,
+    "name": "partsupp",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "ps_partkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "ps_suppkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "ps_availqty"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 4,
+          "name": "ps_supplycost"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 5,
+          "name": "ps_comment"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 4
+  },
+  {
+    "id": 7,
+    "name": "customer",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "c_custkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 2,
+          "name": "c_name"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 3,
+          "name": "c_address"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 4,
+          "name": "c_nationkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 5,
+          "name": "c_phone"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 6,
+          "name": "c_acctbal"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 7,
+          "name": "c_mktsegment"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 8,
+          "name": "c_comment"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 6
+  },
+  {
+    "id": 9,
+    "name": "orders",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 1,
+          "name": "o_orderkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "o_custkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 3,
+          "name": "o_orderstatus"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 4,
+          "name": "o_totalprice"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DATE", "isNullable": true },
+          "columnId": 5,
+          "name": "o_orderdate"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 6,
+          "name": "o_orderpriority"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 7,
+          "name": "o_clerk"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 8,
+          "name": "o_shippriority"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 9,
+          "name": "o_comment"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 8
+  },
+  {
+    "id": 11,
+    "name": "lineitem",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 1,
+          "name": "l_orderkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "l_partkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "l_suppkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 4,
+          "name": "l_linenumber"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 5,
+          "name": "l_quantity"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 6,
+          "name": "l_extendedprice"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 7,
+          "name": "l_discount"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 8,
+          "name": "l_tax"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 9,
+          "name": "l_returnflag"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 10,
+          "name": "l_linestatus"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DATE", "isNullable": true },
+          "columnId": 11,
+          "name": "l_shipdate"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DATE", "isNullable": true },
+          "columnId": 12,
+          "name": "l_commitdate"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DATE", "isNullable": true },
+          "columnId": 13,
+          "name": "l_receiptdate"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 14,
+          "name": "l_shipinstruct"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 15,
+          "name": "l_shipmode"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 16,
+          "name": "l_comment"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 10
+  },
+  {
+    "id": 13,
+    "name": "nation",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "n_nationkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 2,
+          "name": "n_name"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "n_regionkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 4,
+          "name": "n_comment"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 12
+  },
+  {
+    "id": 15,
+    "name": "region",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "r_regionkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 2,
+          "name": "r_name"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 3,
+          "name": "r_comment"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 14
+  },
+  {
+    "id": 16,
+    "name": "tpch_q1",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "name": "l_returnflag"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 1,
+          "name": "l_linestatus"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 2,
+          "name": "sum_qty"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 3,
+          "name": "sum_base_price"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 4,
+          "name": "sum_disc_price"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 5,
+          "name": "sum_charge"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 6,
+          "name": "avg_qty"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 7,
+          "name": "avg_price"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 8,
+          "name": "avg_disc"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 9,
+          "name": "count_order"
+        }
+      }
+    ],
+    "orderColumnIds": [0, 1],
+    "orders": ["ASCENDING", "ASCENDING"],
+    "dependentRelations": [11],
+    "distributionKeys": [0, 1],
+    "pk": [0, 1]
+  },
+  {
+    "id": 29,
+    "name": "tpch_q2",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "name": "s_acctbal"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 1,
+          "name": "s_name"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 2,
+          "name": "n_name"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "p_partkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 4,
+          "name": "p_mfgr"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 5,
+          "name": "s_address"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 6,
+          "name": "s_phone"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 7,
+          "name": "s_comment"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 8,
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 9,
+          "name": "ps_partkey"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 10,
+          "name": "ps_suppkey"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 11,
+          "name": "ps_availqty"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 12,
+          "name": "ps_supplycost"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 13,
+          "name": "ps_comment"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 14,
+          "name": "_row_id#1"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 15,
+          "name": "p_name"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 16,
+          "name": "p_brand"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 17,
+          "name": "p_type"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 18,
+          "name": "p_size"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 19,
+          "name": "p_container"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 20,
+          "name": "p_retailprice"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 21,
+          "name": "p_comment"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 22,
+          "name": "_row_id#2"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 23,
+          "name": "s_suppkey"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 24,
+          "name": "s_nationkey"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 25,
+          "name": "_row_id#3"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 26,
+          "name": "n_nationkey"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 27,
+          "name": "n_regionkey"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 28,
+          "name": "n_comment"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 29,
+          "name": "_row_id#4"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 30,
+          "name": "r_regionkey"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 31,
+          "name": "r_name"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 32,
+          "name": "r_comment"
+        },
+        "isHidden": true
+      }
+    ],
+    "orderColumnIds": [
+      0, 2, 1, 3, 8, 9, 10, 11, 12, 13, 14, 15, 4, 16, 17, 18, 19, 20, 21, 22, 23, 5, 24, 6, 7, 25,
+      26, 27, 28, 29, 30, 31, 32
+    ],
+    "orders": [
+      "DESCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING"
+    ],
+    "dependentRelations": [1, 13, 15, 3, 5],
+    "pk": [
+      8, 9, 10, 11, 12, 13, 14, 3, 15, 4, 16, 17, 18, 19, 20, 21, 22, 23, 1, 5, 24, 6, 0, 7, 25, 26,
+      2, 27, 28, 29, 30, 31, 32
+    ]
+  },
+  {
+    "id": 48,
+    "name": "tpch_q3",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "l_orderkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 1,
+          "name": "revenue"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DATE", "isNullable": true },
+          "columnId": 2,
+          "name": "o_orderdate"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "o_shippriority"
+        }
+      }
+    ],
+    "orderColumnIds": [1, 2, 0, 3],
+    "orders": ["DESCENDING", "ASCENDING", "ASCENDING", "ASCENDING"],
+    "dependentRelations": [11, 9, 7],
+    "pk": [0, 2, 3]
+  },
+  {
+    "id": 55,
+    "name": "tpch_q4",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "name": "o_orderpriority"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 1,
+          "name": "order_count"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "dependentRelations": [9, 11],
+    "distributionKeys": [0],
+    "pk": [0]
+  },
+  {
+    "id": 60,
+    "name": "tpch_q5",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "name": "n_name"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 1,
+          "name": "revenue"
+        }
+      }
+    ],
+    "orderColumnIds": [1, 0],
+    "orders": ["DESCENDING", "ASCENDING"],
+    "dependentRelations": [1, 13, 11, 15, 9, 7],
+    "distributionKeys": [0],
+    "pk": [0]
+  },
+  {
+    "id": 73,
+    "name": "tpch_q6",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "name": "revenue"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 1,
+          "name": "agg#0"
+        },
+        "isHidden": true
+      }
+    ],
+    "orderColumnIds": [1, 0],
+    "orders": ["ASCENDING", "ASCENDING"],
+    "dependentRelations": [11],
+    "pk": [1, 0]
+  },
+  {
+    "id": 76,
+    "name": "tpch_q7",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "name": "supp_nation"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 1,
+          "name": "cust_nation"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 2,
+          "name": "l_year"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 3,
+          "name": "revenue"
+        }
+      }
+    ],
+    "orderColumnIds": [0, 1, 2],
+    "orders": ["ASCENDING", "ASCENDING", "ASCENDING"],
+    "dependentRelations": [11, 1, 13, 7, 9],
+    "distributionKeys": [0, 1, 2],
+    "pk": [0, 1, 2]
+  },
+  {
+    "id": 89,
+    "name": "tpch_q8",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "name": "o_year"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 1,
+          "name": "mkt_share"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "dependentRelations": [11, 1, 7, 3, 9, 13, 15],
+    "distributionKeys": [0],
+    "pk": [0]
+  },
+  {
+    "id": 107,
+    "name": "tpch_q9",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "name": "nation"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 1,
+          "name": "o_year"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 2,
+          "name": "sum_profit"
+        }
+      }
+    ],
+    "orderColumnIds": [0, 1],
+    "orders": ["ASCENDING", "DESCENDING"],
+    "dependentRelations": [9, 1, 3, 5, 11, 13],
+    "distributionKeys": [0, 1],
+    "pk": [0, 1]
+  },
+  {
+    "id": 120,
+    "name": "tpch_q10",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "name": "c_custkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 1,
+          "name": "c_name"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 2,
+          "name": "revenue"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 3,
+          "name": "c_acctbal"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 4,
+          "name": "n_name"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 5,
+          "name": "c_address"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 6,
+          "name": "c_phone"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "columnId": 7,
+          "name": "c_comment"
+        }
+      }
+    ],
+    "orderColumnIds": [2, 0, 1, 3, 6, 4, 5, 7],
+    "orders": [
+      "DESCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING",
+      "ASCENDING"
+    ],
+    "dependentRelations": [11, 9, 7, 13],
+    "pk": [0, 1, 3, 6, 4, 5, 7]
+  },
+  {
+    "id": 129,
+    "name": "tpch_q12",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "name": "l_shipmode"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 1,
+          "name": "high_line_count"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 2,
+          "name": "low_line_count"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "dependentRelations": [11, 9],
+    "distributionKeys": [0],
+    "pk": [0]
+  },
+  {
+    "id": 135,
+    "name": "tpch_q13",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "c_count"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 1,
+          "name": "custdist"
+        }
+      }
+    ],
+    "orderColumnIds": [1, 0],
+    "orders": ["DESCENDING", "DESCENDING"],
+    "dependentRelations": [9, 7],
+    "distributionKeys": [0],
+    "pk": [0]
+  },
+  {
+    "id": 142,
+    "name": "tpch_q14",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "name": "promo_revenue"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 1,
+          "name": "agg#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 2,
+          "name": "agg#1"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 3,
+          "name": "agg#2"
+        },
+        "isHidden": true
+      }
+    ],
+    "orderColumnIds": [1, 2, 3],
+    "orders": ["ASCENDING", "ASCENDING", "ASCENDING"],
+    "dependentRelations": [3, 11],
+    "pk": [1, 2, 3]
+  },
+  {
+    "id": 148,
+    "name": "tpch_q17",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "name": "avg_yearly"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 1,
+          "name": "agg#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 2,
+          "name": "agg#1"
+        },
+        "isHidden": true
+      }
+    ],
+    "orderColumnIds": [1, 2],
+    "orders": ["ASCENDING", "ASCENDING"],
+    "dependentRelations": [3, 11],
+    "pk": [1, 2]
+  },
+  {
+    "id": 158,
+    "name": "tpch_q18",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "VARCHAR", "isNullable": true },
+          "name": "c_name"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "c_custkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 2,
+          "name": "o_orderkey"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DATE", "isNullable": true },
+          "columnId": 3,
+          "name": "o_orderdate"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 4,
+          "name": "o_totalprice"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "columnId": 5,
+          "name": "quantity"
+        }
+      }
+    ],
+    "orderColumnIds": [4, 3, 0, 1, 2],
+    "orders": ["DESCENDING", "ASCENDING", "ASCENDING", "ASCENDING", "ASCENDING"],
+    "dependentRelations": [7, 9, 11],
+    "pk": [0, 1, 2, 3, 4]
+  },
+  {
+    "id": 169,
+    "name": "tpch_q19",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "DECIMAL", "isNullable": true },
+          "name": "revenue"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 1,
+          "name": "agg#0"
+        },
+        "isHidden": true
+      }
+    ],
+    "orderColumnIds": [1, 0],
+    "orders": ["ASCENDING", "ASCENDING"],
+    "dependentRelations": [11, 3],
+    "pk": [1, 0]
+  }
+]

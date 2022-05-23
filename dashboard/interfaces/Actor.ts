@@ -24,6 +24,13 @@ export interface Actor {
   nodes: OperatorNode;
   dispatcher: Dispatcher[];
   upstreamActorId?: number[];
+  downstreamActorId?: number[];
+}
+
+export interface ActorProto extends Actor {
+  computeNodeAddress: string;
+  output: OperatorNode[];
+  rootNode: OperatorNode | null;
 }
 
 export interface Actors {

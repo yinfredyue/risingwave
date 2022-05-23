@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "type": "COMPUTE_NODE",
+    "host": { "host": "127.0.0.1", "port": 5687 },
+    "state": "RUNNING",
+    "parallelUnits": [
+      { "workerNodeId": 1 },
+      { "id": 1, "type": "HASH", "workerNodeId": 1 },
+      { "id": 2, "type": "HASH", "workerNodeId": 1 },
+      { "id": 3, "type": "HASH", "workerNodeId": 1 }
+    ]
+  },
+  {
+    "id": 3,
+    "type": "COMPUTE_NODE",
+    "host": { "host": "127.0.0.1", "port": 5689 },
+    "state": "RUNNING",
+    "parallelUnits": [
+      { "id": 8, "workerNodeId": 3 },
+      { "id": 9, "type": "HASH", "workerNodeId": 3 },
+      { "id": 10, "type": "HASH", "workerNodeId": 3 },
+      { "id": 11, "type": "HASH", "workerNodeId": 3 }
+    ]
+  },
+  {
+    "id": 2,
+    "type": "COMPUTE_NODE",
+    "host": { "host": "127.0.0.1", "port": 5688 },
+    "state": "RUNNING",
+    "parallelUnits": [
+      { "id": 4, "workerNodeId": 2 },
+      { "id": 5, "type": "HASH", "workerNodeId": 2 },
+      { "id": 6, "type": "HASH", "workerNodeId": 2 },
+      { "id": 7, "type": "HASH", "workerNodeId": 2 }
+    ]
+  }
+]

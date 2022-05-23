@@ -14,7 +14,8 @@
  * limitations under the License.
  *
  */
-import { Actors } from "@interfaces/Actor";
+import { Actor, ActorProto, Actors } from "@interfaces/Actor";
+import { OperatorNode } from "@interfaces/Node";
 import { graphBfs } from "../algo";
 
 let cnt = 0;
@@ -22,44 +23,36 @@ function generateNewNodeId() {
   return "g" + ++cnt;
 }
 
-function getNodeId(nodeProto, actorId) {
-  return (
-    actorId +
-    ":" +
-    (nodeProto.operatorId === undefined ? generateNewNodeId() : "o" + nodeProto.operatorId)
-  );
+function getNodeId(nodeProto: OperatorNode, actorId: number) {
+  return `${actorId}:${nodeProto.operatorId ? "o" + nodeProto.operatorId : generateNewNodeId()}`;
 }
 
-class Node {
-  constructor(id, actorId, nodeProto) {
+class BaseNode {
+  id: any;
+  nodeProto: any;
+  nextNodes: BaseNode[];
+  actorId: any;
+
+  constructor(id: any, actorId: any, nodeProto: any) {
     this.id = id;
-    /**
-     * @type {any}
-     */
     this.nodeProto = nodeProto;
-    /**
-     * @type {Array<Node}
-     */
     this.nextNodes = [];
     this.actorId = actorId;
   }
 }
 
-class StreamNode extends Node {
-  constructor(id, actorId, nodeProto) {
+class StreamNode extends BaseNode {
+  type: string | undefined;
+  typeInfo: any;
+
+  constructor(id: any, actorId: any, nodeProto: any) {
     super(id, actorId, nodeProto);
-    /**
-     * @type {string}
-     */
     this.type = this.parseType(nodeProto);
-    /**
-     * @type {any}
-     */
-    this.typeInfo = nodeProto[this.type];
+    this.typeInfo = nodeProto[this.type!];
   }
 
-  parseType(nodeProto) {
-    let types = new Set([
+  parseType(nodeProto: any) {
+    const types = new Set([
       "source",
       "project",
       "filter",
@@ -81,7 +74,7 @@ class StreamNode extends Node {
       "union",
       "deltaIndexJoin",
     ]);
-    for (let [type, _] of Object.entries(nodeProto)) {
+    for (const [type, _] of Object.entries(nodeProto)) {
       if (types.has(type)) {
         return type;
       }
@@ -89,54 +82,65 @@ class StreamNode extends Node {
   }
 }
 
-class Dispatcher extends Node {
-  constructor(actorId, dispatcherType, downstreamActorId, nodeProto) {
-    super(actorId, nodeProto);
+class Dispatcher extends BaseNode {
+  dispatcherType: any;
+  downstreamActorId: any;
+
+  constructor(actorId: any, dispatcherType: any, downstreamActorId: any, nodeProto: any) {
+    // TODO: Dispatcher super (id)?
+    super(actorId, actorId, nodeProto);
     this.dispatcherType = dispatcherType;
     this.downstreamActorId = downstreamActorId;
   }
 }
 
-export class Actor {
-  constructor(actorId, output, rootNode, fragmentId, computeNodeAddress) {
-    /**
-     * @type {number}
-     */
-    this.actorId = actorId;
-    /**
-     * @type {Array<Node>}
-     */
-    this.output = output;
-    /**
-     * @type {Node}
-     */
-    this.rootNode = rootNode;
-    /**
-     * @type {number}
-     */
-    this.fragmentId = fragmentId;
-    /**
-     * @type {string}
-     */
-    this.computeNodeAddress = computeNodeAddress;
-    /**
-     * @type {Array<Actor>}
-     */
-    this.representedActorList = null;
-    /**
-     * @type {Set<string>}
-     */
-    this.representedWorkNodes = null;
-  }
-}
+// export class Actor {
+//   constructor(actorId, output, rootNode, fragmentId, computeNodeAddress) {
+//     /**
+//      * @type {number}
+//      */
+//     this.actorId = actorId;
+//     /**
+//      * @type {Array<Node>}
+//      */
+//     this.output = output;
+//     /**
+//      * @type {Node}
+//      */
+//     this.rootNode = rootNode;
+//     /**
+//      * @type {number}
+//      */
+//     this.fragmentId = fragmentId;
+//     /**
+//      * @type {string}
+//      */
+//     this.computeNodeAddress = computeNodeAddress;
+//     /**
+//      * @type {Array<Actor>}
+//      */
+//     this.representedActorList = null;
+//     /**
+//      * @type {Set<string>}
+//      */
+//     this.representedWorkNodes = null;
+//   }
+// }
+
+// interface StreamNode {
+//   id: string; // TODO:
+//   actorId: number;
+//   nodeProto: any;
+//   nextNodes: OperatorNode[];
+// }
 
 export default class StreamPlanParser {
-  actorId2Proto: Map<number, any>;
+  actorId2Proto: Map<number, ActorProto>;
   actorIdTomviewNodes: Map<any, any>;
   shownActorSet: Set<number>;
-  parsedNodeMap: Map<any, any>;
-  parsedActorMap: Map<any, any>;
-  parsedActorList: [];
+  parsedNodeMap: Map<string, any>;
+  parsedActorMap: Map<number, any>;
+  parsedActorList: any[];
   fragmentRepresentedActors: Set<any>;
   mvTableIdToSingleViewActorList: Map<any, any>;
   mvTableIdToChainViewActorList: Map<any, any>;
@@ -148,23 +152,26 @@ export default class StreamPlanParser {
     this.parsedActorMap = new Map();
     this.actorIdTomviewNodes = new Map();
     this.shownActorSet = new Set(shownActorList);
-    console.log(this.shownActorSet, "shoule be null");
 
     for (const actor of data) {
       for (const singleActorProto of actor.actors) {
         if (shownActorList && !this.shownActorSet.has(singleActorProto.actorId)) {
           continue;
         }
-        const proto = {
-          computeNodeAddress: `${actor.node.host.host}:${actor.node.host.port}`,
+
+        const proto: ActorProto = {
           ...singleActorProto,
+          output: [],
+          rootNode: null,
+          computeNodeAddress: `${actor.node.host.host}:${actor.node.host.port}`,
         };
+
         this.actorId2Proto.set(singleActorProto.actorId, proto);
       }
     }
 
-    for (const [_, singleActorProto] of this.actorId2Proto.entries()) {
-      this.parseActor(singleActorProto);
+    for (const [_, actorProto] of this.actorId2Proto.entries()) {
+      this.parseActor(actorProto);
     }
 
     for (const [_, actor] of this.parsedActorMap.entries()) {
@@ -320,29 +327,19 @@ export default class StreamPlanParser {
 
   /**
    * Parse raw data from meta node to an actor
-   * @param {{
-   *  actorId: number,
-   *  fragmentId: number,
-   *  nodes: any,
-   *  dispatcher?: {type: string},
-   *  downstreamActorId?: any
-   * }} actorProto
-   * @returns {Actor}
    */
-  parseActor(actorProto) {
-    let actorId = actorProto.actorId;
+  parseActor(actorProto: ActorProto) {
+    const actorId = actorProto.actorId;
     if (this.parsedActorMap.has(actorId)) {
       return this.parsedActorMap.get(actorId);
     }
 
-    let actor = new Actor(actorId, [], null, actorProto.fragmentId, actorProto.computeNodeAddress);
-
     let rootNode;
-    this.parsedActorMap.set(actorId, actor);
+    // TODO: optional chaining with filter
     if (actorProto.dispatcher && actorProto.dispatcher[0].type) {
-      let nodeBeforeDispatcher = this.parseNode(actor.actorId, actorProto.nodes);
+      let nodeBeforeDispatcher = this.parseNode(actorId, actorProto.nodes);
       rootNode = this.newDispatcher(
-        actor.actorId,
+        actorProto.actorId,
         actorProto.dispatcher[0].type,
         actorProto.downstreamActorId
       );
@@ -350,21 +347,25 @@ export default class StreamPlanParser {
     } else {
       rootNode = this.parseNode(actorId, actorProto.nodes);
     }
-    actor.rootNode = rootNode;
+    actorProto.rootNode = rootNode;
+    console.log("rootNode afters", actorProto.rootNode);
 
-    return actor;
+    this.parsedActorMap.set(actorId, actorProto);
+    return actorProto;
   }
 
-  parseNode(actorId, nodeProto) {
-    let id = getNodeId(nodeProto, actorId);
+  parseNode(actorId: number, nodeProto: OperatorNode) {
+    const id = getNodeId(nodeProto, actorId);
     if (this.parsedNodeMap.has(id)) {
       return this.parsedNodeMap.get(id);
     }
-    let newNode = new StreamNode(id, actorId, nodeProto);
-    this.parsedNodeMap.set(id, newNode);
+
+    const newNode = new StreamNode(id, actorId, nodeProto);
+
+    this.parsedNodeMap.set(id, nodeProto);
 
     if (nodeProto.input !== undefined) {
-      for (let nextNodeProto of nodeProto.input) {
+      for (const nextNodeProto of nodeProto.input) {
         newNode.nextNodes.push(this.parseNode(actorId, nextNodeProto));
       }
     }
@@ -394,11 +395,11 @@ export default class StreamPlanParser {
     return newNode;
   }
 
-  getActor(actorId) {
+  getActor(actorId: number) {
     return this.parsedActorMap.get(actorId);
   }
 
-  getOperator(operatorId) {
+  getOperator(operatorId: string) {
     return this.parsedNodeMap.get(operatorId);
   }
 

@@ -639,7 +639,7 @@ export class StreamChartHelper {
    * @param {number} props.baseY [optional] The y coordination of left-top corner. default: 0.
    * @returns {{group: Group, width: number, height: number}} The size of the flow
    */
-  drawFlow(props) {
+  drawFlow(props: { g: any; baseX: any; baseY: any; actorDagList: any }) {
     if (props.g === undefined) {
       throw Error("Invalid Argument: Target group cannot be undefined.");
     }
@@ -800,7 +800,6 @@ export class StreamChartHelper {
     const g = this.topGroup;
     const baseX = 0;
     const baseY = 0;
-
     g.attr("id", "");
 
     // Set<ActorInfo>
@@ -811,31 +810,31 @@ export class StreamChartHelper {
     for (const actor of fragmentRepresentedActors) {
       // actor.rootNode.actorId {operatorId}
       actor.rootNode.actorId = actor.actorId;
-      treeBfs(actor.rootNode, (node) => {
+      treeBfs(actor.rootNode, (node: any) => {
         node.actorId = actor.actorId;
         return false;
       });
       dagNodeMap.set(actor.actorId, { id: actor.actorId, nextNodes: [], actor: actor });
     }
-    for (let actor of fragmentRepresentedActors) {
-      for (let outputActorNode of actor.output) {
-        let outputDagNode = dagNodeMap.get(outputActorNode.actorId);
+    for (const actor of fragmentRepresentedActors) {
+      for (const outputActorNode of actor.output) {
+        const outputDagNode = dagNodeMap.get(outputActorNode.actorId);
         if (outputDagNode) {
           // the output actor node is in a represented actor
           dagNodeMap.get(actor.actorId).nextNodes.push(outputDagNode);
         }
       }
     }
-    let actorDagNodes = [];
-    for (let id of dagNodeMap.keys()) {
+    const actorDagNodes = [];
+    for (const id of dagNodeMap.keys()) {
       actorDagNodes.push(dagNodeMap.get(id));
     }
 
-    let actorsList = getConnectedComponent(actorDagNodes);
+    const actorsList = getConnectedComponent(actorDagNodes);
 
     let y = baseY;
-    for (let actorDagList of actorsList) {
-      let flowChart = this.drawFlow({
+    for (const actorDagList of actorsList) {
+      const flowChart = this.drawFlow({
         g: g,
         baseX: baseX,
         baseY: y,

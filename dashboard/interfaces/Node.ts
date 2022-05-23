@@ -133,15 +133,35 @@ export interface Chain {
   upstreamFields: Field[];
 }
 
+export interface HashAgg {
+  distributionKeys: number[];
+  aggCalls: AggCall[];
+  tableIds: number[];
+}
+
+export interface Arg {
+  input: InputRef;
+  type: DataType;
+}
+
+export interface AggCall {
+  type: string;
+  returnType: DataType;
+  args?: Arg[];
+}
+
 export interface OperatorNode {
   chain?: Chain;
   fields: Field[];
   source?: Source;
   identity: string;
   project?: Project;
+  hashAgg?: HashAgg;
   operatorId: string;
   pkIndices: number[];
   hashJoin?: HashJoin;
+  appendOnly?: boolean;
+  batchPlan?: BatchPlan;
   input?: OperatorNode[];
   materialize?: Materialize;
 }
