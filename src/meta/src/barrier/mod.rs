@@ -410,7 +410,7 @@ where
                 let env = env.clone();
                 let command_ctx = CommandContext::new(
                     fragment_manager.clone(),
-                    env.stream_clients_ref(),
+                    env.stream_client_pool_ref(),
                     &info,
                     &prev_epoch,
                     &new_epoch,
@@ -561,7 +561,7 @@ where
                 };
                 let env = env.clone();
                 async move {
-                    let mut client = env.stream_clients().get(node).await?;
+                    let mut client = env.stream_client_pool().get(node).await?;
 
                     let request = InjectBarrierRequest {
                         request_id,
