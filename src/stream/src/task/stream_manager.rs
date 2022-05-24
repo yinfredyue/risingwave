@@ -19,7 +19,7 @@ use futures::channel::mpsc::{channel, Receiver};
 use itertools::Itertools;
 use madsim::collections::{HashMap, HashSet};
 use madsim::task::JoinHandle;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use risingwave_common::config::StreamingConfig;
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_common::try_match_expand;
@@ -29,8 +29,7 @@ use risingwave_pb::common::ActorInfo;
 use risingwave_pb::stream_plan::stream_node::NodeBody;
 use risingwave_pb::{stream_plan, stream_service};
 use risingwave_storage::{dispatch_state_store, StateStore, StateStoreImpl};
-use tokio::sync::oneshot;
-use tokio::sync::oneshot::Sender;
+use tokio::sync::{oneshot, watch};
 
 use super::{unique_executor_id, unique_operator_id, CollectResult, ComputeClientPool};
 use crate::executor::dispatch::*;
@@ -88,12 +87,7 @@ pub struct LocalStreamManagerCore {
 pub struct LocalStreamManager {
     core: Mutex<LocalStreamManagerCore>,
 
-    wait_epoch: Mutex<WaitEpoch>,
-}
-struct WaitEpoch {
-    map: Arc<RwLock<HashMap<u64, Sender<()>>>>,
-
-    last_epoch: u64,
+    wait_epoch_sender: Mutex<watch::Sender<u64>>,
 }
 
 pub struct ExecutorParams {
@@ -137,10 +131,7 @@ impl LocalStreamManager {
     fn with_core(core: LocalStreamManagerCore) -> Self {
         Self {
             core: Mutex::new(core),
-            wait_epoch: Mutex::new(WaitEpoch {
-                map: Arc::new(RwLock::new(HashMap::new())),
-                last_epoch: INVALID_EPOCH,
-            }),
+            wait_epoch_sender: Mutex::new(watch::channel(INVALID_EPOCH).0),
         }
     }
 
@@ -187,12 +178,16 @@ impl LocalStreamManager {
         actor_ids_to_collect: impl IntoIterator<Item = ActorId>,
         need_sync: bool,
     ) -> Result<CollectResult> {
-        if let Some(next_barrier_rx) = self.wait_barrier_epoch(barrier) {
-            next_barrier_rx.await.unwrap();
-        };
+        let mut wait_epoch_receiver = self.wait_epoch_sender.lock().subscribe();
+        while barrier.epoch.prev != *wait_epoch_receiver.borrow() {
+            wait_epoch_receiver.changed().await.unwrap();
+        }
 
         let rx = self.send_barrier(barrier, actor_ids_to_send, actor_ids_to_collect)?;
-        self.update_barrier_epoch(barrier);
+        self.wait_epoch_sender
+            .lock()
+            .send(barrier.epoch.curr)
+            .unwrap();
 
         // Wait for all actors finishing this barrier.
         let collect_result = rx.await.unwrap();
@@ -213,27 +208,6 @@ impl LocalStreamManager {
         }
 
         Ok(collect_result)
-    }
-
-    fn wait_barrier_epoch(&self, barrier: &Barrier) -> Option<oneshot::Receiver<()>> {
-        let wait_epoch = self.wait_epoch.lock();
-        if wait_epoch.last_epoch != barrier.epoch.prev && wait_epoch.last_epoch != INVALID_EPOCH {
-            let (next_barrier_tx, next_barrier_rx) = oneshot::channel();
-            let mut map = wait_epoch.map.write();
-            map.insert(barrier.epoch.prev, next_barrier_tx);
-            Some(next_barrier_rx)
-        } else {
-            None
-        }
-    }
-
-    fn update_barrier_epoch(&self, barrier: &Barrier) {
-        let mut wait_epoch = self.wait_epoch.lock();
-        wait_epoch.last_epoch = barrier.epoch.curr;
-        let mut map = wait_epoch.map.write();
-        if let Some(next_barrier_tx) = map.remove(&barrier.epoch.curr) {
-            next_barrier_tx.send(()).unwrap();
-        };
     }
 
     /// Broadcast a barrier to all senders. Returns immediately, and caller won't be notified when

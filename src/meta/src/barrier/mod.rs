@@ -56,13 +56,17 @@ type Scheduled = (Command, SmallVec<[Notifier; 1]>);
 
 #[derive(Debug)]
 enum BarrierSendResult {
-    Ok(
-        Epoch,
-        HashSet<ActorId>,
-        SmallVec<[Notifier; 1]>,
-        Vec<InjectBarrierResponse>,
-    ),
-    Err(Epoch, RwError, bool),
+    Ok {
+        new_epoch: Epoch,
+        actors_to_finish: HashSet<ActorId>,
+        notifiers: SmallVec<[Notifier; 1]>,
+        responses: Vec<InjectBarrierResponse>,
+    },
+    Err {
+        new_epoch: Epoch,
+        err_msg: RwError,
+        is_over: bool,
+    },
 }
 
 /// A buffer or queue for scheduling barriers.
@@ -199,13 +203,13 @@ impl HeapNode {
 impl Eq for HeapNode {}
 impl PartialEq for HeapNode {
     fn eq(&self, other: &Self) -> bool {
-        other.prev_epoch == self.prev_epoch
+        other.prev_epoch.eq(&self.prev_epoch)
     }
 }
 
 impl PartialOrd for HeapNode {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        other.prev_epoch.partial_cmp(&self.prev_epoch)
+        Some(self.cmp(other))
     }
 }
 
@@ -214,7 +218,7 @@ where
     Self: PartialOrd,
 {
     fn cmp(&self, other: &HeapNode) -> Ordering {
-        self.partial_cmp(other).unwrap()
+        other.prev_epoch.cmp(&self.prev_epoch)
     }
 }
 
@@ -302,7 +306,7 @@ where
                 }
                 result = barrier_send_rx.recv() =>{
                     match result{
-                        Some(BarrierSendResult::Ok(new_epoch,actors_to_finish,notifiers,responses)) => {
+                        Some(BarrierSendResult::Ok{new_epoch,actors_to_finish,notifiers,responses}) => {
                             unfinished.add(new_epoch.0, actors_to_finish, notifiers);
 
                             for finished in responses.into_iter().flat_map(|r| r.finished_create_mviews) {
@@ -312,13 +316,13 @@ where
                         state.prev_epoch = new_epoch;
 
                         }
-                        Some(BarrierSendResult::Err(prev_epoch,e,isover)) => {
+                        Some(BarrierSendResult::Err{new_epoch,err_msg,is_over}) => {
                             if self.enable_recovery {
                                 // if not over , need wait all err barrier
-                                if isover{
+                                if is_over{
                                     // If failed, enter recovery mode.
                                     let (new_epoch, actors_to_finish, finished_create_mviews) =
-                                    self.recovery(prev_epoch).await;
+                                    self.recovery(new_epoch).await;
                                     unfinished = UnfinishedNotifiers::default();
                                     unfinished.add(new_epoch.0, actors_to_finish, vec![]);
                                     for finished in finished_create_mviews {
@@ -331,7 +335,7 @@ where
                                     self.wait_recovery.store(false,atomic::Ordering::SeqCst);
                                 }
                             } else {
-                                panic!("failed to execute barrier: {:?}", e);
+                                panic!("failed to execute barrier: {:?}", err_msg);
                             }
                         }
                         _=>{}
@@ -433,24 +437,28 @@ where
                         // Then try to finish the barrier for Create MVs.
                         let actors_to_finish = command_ctx.actors_to_finish();
                         barrier_send_tx_clone
-                            .send(BarrierSendResult::Ok(
+                            .send(BarrierSendResult::Ok {
                                 new_epoch,
                                 actors_to_finish,
                                 notifiers,
                                 responses,
-                            ))
+                            })
                             .unwrap();
                     }
-                    Err(e) => {
-                        notifiers
-                            .into_iter()
-                            .for_each(|notifier| notifier.notify_collection_failed(e.clone()));
+                    Err(err_msg) => {
+                        notifiers.into_iter().for_each(|notifier| {
+                            notifier.notify_collection_failed(err_msg.clone())
+                        });
                         let mut is_over = false;
                         if heap.read().await.len() == 1 {
                             is_over = true;
                         }
                         barrier_send_tx_clone
-                            .send(BarrierSendResult::Err(prev_epoch, e, is_over))
+                            .send(BarrierSendResult::Err {
+                                new_epoch,
+                                err_msg,
+                                is_over,
+                            })
                             .unwrap();
                     }
                 }
