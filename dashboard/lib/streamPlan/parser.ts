@@ -154,19 +154,19 @@ export default class StreamPlanParser {
     this.shownActorSet = new Set(shownActorList);
 
     for (const actor of data) {
-      for (const singleActorProto of actor.actors) {
-        if (shownActorList && !this.shownActorSet.has(singleActorProto.actorId)) {
+      for (const singleActor of actor.actors) {
+        if (shownActorList && !this.shownActorSet.has(singleActor.actorId)) {
           continue;
         }
 
         const proto: ActorProto = {
-          ...singleActorProto,
+          ...singleActor,
           output: [],
           rootNode: null,
           computeNodeAddress: `${actor.node.host.host}:${actor.node.host.port}`,
         };
 
-        this.actorId2Proto.set(singleActorProto.actorId, proto);
+        this.actorId2Proto.set(singleActor.actorId, proto);
       }
     }
 

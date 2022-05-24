@@ -124,15 +124,7 @@ export class StreamChartHelper {
   selectedWorkerNode: string;
   selectedWorkerNodeStr: string;
   streamPlan: StreamPlanParser;
-  /**
-   *
-   * @param {Group} g The group element in canvas engine
-   * @param {Actors[]} data The raw response from the meta node
-   * @param {(e, node) => void} onNodeClick The callback function trigged when a node is click
-   * @param {(e, actor) => void} onActorClick The callback function trigged when an actor is click
-   * @param {string} selectedWorkerNode The selectedWorkerNode
-   * @param {number[]} shownActorIdList
-   */
+
   constructor(
     g: Group,
     data: Actors[],
