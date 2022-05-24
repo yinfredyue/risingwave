@@ -29,17 +29,40 @@ function getNodeId(nodeProto: OperatorNode, actorId: number) {
 
 class BaseNode {
   id: any;
-  nodeProto: any;
-  nextNodes: BaseNode[];
   actorId: any;
+  nodeProto: any;
+  nextNodes: any[];
 
   constructor(id: any, actorId: any, nodeProto: any) {
-    this.id = id;
-    this.nodeProto = nodeProto;
+    this.id = id; //operatorId
     this.nextNodes = [];
     this.actorId = actorId;
+    this.nodeProto = nodeProto;
   }
 }
+
+const types = new Set([
+  "source",
+  "project",
+  "filter",
+  "materialize",
+  "localSimpleAgg",
+  "globalSimpleAgg",
+  "hashAgg",
+  "appendOnlyTopN",
+  "hashJoin",
+  "topN",
+  "hopWindow",
+  "merge",
+  "exchange",
+  "chain",
+  "batchPlan",
+  "lookup",
+  "arrange",
+  "lookupUnion",
+  "union",
+  "deltaIndexJoin",
+]);
 
 class StreamNode extends BaseNode {
   type: string | undefined;
@@ -47,38 +70,10 @@ class StreamNode extends BaseNode {
 
   constructor(id: any, actorId: any, nodeProto: any) {
     super(id, actorId, nodeProto);
-    this.type = this.parseType(nodeProto);
-    this.typeInfo = nodeProto[this.type!];
-  }
-
-  parseType(nodeProto: any) {
-    const types = new Set([
-      "source",
-      "project",
-      "filter",
-      "materialize",
-      "localSimpleAgg",
-      "globalSimpleAgg",
-      "hashAgg",
-      "appendOnlyTopN",
-      "hashJoin",
-      "topN",
-      "hopWindow",
-      "merge",
-      "exchange",
-      "chain",
-      "batchPlan",
-      "lookup",
-      "arrange",
-      "lookupUnion",
-      "union",
-      "deltaIndexJoin",
-    ]);
-    for (const [type, _] of Object.entries(nodeProto)) {
-      if (types.has(type)) {
-        return type;
-      }
-    }
+    // Object.keys(nodeProto) are attributes that nodeProto have
+    // StreamNode only has one of them
+    this.type = Object.keys(nodeProto).filter((key) => types.has(key))[0];
+    this.typeInfo = nodeProto[this.type];
   }
 }
 
@@ -86,9 +81,14 @@ class Dispatcher extends BaseNode {
   dispatcherType: any;
   downstreamActorId: any;
 
-  constructor(actorId: any, dispatcherType: any, downstreamActorId: any, nodeProto: any) {
-    // TODO: Dispatcher super (id)?
-    super(actorId, actorId, nodeProto);
+  constructor(
+    actorId: number,
+    dispatcherType: string,
+    downstreamActorId: number[],
+    nodeProto: any
+  ) {
+    const id = getNodeId(nodeProto, actorId);
+    super(id, actorId, nodeProto);
     this.dispatcherType = dispatcherType;
     this.downstreamActorId = downstreamActorId;
   }
@@ -136,7 +136,7 @@ class Dispatcher extends BaseNode {
 
 export default class StreamPlanParser {
   actorId2Proto: Map<number, ActorProto>;
-  actorIdTomviewNodes: Map<any, any>;
+  actorIdToMVNodes: Map<number, any>;
   shownActorSet: Set<number>;
   parsedNodeMap: Map<string, any>;
   parsedActorMap: Map<number, any>;
@@ -145,28 +145,29 @@ export default class StreamPlanParser {
   mvTableIdToSingleViewActorList: Map<any, any>;
   mvTableIdToChainViewActorList: Map<any, any>;
 
-  constructor(data: Actors[], shownActorList: number[] | null) {
+  constructor(datas: Actors[], shownActorList: number[] | null) {
     this.parsedActorList = [];
     this.actorId2Proto = new Map();
     this.parsedNodeMap = new Map();
     this.parsedActorMap = new Map();
-    this.actorIdTomviewNodes = new Map();
+    this.actorIdToMVNodes = new Map();
     this.shownActorSet = new Set(shownActorList);
 
-    for (const actor of data) {
-      for (const singleActor of actor.actors) {
-        if (shownActorList && !this.shownActorSet.has(singleActor.actorId)) {
+    for (const data of datas) {
+      const { host, port } = data.node.host;
+
+      for (const actor of data.actors) {
+        if (shownActorList && !this.shownActorSet.has(actor.actorId)) {
           continue;
         }
-
         const proto: ActorProto = {
-          ...singleActor,
+          ...actor,
           output: [],
           rootNode: null,
-          computeNodeAddress: `${actor.node.host.host}:${actor.node.host.port}`,
+          computeNodeAddress: `${host}:${port}`,
         };
 
-        this.actorId2Proto.set(singleActor.actorId, proto);
+        this.actorId2Proto.set(actor.actorId, proto);
       }
     }
 
@@ -250,7 +251,7 @@ export default class StreamPlanParser {
       getShellNode(actorId);
     }
 
-    for (let [actorId, mviewNode] of this.actorIdTomviewNodes.entries()) {
+    for (let [actorId, mviewNode] of this.actorIdToMVNodes.entries()) {
       let list = new Set();
       let shellNode = getShellNode(actorId);
       graphBfs(shellNode, (n) => {
@@ -275,7 +276,7 @@ export default class StreamPlanParser {
   _constructSingleViewMvList() {
     let mvTableIdToSingleViewActorList = new Map();
     let shellNodes = new Map();
-    const getShellNode = (actorId) => {
+    const getShellNode = (actorId: number) => {
       if (shellNodes.has(actorId)) {
         return shellNodes.get(actorId);
       }
@@ -297,14 +298,14 @@ export default class StreamPlanParser {
       getShellNode(actorId);
     }
 
-    for (let [actorId, mviewNode] of this.actorIdTomviewNodes.entries()) {
+    for (let [actorId, mviewNode] of this.actorIdToMVNodes.entries()) {
       let list = [];
       let shellNode = getShellNode(actorId);
       graphBfs(
         shellNode,
         (n) => {
           list.push(n.id);
-          if (shellNode.id !== n.id && this.actorIdTomviewNodes.has(n.id)) {
+          if (shellNode.id !== n.id && this.actorIdToMVNodes.has(n.id)) {
             return true; // stop to traverse its next nodes
           }
         },
@@ -319,14 +320,14 @@ export default class StreamPlanParser {
     return mvTableIdToSingleViewActorList;
   }
 
-  newDispatcher(actorId, type, downstreamActorId) {
+  newDispatcher(actorId: number, type: string, downstreamActorId: number[]) {
     return new Dispatcher(actorId, type, downstreamActorId, {
       operatorId: 100000 + actorId,
     });
   }
 
   /**
-   * Parse raw data from meta node to an actor
+   * Parse raw data from meta node to an ActorProto
    */
   parseActor(actorProto: ActorProto) {
     const actorId = actorProto.actorId;
@@ -337,18 +338,15 @@ export default class StreamPlanParser {
     let rootNode;
     // TODO: optional chaining with filter
     if (actorProto.dispatcher && actorProto.dispatcher[0].type) {
-      let nodeBeforeDispatcher = this.parseNode(actorId, actorProto.nodes);
-      rootNode = this.newDispatcher(
-        actorProto.actorId,
-        actorProto.dispatcher[0].type,
-        actorProto.downstreamActorId
-      );
+      const { type, downstreamActorId } = actorProto.dispatcher[0];
+      rootNode = this.newDispatcher(actorProto.actorId, type, downstreamActorId!);
+
+      const nodeBeforeDispatcher = this.parseNode(actorId, actorProto.nodes);
       rootNode.nextNodes = [nodeBeforeDispatcher];
     } else {
       rootNode = this.parseNode(actorId, actorProto.nodes);
     }
     actorProto.rootNode = rootNode;
-    console.log("rootNode afters", actorProto.rootNode);
 
     this.parsedActorMap.set(actorId, actorProto);
     return actorProto;
@@ -361,35 +359,36 @@ export default class StreamPlanParser {
     }
 
     const newNode = new StreamNode(id, actorId, nodeProto);
-
     this.parsedNodeMap.set(id, nodeProto);
 
-    if (nodeProto.input !== undefined) {
-      for (const nextNodeProto of nodeProto.input) {
-        newNode.nextNodes.push(this.parseNode(actorId, nextNodeProto));
+    // input: OperatorNode, use dfs to parseNode
+    if (nodeProto.input) {
+      for (const inputNode of nodeProto.input) {
+        newNode.nextNodes.push(this.parseNode(actorId, inputNode));
       }
     }
 
     if (newNode.type === "merge" && newNode.typeInfo.upstreamActorId) {
-      for (let upStreamActorId of newNode.typeInfo.upstreamActorId) {
-        if (!this.actorId2Proto.has(upStreamActorId)) {
-          continue;
+      for (const actorId of newNode.typeInfo.upstreamActorId) {
+        if (this.actorId2Proto.has(actorId)) {
+          const actor = this.actorId2Proto.get(actorId);
+          this.parseActor(actor!).output.push(newNode);
         }
-        this.parseActor(this.actorId2Proto.get(upStreamActorId)).output.push(newNode);
       }
     }
 
+    // TODO: chain is not with upstreamActors
     if (newNode.type === "chain" && newNode.typeInfo.upstreamActorIds) {
-      for (let upStreamActorId of newNode.typeInfo.upstreamActorIds) {
-        if (!this.actorId2Proto.has(upStreamActorId)) {
-          continue;
+      for (const actorId of newNode.typeInfo.upstreamActorIds) {
+        if (this.actorId2Proto.has(actorId)) {
+          const actor = this.actorId2Proto.get(actorId);
+          this.parseActor(actor!).output.push(newNode);
         }
-        this.parseActor(this.actorId2Proto.get(upStreamActorId)).output.push(newNode);
       }
     }
 
     if (newNode.type === "materialize") {
-      this.actorIdTomviewNodes.set(actorId, newNode);
+      this.actorIdToMVNodes.set(actorId, newNode);
     }
 
     return newNode;

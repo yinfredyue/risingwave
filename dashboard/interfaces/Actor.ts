@@ -28,9 +28,11 @@ export interface Actor {
 }
 
 export interface ActorProto extends Actor {
-  computeNodeAddress: string;
   output: OperatorNode[];
+  computeNodeAddress: string;
+  representedActorList?: any; // TODO: Array<Actor>
   rootNode: OperatorNode | null;
+  representedWorkNodes?: Set<string>;
 }
 
 export interface Actors {

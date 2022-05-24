@@ -152,6 +152,7 @@ export interface AggCall {
 
 export interface OperatorNode {
   chain?: Chain;
+  merge?: Merge;
   fields: Field[];
   source?: Source;
   identity: string;
@@ -164,4 +165,17 @@ export interface OperatorNode {
   batchPlan?: BatchPlan;
   input?: OperatorNode[];
   materialize?: Materialize;
+  // TODO: implement AnyScript
+  topN?: any;
+  union?: any;
+  filter?: any;
+  lookup?: any;
+  arrange?: any;
+  exchange?: any;
+  hopWindow?: any;
+  lookupUnion?: any;
+  appendOnlyTopN?: any;
+  deltaIndexJoin?: any;
+  localSimpleAgg?: any;
+  globalSimpleAgg?: any;
 }
