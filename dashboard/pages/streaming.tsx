@@ -23,8 +23,9 @@ import { Actors } from "@interfaces/Actor";
 import { useEffect, useState } from "react";
 import StreamingView from "@components/StreamingView";
 import { MaterializedView } from "@interfaces/MaterializedView";
-import actors from "./mock/actors.json";
-import materialized_view from "./mock/materialized_view.json";
+
+import actors from "./mock/single_node/actors.json";
+import materialized_view from "./mock/single_node/materialized_view.json";
 
 const Streaming: NextPage = () => {
   const actorsPath = "api/actors";

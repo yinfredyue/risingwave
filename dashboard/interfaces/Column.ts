@@ -17,12 +17,12 @@
 import { DataType } from "./Node";
 
 export interface ColumnDesc {
-  name: String;
-  columnId?: Number;
+  name: string;
+  columnId?: number;
   columnType: DataType;
 }
 
 export interface Column {
-  isHidden?: Boolean;
+  isHidden?: boolean;
   columnDesc: ColumnDesc;
 }

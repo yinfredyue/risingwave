@@ -16,11 +16,13 @@
  */
 import { Column } from "./Column";
 
+// type Order = "ASCENDING" | "DESCENDING";
+
 export interface MaterializedView {
   id: number;
   pk: number[];
   name: string;
-  orders: string[];
+  orders: string[]; // TODO: set orders' type
   columns: Column[];
   orderColumnIds: number[];
   distributionKeys?: number[];

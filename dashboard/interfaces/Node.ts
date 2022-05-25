@@ -56,10 +56,16 @@ export interface InputRef {
   columnIdx?: number;
 }
 
+export interface Constant {
+  body: string;
+}
+
 export interface Children {
   exprType: string;
   DataType: DataType;
   inputRef: InputRef;
+  funcCall?: FuncCall;
+  constant?: Constant;
 }
 
 export interface FuncCall {
@@ -93,10 +99,10 @@ export interface HashMapping {
 
 export interface BatchPlan {
   tableRefId: TableRefId;
+  parallelUnitId: number;
+  hashMapping: HashMapping;
   columnDescs: ColumnDesc[];
   distributionKeys: number[];
-  hashMapping: HashMapping;
-  parallelUnitId: number;
 }
 
 export interface ColumnOrder {
@@ -134,27 +140,34 @@ export interface Chain {
 }
 
 export interface HashAgg {
-  distributionKeys: number[];
-  aggCalls: AggCall[];
   tableIds: number[];
+  aggCalls: AggCall[];
+  distributionKeys: number[];
 }
 
 export interface Arg {
-  input: InputRef;
   type: DataType;
+  input: InputRef;
 }
 
 export interface AggCall {
+  args?: Arg[];
   type: string;
   returnType: DataType;
-  args?: Arg[];
+}
+
+export interface TopN {
+  columnOrders: ColumnOrder[];
+  limit: string;
 }
 
 export interface OperatorNode {
+  topN?: TopN;
   chain?: Chain;
   merge?: Merge;
   fields: Field[];
   source?: Source;
+  filter?: Filter;
   identity: string;
   project?: Project;
   hashAgg?: HashAgg;
@@ -166,9 +179,7 @@ export interface OperatorNode {
   input?: OperatorNode[];
   materialize?: Materialize;
   // TODO: implement AnyScript
-  topN?: any;
   union?: any;
-  filter?: any;
   lookup?: any;
   arrange?: any;
   exchange?: any;
@@ -178,4 +189,14 @@ export interface OperatorNode {
   deltaIndexJoin?: any;
   localSimpleAgg?: any;
   globalSimpleAgg?: any;
+}
+
+export interface Filter {
+  searchCondition: SearchCondition;
+}
+
+export interface SearchCondition {
+  exprType: string;
+  returnType: DataType;
+  funcCall: FuncCall;
 }
