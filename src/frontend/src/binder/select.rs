@@ -154,7 +154,9 @@ impl Binder {
                 }
                 SelectItem::Wildcard => {
                     let (exprs, names) = Self::iter_bound_columns(
-                        self.context.columns[..].iter().filter(|c| !c.is_hidden),
+                        self.context.columns[..]
+                            .iter()
+                            .filter(|c| !c.is_hidden && !c.skip),
                     );
                     select_list.extend(exprs);
                     aliases.extend(names);

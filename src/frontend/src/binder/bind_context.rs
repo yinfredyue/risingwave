@@ -24,6 +24,7 @@ pub struct ColumnBinding {
     pub index: usize,
     pub is_hidden: bool,
     pub field: Field,
+    pub skip: bool,
 }
 
 impl ColumnBinding {
@@ -33,6 +34,7 @@ impl ColumnBinding {
             index,
             is_hidden,
             field,
+            skip: false,
         }
     }
 }
@@ -77,14 +79,16 @@ impl BindContext {
     }
 
     pub fn get_index(&self, column_name: &String) -> Result<usize> {
-        let columns = self
-            .indexs_of
-            .get(column_name)
-            .ok_or_else(|| ErrorCode::ItemNotFound(format!("Invalid column: {}", column_name)))?;
-        if columns.len() > 1 {
-            Err(ErrorCode::InternalError("Ambiguous column name".into()).into())
-        } else {
-            Ok(columns[0])
+        let z = vec![];
+        let columns = self.indexs_of.get(column_name).unwrap_or(&z);
+        let columns: Vec<_> = columns
+            .iter()
+            .filter(|idx| !self.columns[**idx].skip)
+            .collect();
+        match &columns[..] {
+            [] => Err(ErrorCode::ItemNotFound(format!("Invalid column: {}", column_name)).into()),
+            [r] => Ok(**r),
+            _ => Err(ErrorCode::InternalError("Ambiguous column name".into()).into()),
         }
     }
 
