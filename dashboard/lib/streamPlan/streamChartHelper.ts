@@ -19,10 +19,10 @@ import * as color from "../color";
 import { getConnectedComponent, treeBfs } from "../algo";
 import { cloneDeep, max } from "lodash";
 import { newNumberArray } from "../util";
-import StreamPlanParser from "./parser";
 import { CanvasEngine, Group } from "../graaphEngine/canvasEngine";
 import { NodeOperator, WorkerNode } from "@interfaces/Node";
 import { ActorInfo, Actors } from "@interfaces/Actor";
+import StreamPlanParser from "../../classes/StreamPlanParser";
 // Actor constant
 //
 // =======================================================

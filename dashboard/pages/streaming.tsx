@@ -24,8 +24,8 @@ import { useEffect, useState } from "react";
 import StreamingView from "@components/StreamingView";
 import { MaterializedView } from "@interfaces/MaterializedView";
 
-import actors from "./mock/single_node/actors.json";
-import materialized_view from "./mock/single_node/materialized_view.json";
+// import actors from "./mock/single_node/actors.json";
+// import materialized_view from "./mock/single_node/materialized_view.json";
 
 const Streaming: NextPage = () => {
   const actorsPath = "api/actors";
@@ -50,10 +50,10 @@ const Streaming: NextPage = () => {
   };
 
   useEffect(() => {
-    setActorProtoList(actors);
-    setMvList(materialized_view);
-    // getData(actorsPath).then((res: Actors[]) => setActorProtoList(res));
-    // getData(mViewsPath).then((res: MaterializedView[]) => setMvList(res));
+    // setActorProtoList(actors);
+    // setMvList(materialized_view);
+    getData(actorsPath).then((res: Actors[]) => setActorProtoList(res));
+    getData(mViewsPath).then((res: MaterializedView[]) => setMvList(res));
 
     return () => setMessage("");
   }, []);

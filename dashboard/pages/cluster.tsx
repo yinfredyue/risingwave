@@ -24,8 +24,8 @@ import { ComputeNode } from "@interfaces/ComputeNode";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 
-import frontendNode from "./mock/single_node/0.json";
-import computeNode from "./mock/single_node/1.json";
+// import frontendNode from "./mock/single_node/0.json";
+// import computeNode from "./mock/single_node/1.json";
 
 const Cluster: NextPage = () => {
   const clusterFrontendPath = "api/clusters/0";
@@ -49,10 +49,10 @@ const Cluster: NextPage = () => {
   };
 
   useEffect(() => {
-    setFrontendList(frontendNode);
-    setComputeNodeList(computeNode);
-    // getData(clusterComputeNodePath).then((res: ComputeNode[]) => setComputeNodeList(res));
-    // getData(clusterFrontendPath).then((res: FrontendNode[]) => setFrontendList(res));
+    // setFrontendList(frontendNode);
+    // setComputeNodeList(computeNode);
+    getData(clusterComputeNodePath).then((res: ComputeNode[]) => setComputeNodeList(res));
+    getData(clusterFrontendPath).then((res: FrontendNode[]) => setFrontendList(res));
 
     return () => setMessage("");
   }, []);
