@@ -163,7 +163,7 @@ export default class StreamPlanParser {
 
   // TODO:
   _constructSingleViewMvList() {
-    const shellNodes = new Map();
+    const shellNodes = new Map<number, ShellNode>();
     const mvTableIdToSingleViewActorList = new Map();
 
     const getShellNode = (actorId: number) => {
@@ -176,12 +176,12 @@ export default class StreamPlanParser {
         parentNodes: [],
       };
 
+      const actor = this.actorId2Proto.get(actorId)!;
       // TODO:
       // what is the type of ActorProto.output? OperatorNode or StreamNode
-      console.log("this actor id:", actorId, this.actorId2Proto.get(actorId)!.output);
-      for (const node of this.actorId2Proto.get(actorId)!.output) {
+      for (const node of actor.output) {
         if (node.actorId) {
-          const parent = getShellNode(node.actorId);
+          const parent = getShellNode(node.actorId)!;
           parent.parentNodes.push(shellNode);
         }
       }
