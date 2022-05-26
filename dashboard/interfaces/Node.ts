@@ -32,9 +32,9 @@ export interface NodeOperator {
 
 // for stream chart helper
 export interface WorkerNode {
-  type: string;
   host: Host;
   id?: number;
+  type: string;
 }
 
 export interface DataType {
@@ -162,12 +162,14 @@ export interface TopN {
 }
 
 export interface OperatorNode {
+  [key: string]: any;
   topN?: TopN;
   chain?: Chain;
   merge?: Merge;
   fields: Field[];
   source?: Source;
   filter?: Filter;
+  actorId?: number;
   identity: string;
   project?: Project;
   hashAgg?: HashAgg;
@@ -199,4 +201,10 @@ export interface SearchCondition {
   exprType: string;
   returnType: DataType;
   funcCall: FuncCall;
+}
+
+export interface ShellNode {
+  id: number;
+  parentNodes: any[];
+  nextNodes?: any[];
 }

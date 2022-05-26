@@ -14,7 +14,7 @@
  * limitations under the License.
  *
  */
-import { ActorInfo } from "@interfaces/Actor";
+import { ActorProto } from "@interfaces/Actor";
 import Button from "@mui/material/Button";
 import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
@@ -22,7 +22,7 @@ import Typography from "@mui/material/Typography";
 import React from "react";
 
 type Props = {
-  actor: ActorInfo | null;
+  actor: ActorProto | null;
 };
 
 export function ActorInfoView({ actor }: Props) {
@@ -36,7 +36,7 @@ export function ActorInfoView({ actor }: Props) {
 
   return (
     <Stack alignItems="center" p={2} width="100%" height="100%" overflow="auto">
-      {actor?.representedActorList?.map((act, idx) => (
+      {actor?.representedActorList?.map((act: any, idx: number) => (
         <Stack
           key={idx}
           spacing={1}

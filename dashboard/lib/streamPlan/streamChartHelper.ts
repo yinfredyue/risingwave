@@ -16,13 +16,13 @@
  */
 import * as d3 from "d3";
 import * as color from "../color";
-import { getConnectedComponent, treeBfs } from "../algo";
 import { cloneDeep, max } from "lodash";
 import { newNumberArray } from "../util";
-import { CanvasEngine, Group } from "../graaphEngine/canvasEngine";
+import { ActorProto, Actors } from "@interfaces/Actor";
+import { getConnectedComponent, treeBfs } from "../algo";
+import StreamPlanParser from "@classes/StreamPlanParser";
 import { NodeOperator, WorkerNode } from "@interfaces/Node";
-import { ActorInfo, Actors } from "@interfaces/Actor";
-import StreamPlanParser from "../../classes/StreamPlanParser";
+import { CanvasEngine, Group } from "../graaphEngine/canvasEngine";
 // Actor constant
 //
 // =======================================================
@@ -149,39 +149,39 @@ export class StreamChartHelper {
     return this.streamPlan.mvTableIdToChainViewActorList;
   }
 
-  isInSelectedActor(actor: ActorInfo) {
+  isInSelectedActor(actor: ActorProto) {
     if (this.selectedWorkerNodeStr === "Show All") {
       return true;
     } else {
-      return actor.representedWorkNodes.has(this.selectedWorkerNodeStr);
+      return actor.representedWorkNodes?.has(this.selectedWorkerNodeStr);
     }
   }
 
-  _mainColor(actor: ActorInfo) {
-    const addr = actor.representedWorkNodes.has(this.selectedWorkerNodeStr)
+  _mainColor(actor: ActorProto) {
+    const addr = actor.representedWorkNodes?.has(this.selectedWorkerNodeStr)
       ? this.selectedWorkerNodeStr
       : actor.computeNodeAddress;
     return color.TwoGradient(hashIpv4Index(addr))[1];
   }
 
-  _sideColor(actor: ActorInfo) {
-    const addr = actor.representedWorkNodes.has(this.selectedWorkerNodeStr)
+  _sideColor(actor: ActorProto) {
+    const addr = actor.representedWorkNodes?.has(this.selectedWorkerNodeStr)
       ? this.selectedWorkerNodeStr
       : actor.computeNodeAddress;
     return color.TwoGradient(hashIpv4Index(addr))[1];
   }
 
-  _operatorColor = (actor: ActorInfo, operator: WorkerNode) => {
+  _operatorColor = (actor: ActorProto, operator: WorkerNode) => {
     return this.isInSelectedActor(actor) && operator.type === "mviewNode"
       ? this._mainColor(actor)
       : "#eee";
   };
 
-  _actorBoxBackgroundColor = (actor: ActorInfo) => {
+  _actorBoxBackgroundColor = (actor: ActorProto) => {
     return this.isInSelectedActor(actor) ? this._sideColor(actor) : "#eee";
   };
 
-  _actorOutgoinglinkColor = (actor: ActorInfo) => {
+  _actorOutgoinglinkColor = (actor: ActorProto) => {
     return this.isInSelectedActor(actor) ? this._mainColor(actor) : "#fff";
   };
 
@@ -230,11 +230,11 @@ export class StreamChartHelper {
    * @param {Array<Node>} nodes An array of node: {nextNodes: [...]}
    * @returns {Map<Node, [number, number]>} position of each node
    */
-  dagLayout(nodes) {
+  dagLayout(nodes: any) {
     let sorted = [];
     let _nodes = [];
     let node2dagNode = new Map();
-    const visit = (n) => {
+    const visit = (n: any) => {
       if (n.temp) {
         throw Error("This is not a DAG");
       }
@@ -472,7 +472,7 @@ export class StreamChartHelper {
    * @param {number} props.baseY [optinal] The y coordination of the lef-top corner. default: 0
    * @returns {Group} The group element of this tree
    */
-  drawActorBox(props) {
+  drawActorBox(props: any) {
     if (props.g === undefined) {
       throw Error("Invalid Argument: Target group cannot be undefined.");
     }
@@ -794,7 +794,7 @@ export class StreamChartHelper {
     const baseY = 0;
     g.attr("id", "");
 
-    // Set<ActorInfo>
+    // Set<ActorProto>
     const fragmentRepresentedActors = this.streamPlan.fragmentRepresentedActors;
 
     // get dag layout of these actors

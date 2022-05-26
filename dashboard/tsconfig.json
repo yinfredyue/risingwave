@@ -18,6 +18,7 @@
     "baseUrl": ".",
     "paths": {
       "@api/*": ["./pages/api/*"],
+      "@classes/*": ["./classes/*"],
       "@interfaces/*": ["./interfaces/*"],
       "@components/*": ["./components/*"]
     }

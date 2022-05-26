@@ -17,6 +17,7 @@
 import { ComputeNode } from "./ComputeNode";
 import { Dispatcher } from "./Dispatcher";
 import { OperatorNode } from "./Node";
+import { StreamNode } from "@classes/StreamNode";
 
 export interface Actor {
   actorId: number;
@@ -28,7 +29,7 @@ export interface Actor {
 }
 
 export interface ActorProto extends Actor {
-  output: OperatorNode[];
+  output: StreamNode[];
   computeNodeAddress: string;
   representedActorList?: any; // TODO: Array<Actor>
   rootNode: OperatorNode | null;
@@ -38,33 +39,4 @@ export interface ActorProto extends Actor {
 export interface Actors {
   node: ComputeNode;
   actors: Actor[];
-}
-
-interface StreamNode {
-  actorId: number;
-  id: string;
-  isLeaf: boolean;
-  layer: number;
-  // nextNodes: Nodes[];
-  // nodeProto
-  type: string;
-  // typeInfo:
-  width: number;
-  x: number;
-  y: number;
-}
-
-// for stream chart helper
-export interface ActorInfo {
-  row: number;
-  layer: number;
-  actorId: number;
-  boxWidth: number;
-  boxHeight: number;
-  fragmentId: number;
-  output: StreamNode[];
-  // rootNode: Dispatcher;
-  computeNodeAddress: string;
-  representedActorList: ActorInfo[];
-  representedWorkNodes: Set<string>;
 }

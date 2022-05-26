@@ -28,7 +28,7 @@ type Element = {
 };
 
 export class DrawElement {
-  canvasElement: fabric.Object | undefined;
+  canvasElement: fabric.Object;
   engine: CanvasEngine;
   eventHandler: Map<any, Function>;
 
@@ -43,7 +43,7 @@ export class DrawElement {
 
     this.engine = engine;
     this.eventHandler = new Map();
-    this.canvasElement = canvasElement;
+    this.canvasElement = canvasElement!;
   }
 
   // TODO: this method is for migrating from d3.js to fabric.js.
@@ -319,17 +319,17 @@ class CordMapper {
     this.map = new Map();
   }
 
-  rangeQuery(start, end) {
+  rangeQuery(start: number, end: number) {
     let rtn = new Set();
     for (let [k, s] of this.map.entries()) {
       if (start <= k && k <= end) {
-        s.forEach((v) => rtn.add(v));
+        s.forEach((v: any) => rtn.add(v));
       }
     }
     return rtn;
   }
 
-  insert(k, v) {
+  insert(k: number, v: any) {
     if (this.map.has(k)) {
       this.map.get(k).add(v);
     } else {
@@ -510,10 +510,10 @@ export class CanvasEngine {
     const canvasElement = ele.canvasElement;
     this.canvasElementToDrawElement.set(canvasElement, ele);
     this.gridMapper.addObject(
-      canvasElement.left,
-      canvasElement.left + canvasElement.width,
-      canvasElement.top,
-      canvasElement.top + canvasElement.height,
+      canvasElement.left!,
+      canvasElement.left! + canvasElement.width!,
+      canvasElement.top!,
+      canvasElement.top! + canvasElement.height!,
       canvasElement
     );
   }
@@ -555,7 +555,7 @@ export class CanvasEngine {
         const scale = 1.0;
         this.canvas.setZoom(scale);
         const vpt = this.canvas.viewportTransform;
-        if (vpt) {
+        if (vpt && x && y) {
           vpt[4] = (-x + this.width * 0.5) * scale;
           vpt[5] = (-y + this.height * 0.5) * scale;
         }

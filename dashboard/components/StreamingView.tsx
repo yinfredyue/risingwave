@@ -47,7 +47,7 @@ import createView, {
 } from "../lib/streamPlan/streamChartHelper";
 import useWindowSize from "hook/useWindowSize";
 import { MaterializedView } from "@interfaces/MaterializedView";
-import { ActorInfo, Actors } from "@interfaces/Actor";
+import { ActorProto, Actors } from "@interfaces/Actor";
 import Dots from "./Dots";
 import { SelectedMateralizedView } from "../interfaces/MaterializedView";
 import { debounce } from "lodash";
@@ -79,7 +79,7 @@ export default function StreamingView({ data, mvList }: Props) {
   const [showFullGraph, setShowFullGraph] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tabValue, setTabValue] = useState(0);
-  const [actor, setActor] = useState<ActorInfo | null>(null);
+  const [actor, setActor] = useState<ActorProto | null>(null);
   const [chartHelper, setChartHelper] = useState<StreamChartHelper | null>(null);
   const [canvasEngine, setCanvasEngine] = useState<CanvasEngine | null>(null);
 
@@ -125,7 +125,7 @@ export default function StreamingView({ data, mvList }: Props) {
     );
   };
 
-  const onActorClick = (_e: any, actor: ActorInfo) => {
+  const onActorClick = (_e: any, actor: ActorProto) => {
     setActor(actor);
     setShowInfoPane(true);
     setNodeJson("Click a node to show its raw json");
