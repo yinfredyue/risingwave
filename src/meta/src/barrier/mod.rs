@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::iter::once;
 use std::sync::atomic::AtomicBool;
 use std::sync::{atomic, Arc};
@@ -34,6 +33,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, watch, RwLock};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
+use crate::barrier::BarrierEpochState::{Fail,Complete};
 
 pub use self::command::Command;
 use self::command::CommandContext;
@@ -65,7 +65,6 @@ enum BarrierSendResult {
     Err {
         new_epoch: Epoch,
         err_msg: RwError,
-        is_over: bool,
     },
 }
 
@@ -176,50 +175,24 @@ pub struct GlobalBarrierManager<S: MetaStore> {
 
     env: MetaSrvEnv<S>,
 
-    epoch_heap: Arc<RwLock<BinaryHeap<HeapNode>>>,
-
     wait_recovery: Arc<AtomicBool>,
 
     wait_build_actor: Arc<AtomicBool>,
+
+    command_ctx_queue: Arc<RwLock<VecDeque<EpochNode<S>>>>,
 }
 
-struct HeapNode {
-    prev_epoch: u64,
-    tx: Option<oneshot::Sender<()>>,
+struct EpochNode<S>{
+    result: Option<Result<Vec<InjectBarrierResponse>>>,
+    states: BarrierEpochState,
+    command_ctx: Arc<CommandContext<S>>,
+    notifiers: SmallVec<[Notifier; 1]>,
 }
-
-impl HeapNode {
-    fn new(prev_epoch: u64, tx: Option<oneshot::Sender<()>>) -> Self {
-        Self { prev_epoch, tx }
-    }
-
-    fn notify_wait(&mut self) {
-        if let Some(tx) = self.tx.take() {
-            tx.send(()).ok();
-        }
-    }
-}
-
-impl Eq for HeapNode {}
-impl PartialEq for HeapNode {
-    fn eq(&self, other: &Self) -> bool {
-        other.prev_epoch.eq(&self.prev_epoch)
-    }
-}
-
-impl PartialOrd for HeapNode {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for HeapNode
-where
-    Self: PartialOrd,
-{
-    fn cmp(&self, other: &HeapNode) -> Ordering {
-        other.prev_epoch.cmp(&self.prev_epoch)
-    }
+#[derive(PartialEq)]
+enum BarrierEpochState{
+    Pending,
+    Complete,
+    Fail(RwError),
 }
 
 impl<S> GlobalBarrierManager<S>
@@ -253,9 +226,9 @@ where
             hummock_manager,
             metrics,
             env,
-            epoch_heap: Arc::new(RwLock::new(BinaryHeap::new())),
             wait_recovery: Arc::new(AtomicBool::new(false)),
             wait_build_actor: Arc::new(AtomicBool::new(false)),
+            command_ctx_queue: Arc::new(RwLock::new(VecDeque::new())),
         }
     }
 
@@ -269,9 +242,8 @@ where
 
         (join_handle, shutdown_tx)
     }
-
     /// Start an infinite loop to take scheduled barriers and send them.
-    async fn run(&self, mut shutdown_rx: UnboundedReceiver<()>) {
+    async fn run(&self , mut shutdown_rx: UnboundedReceiver<()>){
         let env = self.env.clone();
         let mut unfinished = UnfinishedNotifiers::default();
         let mut state = BarrierManagerState::create(env.meta_store()).await;
@@ -296,7 +268,7 @@ where
         let mut min_interval = tokio::time::interval(self.interval);
         min_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let (barrier_send_tx, mut barrier_send_rx) = tokio::sync::mpsc::unbounded_channel();
-        loop {
+        loop{
             tokio::select! {
                 biased;
                 // Shutdown
@@ -308,7 +280,7 @@ where
                     match result{
                         Some(BarrierSendResult::Ok{new_epoch,actors_to_finish,notifiers,responses}) => {
                             unfinished.add(new_epoch.0, actors_to_finish, notifiers);
-
+                            
                             for finished in responses.into_iter().flat_map(|r| r.finished_create_mviews) {
                                 unfinished.finish_actors(finished.epoch, once(finished.actor_id));
                             }
@@ -316,24 +288,20 @@ where
                         state.prev_epoch = new_epoch;
 
                         }
-                        Some(BarrierSendResult::Err{new_epoch,err_msg,is_over}) => {
+                        Some(BarrierSendResult::Err{new_epoch,err_msg}) => {
                             if self.enable_recovery {
                                 // if not over , need wait all err barrier
-                                if is_over{
-                                    // If failed, enter recovery mode.
-                                    let (new_epoch, actors_to_finish, finished_create_mviews) =
-                                    self.recovery(new_epoch).await;
-                                    unfinished = UnfinishedNotifiers::default();
-                                    unfinished.add(new_epoch.0, actors_to_finish, vec![]);
-                                    for finished in finished_create_mviews {
-                                        unfinished.finish_actors(finished.epoch, once(finished.actor_id));
-                                    }
-
-                                    state.prev_epoch = new_epoch;
-                                    last_epoch = new_epoch.0;
-
-                                    self.wait_recovery.store(false,atomic::Ordering::SeqCst);
+                                // If failed, enter recovery mode.
+                                let (new_epoch, actors_to_finish, finished_create_mviews) =
+                                self.recovery(new_epoch).await;
+                                unfinished = UnfinishedNotifiers::default();
+                                unfinished.add(new_epoch.0, actors_to_finish, vec![]);
+                                for finished in finished_create_mviews {
+                                    unfinished.finish_actors(finished.epoch, once(finished.actor_id));
                                 }
+                                state.prev_epoch = new_epoch;
+                                last_epoch = new_epoch.0;
+                                self.wait_recovery.store(false,atomic::Ordering::SeqCst);
                             } else {
                                 panic!("failed to execute barrier: {:?}", err_msg);
                             }
@@ -362,7 +330,6 @@ where
                     }
                 }
             }
-            // Get a barrier to send.
             let (command, notifiers) = self.scheduled_barriers.pop_or_default().await;
 
             match command {
@@ -371,7 +338,6 @@ where
                     self.wait_build_actor.store(true, atomic::Ordering::SeqCst);
                 }
             }
-
             let info = self.resolve_actor_info(command.creating_table_id()).await;
             // When there's no actors exist in the cluster, we don't need to send the barrier. This
             // is an advance optimization. Besides if another barrier comes immediately,
@@ -392,152 +358,192 @@ where
                 prev_epoch
             );
 
+            let command_ctx = Arc::new(CommandContext::new(
+                self.fragment_manager.clone(),
+                self.env.stream_client_pool_ref(),
+                info,
+                prev_epoch,
+                new_epoch,
+                command,
+            ));
+
             let env = self.env.clone();
-            let fragment_manager = self.fragment_manager.clone();
             let metrics = self.metrics.clone();
-            let barrier_send_tx_clone = barrier_send_tx.clone();
-            let heap = self.epoch_heap.clone();
             let hummock_manager = self.hummock_manager.clone();
             let wait_recovery = self.wait_recovery.clone();
+            let barrier_send_tx_clone = barrier_send_tx.clone();
             let wait_build_actor = self.wait_build_actor.clone();
+            let mut notifiers = notifiers;
+            notifiers.iter_mut().for_each(Notifier::notify_to_send);
+
+            self.command_ctx_queue.write().await.push_back(EpochNode{
+                result: None,
+                states: BarrierEpochState::Pending,
+                command_ctx: command_ctx.clone(),
+                notifiers: notifiers,
+            });
+            let command_ctx_queue = self.command_ctx_queue.clone();
+            let command_ctx = command_ctx.clone();
 
             tokio::spawn(async move {
-                let (wait_tx, wait_rx) = oneshot::channel();
-                heap.write()
-                    .await
-                    .push(HeapNode::new(prev_epoch.0, Some(wait_tx)));
-
-                let env = env.clone();
-                let command_ctx = CommandContext::new(
-                    fragment_manager.clone(),
-                    env.stream_client_pool_ref(),
-                    &info,
-                    &prev_epoch,
-                    &new_epoch,
-                    command.clone(),
-                );
-                let mut notifiers = notifiers;
-                notifiers.iter_mut().for_each(Notifier::notify_to_send);
-                let result = GlobalBarrierManager::run_inner(
+                GlobalBarrierManager::run_inner(
                     env.clone(),
                     metrics,
                     &command_ctx,
-                    heap.clone(),
+                    command_ctx_queue,
                     hummock_manager,
                     wait_recovery,
-                    wait_rx,
+                    wait_build_actor,
+                    barrier_send_tx_clone
                 )
                 .await;
+            });
+        }
 
-                // debug!("over,new_epoch{:?}",new_epoch);
-                match result {
-                    Ok(responses) => {
-                        // Notify about collected first.
-                        notifiers.iter_mut().for_each(Notifier::notify_collected);
-                        // Then try to finish the barrier for Create MVs.
-                        let actors_to_finish = command_ctx.actors_to_finish();
-                        barrier_send_tx_clone
-                            .send(BarrierSendResult::Ok {
-                                new_epoch,
-                                actors_to_finish,
-                                notifiers,
-                                responses,
-                            })
-                            .unwrap();
+    }
+
+    /// Running a scheduled command.
+    async fn run_inner(
+        env: MetaSrvEnv<S>,
+        metrics: Arc<MetaMetrics>,
+        command_context: &CommandContext<S>,
+        command_ctx_queue: Arc<RwLock<VecDeque<EpochNode<S>>>>,
+        hummock_manager: HummockManagerRef<S>,
+        wait_recovery: Arc<AtomicBool>,
+        wait_build_actor: Arc<AtomicBool>,
+        barrier_send_tx_clone: UnboundedSender<BarrierSendResult>,
+    ) {
+        let timer = metrics.barrier_latency.start_timer();
+
+        // Wait for all barriers collected<
+        let result = GlobalBarrierManager::inject_barrier(env, command_context).await;
+
+        timer.observe_duration();
+
+        let mut first_is_complete = false;
+        {
+            let mut command_ctx_queue_clone = command_ctx_queue.write().await;
+            command_ctx_queue_clone.iter_mut().find(|x| x.command_ctx.prev_epoch == command_context.prev_epoch).map(|x| {
+                x.states = Complete;
+                x.result = Some(result);
+            });
+            first_is_complete = command_ctx_queue_clone.get(0).unwrap().states == Complete;
+        }
+        if first_is_complete{
+            let result = GlobalBarrierManager::try_commit_epoch(command_ctx_queue.clone(), barrier_send_tx_clone.clone(),hummock_manager.clone(),wait_build_actor.clone()).await;
+            if result.is_err(){
+                wait_recovery.store(true, atomic::Ordering::SeqCst);
+                command_ctx_queue.write().await.get_mut(0).unwrap().states = Fail(result.unwrap_err());
+            }
+        }
+        let mut command_ctx_queue_clone = command_ctx_queue.write().await;
+        if command_ctx_queue_clone.len() > 0 && matches!(command_ctx_queue_clone.get(0).unwrap().states,Fail(_)){
+            let count = command_ctx_queue_clone.iter().filter(|x| matches!(command_ctx_queue_clone.get(0).unwrap().states,Fail(_))|| x.states == Complete).count();
+            if count == command_ctx_queue_clone.len(){
+                let new_epoch = command_ctx_queue_clone.get(count - 1).unwrap().command_ctx.curr_epoch;
+
+                let mut err_msg = None;
+                while let Some(node) = command_ctx_queue_clone.pop_front(){
+                    hummock_manager
+                        .abort_epoch(node.command_ctx.prev_epoch.0)
+                        .await.unwrap();
+
+                    let err = match node.states{
+                        Fail(err) =>{err},
+                        Complete=>{RwError::from(ErrorCode::InternalError("err from before epoch".to_string()))},
+                        _=>{panic!()},
+                    };
+
+                    node.notifiers.into_iter().for_each(|notifier| {
+                        notifier.notify_collection_failed(err.clone())
+                    });
+                    if err_msg.is_none(){
+                        err_msg = Some(err);
                     }
-                    Err(err_msg) => {
-                        notifiers.into_iter().for_each(|notifier| {
-                            notifier.notify_collection_failed(err_msg.clone())
-                        });
-                        let mut is_over = false;
-                        if heap.read().await.len() == 1 {
-                            is_over = true;
+                    match node.command_ctx.command {
+                        Command::Plain(..) => {}
+                        _ => {
+                            wait_build_actor.store(false, atomic::Ordering::SeqCst);
                         }
-                        barrier_send_tx_clone
-                            .send(BarrierSendResult::Err {
-                                new_epoch,
-                                err_msg,
-                                is_over,
-                            })
-                            .unwrap();
                     }
                 }
-                heap.write().await.pop();
-                if let Some(mut next_heap_node) = heap.write().await.peek_mut() {
-                    next_heap_node.notify_wait();
+                let err_msg = err_msg.unwrap();
+                barrier_send_tx_clone
+                    .send(BarrierSendResult::Err {
+                        new_epoch,
+                        err_msg,
+                    })
+                    .unwrap();
+            }
+        }
+    }
+    async fn try_commit_epoch(
+        command_ctx_queue: Arc<RwLock<VecDeque<EpochNode<S>>>>,
+        barrier_send_tx_clone: UnboundedSender<BarrierSendResult>,
+        hummock_manager: HummockManagerRef<S>,
+        wait_build_actor: Arc<AtomicBool>,
+    )->Result<()>{
+        let mut command_ctx_queue = command_ctx_queue.write().await;
+        while let Some(node) = command_ctx_queue.get_mut(0){
+            if let Complete = node.states{
+                if node.command_ctx.prev_epoch.0 != INVALID_EPOCH {
+                    match node.result {
+                        Some(Ok(_)) => {
+                            // We must ensure all epochs are committed in ascending order, because
+                            // the storage engine will query from new to old in the order in which
+                            // the L0 layer files are generated. see https://github.com/singularity-data/risingwave/issues/1251
+                            hummock_manager
+                                .commit_epoch(node.command_ctx.prev_epoch.0)
+                                .await?;
+                        }
+                        Some(Err(_)) => {
+                            hummock_manager
+                                .abort_epoch(node.command_ctx.prev_epoch.0)
+                                .await?;
+                        }
+                        _=>{
+                            panic!();
+                        }
+                    };
                 }
-                match command {
+                let responses =node.result.clone().unwrap()?;
+                node.command_ctx.post_collect().await?;
+
+                let node = command_ctx_queue.pop_front().unwrap();
+                let mut notifiers = node.notifiers;
+                let new_epoch = node.command_ctx.curr_epoch;
+                // Notify about collected first.
+                notifiers.iter_mut().for_each(Notifier::notify_collected);
+                // Then try to finish the barrier for Create MVs.
+                let actors_to_finish = node.command_ctx.actors_to_finish();
+                match node.command_ctx.command {
                     Command::Plain(..) => {}
                     _ => {
                         wait_build_actor.store(false, atomic::Ordering::SeqCst);
                     }
                 }
-            });
-        }
-    }
-
-    /// Running a scheduled command.
-    async fn run_inner<'a>(
-        env: MetaSrvEnv<S>,
-        metrics: Arc<MetaMetrics>,
-        command_context: &CommandContext<'a, S>,
-        heap: Arc<RwLock<BinaryHeap<HeapNode>>>,
-        hummock_manager: HummockManagerRef<S>,
-        wait_recovery: Arc<AtomicBool>,
-        wait_rx: oneshot::Receiver<()>,
-    ) -> Result<Vec<InjectBarrierResponse>> {
-        let timer = metrics.barrier_latency.start_timer();
-
-        // Wait for all barriers collected
-        let result = GlobalBarrierManager::inject_barrier(env, command_context).await;
-        // Commit this epoch to Hummock
-        if command_context.prev_epoch.0 != INVALID_EPOCH {
-            let heap_read = heap.read().await;
-            if let Some(heap_node) = heap_read.peek() {
-                let prev_epoch = heap_node.prev_epoch;
-                if command_context.prev_epoch.0 != prev_epoch {
-                    drop(heap_read);
-                    wait_rx.await.unwrap();
-                }
+                barrier_send_tx_clone
+                    .send(BarrierSendResult::Ok {
+                        new_epoch,
+                        actors_to_finish,
+                        notifiers,
+                        responses,
+                    })
+                    .unwrap();
+            }else {
+                break;
             }
-            if wait_recovery.load(atomic::Ordering::SeqCst) {
-                hummock_manager
-                    .abort_epoch(command_context.prev_epoch.0)
-                    .await?;
-                result?;
-                return Err(RwError::from(ErrorCode::InternalError("err".to_string())));
-            }
-            match result {
-                Ok(_) => {
-                    // We must ensure all epochs are committed in ascending order, because
-                    // the storage engine will query from new to old in the order in which
-                    // the L0 layer files are generated. see https://github.com/singularity-data/risingwave/issues/1251
-                    hummock_manager
-                        .commit_epoch(command_context.prev_epoch.0)
-                        .await?;
-                }
-                Err(_) => {
-                    wait_recovery.store(true, atomic::Ordering::SeqCst);
-                    hummock_manager
-                        .abort_epoch(command_context.prev_epoch.0)
-                        .await?;
-                }
-            };
-        }
-        let responses = result?;
-
-        timer.observe_duration();
-        command_context.post_collect().await?; // do some post stuffs
-        Ok(responses)
+        };
+        return Ok(());
     }
 
     /// Inject barrier to all computer nodes.
-    async fn inject_barrier<'a>(
+    async fn inject_barrier(
         env: MetaSrvEnv<S>,
-        command_context: &CommandContext<'a, S>,
+        command_context: &CommandContext<S>,
     ) -> Result<Vec<InjectBarrierResponse>> {
         let mutation = command_context.to_mutation().await?;
-        let info = command_context.info;
+        let info = &command_context.info;
 
         let collect_futures = info.node_map.iter().filter_map(|(node_id, node)| {
             let actor_ids_to_send = info.actor_ids_to_send(node_id).collect_vec();

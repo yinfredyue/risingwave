@@ -80,28 +80,28 @@ impl Command {
 
 /// [`CommandContext`] is used for generating barrier and doing post stuffs according to the given
 /// [`Command`].
-pub struct CommandContext<'a, S> {
+pub struct CommandContext<S> {
     fragment_manager: FragmentManagerRef<S>,
 
     client_pool: StreamClientPoolRef,
 
     /// Resolved info in this barrier loop.
     // TODO: this could be stale when we are calling `post_collect`, check if it matters
-    pub info: &'a BarrierActorInfo,
+    pub info: BarrierActorInfo,
 
-    pub prev_epoch: &'a Epoch,
-    pub curr_epoch: &'a Epoch,
+    pub prev_epoch: Epoch,
+    pub curr_epoch: Epoch,
 
-    command: Command,
+    pub command: Command,
 }
 
-impl<'a, S> CommandContext<'a, S> {
+impl<S> CommandContext<S> {
     pub fn new(
         fragment_manager: FragmentManagerRef<S>,
         client_pool: StreamClientPoolRef,
-        info: &'a BarrierActorInfo,
-        prev_epoch: &'a Epoch,
-        curr_epoch: &'a Epoch,
+        info: BarrierActorInfo,
+        prev_epoch: Epoch,
+        curr_epoch: Epoch,
         command: Command,
     ) -> Self {
         Self {
@@ -115,7 +115,7 @@ impl<'a, S> CommandContext<'a, S> {
     }
 }
 
-impl<S> CommandContext<'_, S>
+impl<S> CommandContext<S>
 where
     S: MetaStore,
 {

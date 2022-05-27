@@ -92,9 +92,9 @@ where
             let command_ctx = CommandContext::new(
                 self.fragment_manager.clone(),
                 self.env.stream_client_pool_ref(),
-                &info,
-                &prev_epoch,
-                &new_epoch,
+                info,
+                prev_epoch,
+                new_epoch,
                 Command::checkpoint(),
             );
 
