@@ -601,7 +601,6 @@ where
                     span: vec![],
                 };
                 let env = env.clone();
-                tracing::info!("barrier{:?}", barrier);
                 async move {
                     let mut client = env.stream_client_pool().get(node).await?;
 
