@@ -25,15 +25,15 @@ export interface Actor {
   nodes: OperatorNode;
   dispatcher: Dispatcher[];
   upstreamActorId?: number[];
-  downstreamActorId?: number[];
 }
 
 export interface ActorProto extends Actor {
   output: StreamNode[];
   computeNodeAddress: string;
-  representedActorList?: any; // TODO: Array<Actor>
-  rootNode: OperatorNode | null;
+  rootNode: StreamNode | null;
   representedWorkNodes?: Set<string>;
+  representedActorList?: ActorProto[];
+  downstreamActorId?: number[];
 }
 
 export interface Actors {

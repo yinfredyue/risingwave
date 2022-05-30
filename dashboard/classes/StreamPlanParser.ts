@@ -15,21 +15,20 @@
  *
  */
 import { graphBfs } from "lib/algo";
-import { OperatorNode, ShellNode } from "@interfaces/Node";
-import { ActorProto, Actors } from "@interfaces/Actor";
 import { getNodeId } from "@classes/BaseNode";
 import { StreamNode } from "@classes/StreamNode";
-import { Dispatcher } from "@classes/Dispatcher";
+import { ActorProto, Actors } from "@interfaces/Actor";
+import { OperatorNode, ShellNode } from "@interfaces/Node";
 
 export default class StreamPlanParser {
   shownActorSet: Set<number>;
-  parsedNodeMap: Map<string, any>;
   parsedActorMap: Map<number, any>;
-  actorIdToMVNodes: Map<number, any>;
+  parsedNodeMap: Map<string, StreamNode>;
   actorId2Proto: Map<number, ActorProto>;
+  actorIdToMVNodes: Map<number, StreamNode>;
   fragmentRepresentedActors: Set<ActorProto>;
-  mvTableIdToChainViewActorList: Map<any, any>;
-  mvTableIdToSingleViewActorList: Map<any, any>;
+  mvTableIdToChainViewActorList: Map<number, number[]>;
+  mvTableIdToSingleViewActorList: Map<number, number[]>;
 
   constructor(datas: Actors[], shownActorList: number[] | null) {
     this.actorId2Proto = new Map();
@@ -58,19 +57,45 @@ export default class StreamPlanParser {
     }
 
     // TODO:
-    // Since all the actorProtos are parsed in actorId2Proto,
-    // we dont need parsedActorMap and ~~parsedActorList~~
+    // Since all the actorProtos are parsed and stored in actorId2Proto,
+    // we may not need parsedActorMap and ~~parsedActorList~~
     for (const actor of this.actorId2Proto.values()) {
       this.parseActor(actor);
     }
 
     this.fragmentRepresentedActors = this._constructRepresentedActorList();
-
-    /** @type {Map<number, Array<number>} */
-    this.mvTableIdToSingleViewActorList = this._constructSingleViewMvList();
-
-    /** @type {Map<number, Array<number>} */
     this.mvTableIdToChainViewActorList = this._constructChainViewMvList();
+    this.mvTableIdToSingleViewActorList = this._constructSingleViewMvList();
+  }
+
+  getShellNode(
+    shellNodes: Map<number, ShellNode>,
+    actorId: number,
+    next: boolean = true
+  ): ShellNode {
+    if (shellNodes.has(actorId)) {
+      return shellNodes.get(actorId)!;
+    }
+
+    const shellNode: ShellNode = {
+      id: actorId,
+      nextNodes: [],
+      parentNodes: [],
+    };
+
+    // Use DFS to traversal all nodes to connect links
+    // If the node1 has outputs nodes, which is defined in `parseNode`,
+    // there exists a link: node1 -> nodes
+    for (const node of this.actorId2Proto.get(actorId)!.output) {
+      const nextNode = this.getShellNode(shellNodes, node.actorId);
+      nextNode.parentNodes.push(shellNode);
+      if (next) {
+        shellNode.nextNodes?.push(nextNode);
+      }
+    }
+
+    shellNodes.set(actorId, shellNode);
+    return shellNode;
   }
 
   /**
@@ -98,12 +123,13 @@ export default class StreamPlanParser {
     }
 
     for (const actor of this.actorId2Proto.values()) {
-      const actors_list = fragmentId2actorList
+      const actorsList = fragmentId2actorList
         .get(actor.fragmentId)!
         .sort((a, b) => a.actorId - b.actorId);
-      actor.representedActorList = actors_list;
 
+      actor.representedActorList = actorsList;
       actor.representedWorkNodes = new Set();
+
       for (const representedActor of actor.representedActorList) {
         actor.representedWorkNodes.add(representedActor.computeNodeAddress);
       }
@@ -111,113 +137,90 @@ export default class StreamPlanParser {
     return fragmentRepresentedActors;
   }
 
-  // TODO:
+  /**
+   * Use ShellNode to pack StreamNodes that is materialize view, and shellNode has parentNodes and nextNodes
+   * use BFS to get chain-view list and return a map that maps tableRefId.tableId to chain-view list
+   */
   _constructChainViewMvList() {
-    let mvTableIdToChainViewActorList = new Map();
-    let shellNodes = new Map();
-    const getShellNode = (actorId: number) => {
-      if (shellNodes.has(actorId)) {
-        return shellNodes.get(actorId);
-      }
+    const mvTableIdToChainViewActorList = new Map<number, number[]>();
+    const shellNodes = new Map<number, ShellNode>();
 
-      const shellNode: ShellNode = {
-        id: actorId,
-        parentNodes: [],
-        nextNodes: [],
-      };
-
-      for (const node of this.parsedActorMap.get(actorId).output) {
-        const nextNode = getShellNode(node.actorId);
-        nextNode.parentNodes.push(shellNode);
-        shellNode.nextNodes?.push(nextNode);
-      }
-      shellNodes.set(actorId, shellNode);
-      return shellNode;
-    };
-
-    for (let actorId of this.actorId2Proto.keys()) {
-      getShellNode(actorId);
+    for (const actorId of this.actorId2Proto.keys()) {
+      this.getShellNode(shellNodes, actorId);
     }
 
-    for (let [actorId, mviewNode] of this.actorIdToMVNodes.entries()) {
-      let list = new Set();
-      let shellNode = getShellNode(actorId);
-      graphBfs(shellNode, (n: any) => {
-        list.add(n.id);
-      });
-      graphBfs(
-        shellNode,
-        (n: any) => {
-          list.add(n.id);
-        },
-        "parentNodes"
-      );
-      for (let actor of this.parsedActorMap.get(actorId).representedActorList) {
-        list.add(actor.actorId);
+    // when StreamNode.type === 'materalize', actorIdToMvNodes will map actorID to that StreamNode
+    for (const MVNode of this.actorIdToMVNodes.values()) {
+      const actorId = MVNode.actorId;
+      const chainViewList = new Set<number>();
+      const shellNode = this.getShellNode(shellNodes, MVNode.actorId);
+
+      const func = (node: ShellNode) => {
+        chainViewList.add(node.id);
+        return false; // TODO: what's the difference between return false and true
+      };
+
+      graphBfs(shellNode, func);
+      graphBfs(shellNode, func, "parentNodes");
+
+      const representedList = this.actorId2Proto.get(actorId)!.representedActorList!;
+      for (const actor of representedList) {
+        chainViewList.add(actor.actorId);
       }
-      mvTableIdToChainViewActorList.set(mviewNode.typeInfo.tableRefId.tableId, [...list.values()]);
+
+      mvTableIdToChainViewActorList.set(MVNode.typeInfo.tableRefId.tableId, [
+        ...chainViewList.values(),
+      ]);
     }
 
     return mvTableIdToChainViewActorList;
   }
 
-  // TODO:
+  /**
+   * Use ShellNode to pack StreamNodes that only has parentNodes,
+   * use BFS to get single-view list return a map that maps tableRefId.tableId to single-view list
+   * TODO:
+   * What's the difference between single-view and chain-view anyway
+   */
   _constructSingleViewMvList() {
     const shellNodes = new Map<number, ShellNode>();
-    const mvTableIdToSingleViewActorList = new Map();
-
-    const getShellNode = (actorId: number) => {
-      if (shellNodes.has(actorId)) {
-        return shellNodes.get(actorId);
-      }
-
-      const shellNode: ShellNode = {
-        id: actorId,
-        parentNodes: [],
-      };
-
-      const actor = this.actorId2Proto.get(actorId)!;
-      // TODO:
-      // what is the type of ActorProto.output? OperatorNode or StreamNode
-      for (const node of actor.output) {
-        if (node.actorId) {
-          const parent = getShellNode(node.actorId)!;
-          parent.parentNodes.push(shellNode);
-        }
-      }
-
-      shellNodes.set(actorId, shellNode);
-      return shellNode;
-    };
+    const mvTableIdToSingleViewActorList = new Map<number, number[]>();
 
     for (const actor of this.actorId2Proto.values()) {
-      getShellNode(actor.actorId);
+      this.getShellNode(shellNodes, actor.actorId, false);
     }
 
-    for (const [actorId, mviewNode] of this.actorIdToMVNodes.entries()) {
+    for (const MVNode of this.actorIdToMVNodes.values()) {
       const list = [];
-      const shellNode = getShellNode(actorId);
+      const actorId = MVNode.actorId;
+      const shellNode = this.getShellNode(shellNodes, actorId, false);
+
       graphBfs(
         shellNode,
-        (n: any) => {
+        (n: ShellNode) => {
           list.push(n.id);
-          if (shellNode.id !== n.id && this.actorIdToMVNodes.has(n.id)) {
+          if (shellNode?.id !== n.id && this.actorIdToMVNodes.has(n.id)) {
             return true; // stop to traverse its next nodes
           }
         },
         "parentNodes"
       );
-      for (let actor of this.parsedActorMap.get(actorId).representedActorList) {
+
+      const representedList = this.actorId2Proto.get(actorId)!.representedActorList!;
+      for (const actor of representedList) {
         list.push(actor.actorId);
       }
-      mvTableIdToSingleViewActorList.set(mviewNode.typeInfo.tableRefId.tableId, list);
+      mvTableIdToSingleViewActorList.set(MVNode.typeInfo.tableRefId.tableId, list);
     }
 
     return mvTableIdToSingleViewActorList;
   }
 
   /**
-   * Parse raw data from meta node to an ActorProto
+   * Parse actors.json data from meta node to an ActorProto
+   * with representedActorList and representedWorkNodes
+   *
+   * since downstreamActorId only appears in dispatcher (./proto/stream_plan.proto)
    */
   parseActor(actorProto: ActorProto): ActorProto {
     const actorId = actorProto.actorId;
@@ -229,29 +232,47 @@ export default class StreamPlanParser {
     if (actorProto.dispatcher && actorProto.dispatcher[0].type) {
       const { type, downstreamActorId } = actorProto.dispatcher[0];
 
-      rootNode = new Dispatcher(actorProto.actorId, type, downstreamActorId!, {
-        operatorId: 100000 + actorId,
-      });
+      const id = getNodeId(actorProto.nodes, actorId);
+
+      rootNode = new StreamNode(
+        id,
+        actorProto.actorId,
+        downstreamActorId!,
+        {
+          operatorId: (100000 + actorId).toString(),
+        },
+        type
+      );
 
       const nodeBeforeDispatcher = this.parseNode(actorId, actorProto.nodes);
       rootNode.nextNodes = [nodeBeforeDispatcher];
     } else {
       rootNode = this.parseNode(actorId, actorProto.nodes);
     }
-    actorProto.rootNode = rootNode;
+    actorProto.rootNode = rootNode!;
 
     this.parsedActorMap.set(actorId, actorProto);
     return actorProto;
   }
 
+  /**
+   * parse actors.nodes (OperatorNode) to StreamNode,
+   * and set typeInfo and nextNodes
+   */
   parseNode(actorId: number, nodeProto: OperatorNode) {
     const id = getNodeId(nodeProto, actorId);
     if (this.parsedNodeMap.has(id)) {
       return this.parsedNodeMap.get(id);
     }
 
-    const newNode = new StreamNode(id, actorId, nodeProto);
-    this.parsedNodeMap.set(id, nodeProto);
+    const actorProto = this.actorId2Proto.get(actorId)!;
+    const newNode = new StreamNode(
+      id,
+      actorId,
+      actorProto.dispatcher[0].downstreamActorId!,
+      nodeProto
+    );
+    this.parsedNodeMap.set(id, newNode);
 
     if (nodeProto.input) {
       for (const inputNode of nodeProto.input) {
@@ -262,8 +283,7 @@ export default class StreamPlanParser {
     if (newNode.type === "merge" && newNode.typeInfo.upstreamActorId) {
       for (const actorId of newNode.typeInfo.upstreamActorId) {
         if (this.actorId2Proto.has(actorId)) {
-          const actor = this.actorId2Proto.get(actorId)!;
-          this.parseActor(actor!).output.push(newNode);
+          this.actorId2Proto.get(actorId)!.output.push(newNode);
         }
       }
     }

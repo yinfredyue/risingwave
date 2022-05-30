@@ -1,0 +1,14 @@
+[
+  {
+    "id": 1,
+    "type": "COMPUTE_NODE",
+    "host": { "host": "127.0.0.1", "port": 5688 },
+    "state": "RUNNING",
+    "parallelUnits": [
+      { "workerNodeId": 1 },
+      { "id": 1, "type": "HASH", "workerNodeId": 1 },
+      { "id": 2, "type": "HASH", "workerNodeId": 1 },
+      { "id": 3, "type": "HASH", "workerNodeId": 1 }
+    ]
+  }
+]

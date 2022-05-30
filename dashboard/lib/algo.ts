@@ -15,6 +15,7 @@
  *
  */
 import { newMatrix } from "./util";
+import { ShellNode } from "../interfaces/Node";
 
 /**
  * Traverse a tree from its root node, and do operation
@@ -46,17 +47,22 @@ export function treeBfs(root: any, step: Function) {
  * @param {string} [neighborListKey="nextNodes"]
  * return true if you want to stop traverse its next nodes
  */
-export function graphBfs(root: any, step: Function, neighborListKey?: any) {
+export function graphBfs(root: ShellNode, step: Function, neighborListKey?: string) {
   const key = neighborListKey || "nextNodes";
-  const visitedNodes = new Set();
+  const vis = new Set();
   const queue = [root];
-  while (queue.length) {
-    const c = queue.shift();
 
-    visitedNodes.add(c);
-    if (!step(c)) {
-      for (const nextNode of c[key]) {
-        if (!visitedNodes.has(nextNode)) {
+  while (queue.length) {
+    const node = queue.shift()!;
+    const descriptor = Object.getOwnPropertyDescriptor(node, key);
+    vis.add(node);
+
+    // TODO:
+    // temporarily use descriptor to solve Typescript error and get node's values
+    // maybe there is better way such as Typescript indexable types
+    if (!step(node) && descriptor?.value) {
+      for (const nextNode of descriptor?.value) {
+        if (!vis.has(nextNode)) {
           queue.push(nextNode);
         }
       }

@@ -62,10 +62,10 @@ export interface Constant {
 
 export interface Children {
   exprType: string;
-  DataType: DataType;
   inputRef: InputRef;
   funcCall?: FuncCall;
   constant?: Constant;
+  returnType: DataType;
 }
 
 export interface FuncCall {
@@ -74,8 +74,8 @@ export interface FuncCall {
 
 export interface Condition {
   exprType: string;
-  DataType: DataType;
   funcCall: FuncCall;
+  returnType: DataType;
 }
 
 export interface HashJoin {
@@ -108,7 +108,7 @@ export interface BatchPlan {
 export interface ColumnOrder {
   orderType: string;
   inputRef: InputRef;
-  DataType: DataType;
+  returnType: DataType;
 }
 
 export interface Materialize {
@@ -125,8 +125,8 @@ export interface Source {
 
 export interface SelectList {
   exprType: string;
-  DataType: DataType;
   inputRef: InputRef;
+  returnType: DataType;
 }
 
 export interface Project {
@@ -166,16 +166,16 @@ export interface OperatorNode {
   topN?: TopN;
   chain?: Chain;
   merge?: Merge;
-  fields: Field[];
+  fields?: Field[];
   source?: Source;
   filter?: Filter;
   actorId?: number;
-  identity: string;
+  identity?: string;
   project?: Project;
   hashAgg?: HashAgg;
-  operatorId: string;
-  pkIndices: number[];
+  pkIndices?: number[];
   hashJoin?: HashJoin;
+  operatorId?: string;
   appendOnly?: boolean;
   batchPlan?: BatchPlan;
   input?: OperatorNode[];
@@ -205,6 +205,6 @@ export interface SearchCondition {
 
 export interface ShellNode {
   id: number;
-  parentNodes: any[];
-  nextNodes?: any[];
+  nextNodes?: ShellNode[];
+  parentNodes: ShellNode[];
 }

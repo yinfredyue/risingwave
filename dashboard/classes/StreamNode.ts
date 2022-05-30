@@ -20,13 +20,25 @@ import { OperatorNode } from "@interfaces/Node";
 
 export class StreamNode extends BaseNode {
   type: string | undefined;
+  dispatchType?: string;
+  downstreamActorId: number[];
+  // TODO: abstract typeInfo to key?
   typeInfo: any;
 
-  constructor(id: any, actorId: any, nodeProto: OperatorNode) {
+  constructor(
+    id: string,
+    actorId: number,
+    downstreamActorId: number[],
+    nodeProto: OperatorNode,
+    dispatchType?: string
+  ) {
     super(id, actorId, nodeProto);
-    // Object.keys(nodeProto) are attributes that nodeProto have
+    this.downstreamActorId = downstreamActorId;
+
+    // Object.keys(nodeProto) are attributes that nodeProto may have
     // StreamNode only has one of them
     this.type = Object.keys(nodeProto).filter((key) => types.has(key))[0];
     this.typeInfo = nodeProto[this.type];
+    this.dispatchType = dispatchType;
   }
 }

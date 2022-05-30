@@ -1,0 +1,707 @@
+[
+  {
+    "id": 1,
+    "name": "t1",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v1"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v3"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 0
+  },
+  {
+    "id": 3,
+    "name": "t2",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v1"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v3"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 2
+  },
+  {
+    "id": 4,
+    "name": "mv1",
+    "columns": [
+      { "columnDesc": { "columnType": { "typeName": "INT32", "isNullable": true }, "name": "v1" } },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v3"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v10"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 4,
+          "name": "v20"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 5,
+          "name": "v30"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 6,
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 7,
+          "name": "_row_id#1"
+        },
+        "isHidden": true
+      }
+    ],
+    "orderColumnIds": [6, 7],
+    "orders": ["ASCENDING", "ASCENDING"],
+    "dependentRelations": [3, 1],
+    "distributionKeys": [6, 7],
+    "pk": [6, 7]
+  },
+  {
+    "id": 8,
+    "name": "t3",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v1"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v3"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 7
+  },
+  {
+    "id": 10,
+    "name": "t4",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v1"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v3"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 9
+  },
+  {
+    "id": 11,
+    "name": "mv2",
+    "columns": [
+      { "columnDesc": { "columnType": { "typeName": "INT32", "isNullable": true }, "name": "v1" } },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v3"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v10"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 4,
+          "name": "v20"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 5,
+          "name": "v30"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 6,
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 7,
+          "name": "_row_id#1"
+        },
+        "isHidden": true
+      }
+    ],
+    "orderColumnIds": [6, 7],
+    "orders": ["ASCENDING", "ASCENDING"],
+    "dependentRelations": [10, 8],
+    "distributionKeys": [6, 7],
+    "pk": [6, 7]
+  },
+  {
+    "id": 15,
+    "name": "t5",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v1"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v3"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 14
+  },
+  {
+    "id": 17,
+    "name": "t6",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v1"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v3"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 16
+  },
+  {
+    "id": 18,
+    "name": "mv3",
+    "columns": [
+      { "columnDesc": { "columnType": { "typeName": "INT32", "isNullable": true }, "name": "v1" } },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v3"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v10"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 4,
+          "name": "v20"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 5,
+          "name": "v30"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 6,
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 7,
+          "name": "_row_id#1"
+        },
+        "isHidden": true
+      }
+    ],
+    "orderColumnIds": [6, 7],
+    "orders": ["ASCENDING", "ASCENDING"],
+    "dependentRelations": [17, 15],
+    "distributionKeys": [6, 7],
+    "pk": [6, 7]
+  },
+  {
+    "id": 22,
+    "name": "t7",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v1"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v3"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 21
+  },
+  {
+    "id": 24,
+    "name": "t8",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v1"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v3"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 23
+  },
+  {
+    "id": 25,
+    "name": "mv4",
+    "columns": [
+      { "columnDesc": { "columnType": { "typeName": "INT32", "isNullable": true }, "name": "v1" } },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v3"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v10"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 4,
+          "name": "v20"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 5,
+          "name": "v30"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 6,
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 7,
+          "name": "_row_id#1"
+        },
+        "isHidden": true
+      }
+    ],
+    "orderColumnIds": [6, 7],
+    "orders": ["ASCENDING", "ASCENDING"],
+    "dependentRelations": [24, 22],
+    "distributionKeys": [6, 7],
+    "pk": [6, 7]
+  },
+  {
+    "id": 29,
+    "name": "t9",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v1"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v3"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 28
+  },
+  {
+    "id": 31,
+    "name": "t10",
+    "columns": [
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v1"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v3"
+        }
+      }
+    ],
+    "orderColumnIds": [0],
+    "orders": ["ASCENDING"],
+    "distributionKeys": [0],
+    "pk": [0],
+    "associatedSourceId": 30
+  },
+  {
+    "id": 32,
+    "name": "mv_full_outer_cond",
+    "columns": [
+      { "columnDesc": { "columnType": { "typeName": "INT32", "isNullable": true }, "name": "v1" } },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 1,
+          "name": "v2"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 2,
+          "name": "v3"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 3,
+          "name": "v10"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 4,
+          "name": "v20"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT32", "isNullable": true },
+          "columnId": 5,
+          "name": "v30"
+        }
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 6,
+          "name": "_row_id#0"
+        },
+        "isHidden": true
+      },
+      {
+        "columnDesc": {
+          "columnType": { "typeName": "INT64", "isNullable": true },
+          "columnId": 7,
+          "name": "_row_id#1"
+        },
+        "isHidden": true
+      }
+    ],
+    "orderColumnIds": [6, 7],
+    "orders": ["ASCENDING", "ASCENDING"],
+    "dependentRelations": [31, 29],
+    "distributionKeys": [6, 7],
+    "pk": [6, 7]
+  }
+]

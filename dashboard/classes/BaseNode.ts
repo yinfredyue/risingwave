@@ -26,12 +26,12 @@ export function getNodeId(nodeProto: OperatorNode, actorId: number) {
 }
 
 export class BaseNode {
-  id: any;
-  actorId: any;
-  nodeProto: any;
+  id: string;
+  actorId: number;
   nextNodes: any[];
+  nodeProto: OperatorNode;
 
-  constructor(id: any, actorId: any, nodeProto: any) {
+  constructor(id: string, actorId: number, nodeProto: OperatorNode) {
     this.id = id; //operatorId
     this.nextNodes = [];
     this.actorId = actorId;
