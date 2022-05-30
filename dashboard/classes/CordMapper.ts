@@ -14,11 +14,30 @@
  * limitations under the License.
  *
  */
-export function capitalize(sentence: string) {
-  const words = sentence.split(" ");
-  let s = "";
-  for (const word of words) {
-    s += word.charAt(0).toUpperCase() + word.slice(1, word.length);
+
+// TODO: Use rbtree
+export class CordMapper {
+  map: Map<any, any>;
+
+  constructor() {
+    this.map = new Map();
   }
-  return s;
+
+  rangeQuery(start: number, end: number) {
+    let rtn = new Set();
+    for (let [k, s] of this.map.entries()) {
+      if (start <= k && k <= end) {
+        s.forEach((v: any) => rtn.add(v));
+      }
+    }
+    return rtn;
+  }
+
+  insert(k: number, v: any) {
+    if (this.map.has(k)) {
+      this.map.get(k).add(v);
+    } else {
+      this.map.set(k, new Set([v]));
+    }
+  }
 }

@@ -38,9 +38,9 @@ import DoubleArrowIcon from "@mui/icons-material/DoubleArrow";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import MuiAppBar, { AppBarProps as MuiAppBarProps } from "@mui/material/AppBar";
 
-import { capitalize } from "../lib/str";
 import { NavItems } from "@interfaces/Items";
 import { LayoutProps } from "@interfaces/LayoutProps";
+import { capitalize } from "@lib/util";
 
 interface AppBarProps extends MuiAppBarProps {
   open?: boolean;

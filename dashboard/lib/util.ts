@@ -14,6 +14,15 @@
  * limitations under the License.
  *
  */
+
+import { NodeOperator } from "@interfaces/Node";
+import * as color from "@lib/color";
+
+export function capitalize(sentence: string) {
+  const arr = sentence.split(" ").map((x) => x.charAt(0).toUpperCase() + x.slice(1));
+  return arr.join(" ");
+}
+
 export function iter(n: number, step: Function) {
   for (let i = 0; i < n; ++i) {
     step(i);
@@ -28,10 +37,37 @@ export function newNumberArray(length: number) {
   return rtn;
 }
 
-export function newMatrix(n) {
+export function newMatrix(n: number) {
   const rtn: number[][] = [];
   iter(n, () => {
     rtn.push([]);
   });
   return rtn;
+}
+
+export function hashIpv4Index(addr: string) {
+  const ip = [...addr].filter((x) => !isNaN(+x)).join("");
+  return +ip;
+}
+
+export function computeNodeAddrToSideColor(addr: string) {
+  return color.TwoGradient(hashIpv4Index(addr))[1];
+}
+
+/**
+ * Construct an id for a node (operator) in an actor box.
+ * You may use this method to query and get the svg element
+ * of the link.
+ */
+export function constructOperatorNodeId(node: NodeOperator) {
+  return "node-" + node.id;
+}
+
+/**
+ * Construct an id for a link in actor box.
+ * You may use this method to query and get the svg element
+ * of the link.
+ */
+export function constructInternalLinkId(node1: NodeOperator, node2: NodeOperator) {
+  return "node-" + (node1.id > node2.id ? node1.id + "-" + node2.id : node2.id + "-" + node1.id);
 }

@@ -14,8 +14,9 @@
  * limitations under the License.
  *
  */
+
+import { ShellNode } from "@interfaces/Node";
 import { newMatrix } from "./util";
-import { ShellNode } from "../interfaces/Node";
 
 /**
  * Traverse a tree from its root node, and do operation

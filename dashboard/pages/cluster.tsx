@@ -19,10 +19,10 @@ import React, { useEffect, useState } from "react";
 import api from "@api/api";
 import Message from "@components/Message";
 import NodeTable from "@components/NodeTable";
-import { FrontendNode } from "@interfaces/FrontendNode";
-import { ComputeNode } from "@interfaces/ComputeNode";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { ComputeNode } from "@interfaces/ComputeNode";
+import { FrontendNode } from "@interfaces/FrontendNode";
 
 import frontendNode from "./mock/single_node/0.json";
 import computeNode from "./mock/single_node/1.json";

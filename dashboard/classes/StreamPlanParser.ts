@@ -22,9 +22,9 @@ import { OperatorNode, ShellNode } from "@interfaces/Node";
 
 export default class StreamPlanParser {
   shownActorSet: Set<number>;
-  parsedActorMap: Map<number, any>;
   parsedNodeMap: Map<string, StreamNode>;
   actorId2Proto: Map<number, ActorProto>;
+  parsedActorMap: Map<number, ActorProto>;
   actorIdToMVNodes: Map<number, StreamNode>;
   fragmentRepresentedActors: Set<ActorProto>;
   mvTableIdToChainViewActorList: Map<number, number[]>;
@@ -225,7 +225,7 @@ export default class StreamPlanParser {
   parseActor(actorProto: ActorProto): ActorProto {
     const actorId = actorProto.actorId;
     if (this.parsedActorMap.has(actorId)) {
-      return this.parsedActorMap.get(actorId);
+      return this.parsedActorMap.get(actorId)!;
     }
 
     let rootNode;

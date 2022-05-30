@@ -38,19 +38,19 @@ import Select, { SelectChangeEvent } from "@mui/material/Select";
 import JsonView from "@components/JsonView";
 import { Close } from "@mui/icons-material";
 import { ToolBoxTitle } from "@components/ToolBox";
+import Dots from "@components/Dots";
 import { SvgBox, SvgBoxCover } from "@components/SvgBox";
 import { ActorInfoView } from "@components/ActorInfoView";
-import { CanvasEngine } from "../lib/graaphEngine/canvasEngine";
-import createView, {
-  computeNodeAddrToSideColor,
-  StreamChartHelper,
-} from "../lib/streamPlan/streamChartHelper";
+
 import useWindowSize from "hook/useWindowSize";
 import { MaterializedView } from "@interfaces/MaterializedView";
 import { ActorProto, Actors } from "@interfaces/Actor";
-import Dots from "./Dots";
 import { SelectedMateralizedView } from "../interfaces/MaterializedView";
 import { debounce } from "lodash";
+import { CanvasEngine } from "@classes/CanvasEngine";
+import createView from "@lib/streamPlan/streamChartHelper";
+import { computeNodeAddrToSideColor } from "@lib/util";
+import { StreamChartHelper } from "@classes/StreamChartHelper";
 
 type Props = {
   data: Actors[];
