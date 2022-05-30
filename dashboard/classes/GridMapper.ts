@@ -31,7 +31,7 @@ export class GridMapper {
     return Math.round(value / this.gs);
   }
 
-  addObject(minX: number, maxX: number, minY: number, maxY: number, ele: any) {
+  addObject(minX: number, maxX: number, minY: number, maxY: number, ele: fabric.Object) {
     for (let i = minX; i <= maxX + this.gs; i += this.gs) {
       this.xMap.insert(this._getKey(i), ele);
     }

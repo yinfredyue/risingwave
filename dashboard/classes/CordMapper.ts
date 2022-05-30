@@ -17,15 +17,15 @@
 
 // TODO: Use rbtree
 export class CordMapper {
-  map: Map<any, any>;
+  map: Map<number, Set<fabric.Object>>;
 
   constructor() {
     this.map = new Map();
   }
 
   rangeQuery(start: number, end: number) {
-    let rtn = new Set();
-    for (let [k, s] of this.map.entries()) {
+    const rtn = new Set();
+    for (const [k, s] of this.map.entries()) {
       if (start <= k && k <= end) {
         s.forEach((v: any) => rtn.add(v));
       }
@@ -33,9 +33,9 @@ export class CordMapper {
     return rtn;
   }
 
-  insert(k: number, v: any) {
+  insert(k: number, v: fabric.Object) {
     if (this.map.has(k)) {
-      this.map.get(k).add(v);
+      this.map.get(k)!.add(v);
     } else {
       this.map.set(k, new Set([v]));
     }

@@ -127,9 +127,9 @@ export class StreamChartHelper {
    * @returns {Map<Node, [number, number]>} position of each node
    */
   dagLayout(nodes: any) {
-    let sorted = [];
-    let _nodes = [];
-    let node2dagNode = new Map();
+    const sorted = [];
+    const _nodes = [];
+    const node2dagNode = new Map();
     const visit = (n: any) => {
       if (n.temp) {
         throw Error("This is not a DAG");

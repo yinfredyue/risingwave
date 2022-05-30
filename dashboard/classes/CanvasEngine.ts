@@ -222,8 +222,8 @@ export class CanvasEngine {
       vpt[4] = 0;
       vpt[5] = 0;
     }
-    // this.canvas.requestRenderAll();
-    // this._refreshView();
+    this.canvas.requestRenderAll();
+    this._refreshView();
   }
 
   /**
