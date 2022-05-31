@@ -4310,7 +4310,6 @@ dependencies = [
  "smallvec",
  "static_assertions",
  "thiserror",
- "tokio",
  "tokio-metrics",
  "tokio-stream",
  "tower",
@@ -5017,7 +5016,6 @@ checksum = "bcb585a0069b53171684e22d5255984ec30d1c7304fd0a4a9a603ffd8c765cdd"
 dependencies = [
  "futures-util",
  "pin-project-lite",
- "tokio",
 ]
 
 [[package]]

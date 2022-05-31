@@ -357,16 +357,8 @@ impl LocalStreamManagerCore {
             mock_source: (Some(tx), Some(rx)),
             state_store,
             streaming_metrics,
-<<<<<<< HEAD
-<<<<<<< HEAD
             compute_client_pool: ComputeClientPool::new(u64::MAX),
             config,
-=======
-     //       tokio_metrics_monitors: HashMap::new(),
-=======
->>>>>>> add schedule count
-            compute_client_pool: ComputeClientPool::new(1024),
->>>>>>> add tokio_metrics
         }
     }
 
@@ -634,19 +626,22 @@ impl LocalStreamManagerCore {
             )?;
 
             let dispatcher = self.create_dispatcher(executor, &actor.dispatcher, actor_id)?;
-            let actor = Actor::new(dispatcher, actor_id, self.context.clone());
+            let actor = Actor::new(
+                dispatcher,
+                actor_id,
+                self.context.clone(),
+                self.streaming_metrics.clone(),
+                actor_context,
+            );
             let monitor = tokio_metrics::TaskMonitor::new();
             self.handles.insert(
                 actor_id,
-<<<<<<< HEAD
-                tokio::spawn(async move {
-=======
-                madsim::task::spawn(monitor.instrument(async move {
->>>>>>> add schedule count
+                tokio::spawn(monitor.instrument(async move {
                     // unwrap the actor result to panic on error
                     actor.run().await.expect("actor failed");
                 })),
             );
+          
             {
                 let actor_id_str = actor_id.to_string();
                 let metrics_monitor = monitor.clone();
