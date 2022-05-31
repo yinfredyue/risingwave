@@ -93,6 +93,8 @@ pub struct CommandContext<S> {
     pub curr_epoch: Epoch,
 
     pub command: Command,
+
+    pub is_first: bool,
 }
 
 impl<S> CommandContext<S> {
@@ -103,6 +105,7 @@ impl<S> CommandContext<S> {
         prev_epoch: Epoch,
         curr_epoch: Epoch,
         command: Command,
+        is_first: bool,
     ) -> Self {
         Self {
             fragment_manager,
@@ -111,6 +114,7 @@ impl<S> CommandContext<S> {
             prev_epoch,
             curr_epoch,
             command,
+            is_first,
         }
     }
 }

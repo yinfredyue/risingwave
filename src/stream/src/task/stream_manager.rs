@@ -182,10 +182,13 @@ impl LocalStreamManager {
         actor_ids_to_send: impl IntoIterator<Item = ActorId>,
         actor_ids_to_collect: impl IntoIterator<Item = ActorId>,
         need_sync: bool,
+        is_first: bool,
     ) -> Result<CollectResult> {
         let mut wait_epoch_receiver = self.wait_epoch_sender.lock().subscribe();
-        while barrier.epoch.prev != *wait_epoch_receiver.borrow() {
-            wait_epoch_receiver.changed().await.unwrap();
+        if !is_first {
+            while barrier.epoch.prev != *wait_epoch_receiver.borrow() {
+                wait_epoch_receiver.changed().await.unwrap();
+            }
         }
 
         let rx = self.send_barrier(barrier, actor_ids_to_send, actor_ids_to_collect)?;
@@ -257,8 +260,14 @@ impl LocalStreamManager {
             span: tracing::Span::none(),
         };
 
-        self.send_and_collect_barrier(&barrier, actor_ids_to_send, actor_ids_to_collect, false)
-            .await?;
+        self.send_and_collect_barrier(
+            &barrier,
+            actor_ids_to_send,
+            actor_ids_to_collect,
+            false,
+            false,
+        )
+        .await?;
         self.core.lock().drop_all_actors();
 
         Ok(())

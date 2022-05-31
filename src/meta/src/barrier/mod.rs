@@ -32,7 +32,7 @@ use risingwave_pb::stream_service::{InjectBarrierRequest, InjectBarrierResponse}
 use smallvec::SmallVec;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot::{Receiver, Sender};
-use tokio::sync::{oneshot, watch, RwLock};
+use tokio::sync::{oneshot, watch, RwLock, RwLockWriteGuard};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
@@ -251,7 +251,6 @@ where
         let env = self.env.clone();
         let mut tracker = CreateMviewProgressTracker::default();
         let mut state = BarrierManagerState::create(self.env.meta_store()).await;
-
         if self.enable_recovery {
             // handle init, here we simply trigger a recovery process to achieve the consistency. We
             // may need to avoid this when we have more state persisted in meta store.
@@ -268,6 +267,7 @@ where
             state.prev_epoch = new_epoch;
             state.update(env.meta_store()).await.unwrap();
         }
+        let mut is_first = true;
         let mut last_epoch = state.prev_epoch.0;
         let mut min_interval = tokio::time::interval(self.interval);
         min_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -304,6 +304,7 @@ where
                                 }
                                 state.prev_epoch = new_epoch;
                                 last_epoch = new_epoch.0;
+                                is_first = true;
                                 self.wait_recovery.store(false,atomic::Ordering::SeqCst);
                             } else {
                                 panic!("failed to execute barrier: {:?}", err_msg);
@@ -368,8 +369,9 @@ where
                 prev_epoch,
                 new_epoch,
                 command,
+                is_first,
             ));
-
+            is_first = false;
             let env = self.env.clone();
             let hummock_manager = self.hummock_manager.clone();
             let wait_recovery = self.wait_recovery.clone();
@@ -417,21 +419,20 @@ where
         let result = GlobalBarrierManager::inject_barrier(env, command_context).await;
 
         // let mut first_is_complete = false;
-        {
-            let mut command_ctx_queue_clone = command_ctx_queue.write().await;
+        let mut command_ctx_queue_clone = command_ctx_queue.write().await;
 
-            if let Some(node) = command_ctx_queue_clone
-                .iter_mut()
-                .find(|x| x.command_ctx.prev_epoch == command_context.prev_epoch)
-            {
-                node.states = Complete;
-                node.result = Some(result);
-            };
-            // first_is_complete = command_ctx_queue_clone.get(0).unwrap().states == Complete;
-        }
-        if command_ctx_queue.read().await.get(0).unwrap().states == Complete {
+        if let Some(node) = command_ctx_queue_clone
+            .iter_mut()
+            .find(|x| x.command_ctx.prev_epoch == command_context.prev_epoch)
+        {
+            assert!(matches!(node.states, BarrierEpochState::Pending));
+            node.states = Complete;
+            node.result = Some(result);
+        };
+        // first_is_complete = command_ctx_queue_clone.get(0).unwrap().states == Complete;
+        if matches!(command_ctx_queue_clone.get(0).unwrap().states, Complete) {
             let result = GlobalBarrierManager::try_commit_epoch(
-                command_ctx_queue.clone(),
+                &mut command_ctx_queue_clone,
                 barrier_send_tx_clone.clone(),
                 hummock_manager.clone(),
                 wait_build_actor.clone(),
@@ -439,24 +440,19 @@ where
             .await;
             if result.is_err() {
                 wait_recovery.store(true, atomic::Ordering::SeqCst);
-                command_ctx_queue.write().await.get_mut(0).unwrap().states =
-                    Fail(result.unwrap_err());
+                command_ctx_queue_clone.get_mut(0).unwrap().states = Fail(result.unwrap_err());
             }
         }
-        let mut command_ctx_queue_clone = command_ctx_queue.write().await;
         if command_ctx_queue_clone.len() > 0
             && matches!(command_ctx_queue_clone.get(0).unwrap().states, Fail(_))
         {
             let count = command_ctx_queue_clone
                 .iter()
-                .filter(|x| {
-                    matches!(command_ctx_queue_clone.get(0).unwrap().states, Fail(_))
-                        || x.states == Complete
-                })
+                .filter(|x| matches!(x.states, BarrierEpochState::Pending))
                 .count();
-            if count == command_ctx_queue_clone.len() {
+            if count == 0 {
                 let new_epoch = command_ctx_queue_clone
-                    .get(count - 1)
+                    .get(command_ctx_queue_clone.len() - 1)
                     .unwrap()
                     .command_ctx
                     .curr_epoch;
@@ -469,7 +465,10 @@ where
                             "err from before epoch".to_string(),
                         )),
                         _ => {
-                            panic!()
+                            panic!(
+                                "fail recovery with pending : epoch{:?}",
+                                node.command_ctx.prev_epoch
+                            );
                         }
                     };
 
@@ -497,14 +496,13 @@ where
     }
 
     async fn try_commit_epoch(
-        command_ctx_queue: Arc<RwLock<VecDeque<EpochNode<S>>>>,
+        command_ctx_queue: &mut RwLockWriteGuard<'_, VecDeque<EpochNode<S>>>,
         barrier_send_tx_clone: UnboundedSender<BarrierSendResult>,
         hummock_manager: HummockManagerRef<S>,
         wait_build_actor: Arc<AtomicBool>,
     ) -> Result<()> {
-        let mut command_ctx_queue = command_ctx_queue.write().await;
         while let Some(node) = command_ctx_queue.get(0) {
-            if let Complete = node.states {
+            if matches!(node.states, Complete) {
                 if node.command_ctx.prev_epoch.0 != INVALID_EPOCH {
                     match &node.result {
                         Some(Ok(resps)) => {
@@ -528,7 +526,7 @@ where
                             return Err(err.clone());
                         }
                         _ => {
-                            panic!();
+                            panic!("queue is none");
                         }
                     };
                 }
@@ -566,6 +564,7 @@ where
                     })
                     .unwrap();
             } else {
+                // pending, return and wait next Complete;
                 break;
             }
         }
@@ -600,7 +599,9 @@ where
                     // TODO(chi): add distributed tracing
                     span: vec![],
                 };
+                let is_first = command_context.is_first;
                 let env = env.clone();
+                // tracing::info!("barrier:{:?}", barrier);
                 async move {
                     let mut client = env.stream_client_pool().get(node).await?;
 
@@ -609,6 +610,7 @@ where
                         barrier: Some(barrier),
                         actor_ids_to_send,
                         actor_ids_to_collect,
+                        is_first,
                     };
                     tracing::trace!(
                         target: "events::meta::barrier::inject_barrier",

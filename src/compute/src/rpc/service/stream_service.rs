@@ -115,6 +115,7 @@ impl StreamService for StreamServiceImpl {
         &self,
         request: Request<ForceStopActorsRequest>,
     ) -> std::result::Result<Response<ForceStopActorsResponse>, Status> {
+        tracing::info!("gogoho");
         let req = request.into_inner();
         let epoch = req.epoch.unwrap();
         self.mgr
@@ -146,6 +147,7 @@ impl StreamService for StreamServiceImpl {
                 req.actor_ids_to_send,
                 req.actor_ids_to_collect,
                 true,
+                req.is_first,
             )
             .await
             .map_err(|e| e.to_grpc_status())?;

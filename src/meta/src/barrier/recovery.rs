@@ -65,7 +65,6 @@ where
         let (new_epoch, responses) = tokio_retry::Retry::spawn(retry_strategy, || async {
             let info = self.resolve_actor_info(None).await;
             let mut new_epoch = prev_epoch.next();
-
             // Reset all compute nodes, stop and drop existing actors.
             self.reset_compute_nodes(&info, &prev_epoch, &new_epoch)
                 .await;
@@ -96,6 +95,7 @@ where
                 prev_epoch,
                 new_epoch,
                 Command::checkpoint(),
+                true,
             );
 
             match GlobalBarrierManager::inject_barrier(self.env.clone(), &command_ctx).await {
