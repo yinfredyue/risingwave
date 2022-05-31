@@ -64,7 +64,7 @@ import { fabric } from "fabric";
 
 /**
  * create a graph view based on raw input from the meta node,
- * and append the svg component to the giving svg group.
+ * and append the canvas component for the giving canvas group.
  */
 export default function createView(
   engine: CanvasEngine,
@@ -74,7 +74,6 @@ export default function createView(
   selectedWorkerNode: string,
   shownActorIdList: number[] | null
 ) {
-  // TODO: I remove CanvasEngine's group property, and transfer to StreamChartHelper
   const group = new Group({ engine: engine, canvasElement: new fabric.Group() });
   const streamChartHelper = new StreamChartHelper(
     group,

@@ -24,7 +24,7 @@ export default class StreamPlanParser {
   shownActorSet: Set<number>;
   parsedNodeMap: Map<string, StreamNode>;
   actorId2Proto: Map<number, ActorProto>;
-  actorIdToMVNodes: Map<number, StreamNode>;
+  actorId2MVNodes: Map<number, StreamNode>;
   fragmentRepresentedActors: Set<ActorProto>;
   mvTableIdToChainViewActorList: Map<number, number[]>;
   mvTableIdToSingleViewActorList: Map<number, number[]>;
@@ -32,9 +32,10 @@ export default class StreamPlanParser {
   constructor(datas: Actors[], shownActorList: number[] | null) {
     this.actorId2Proto = new Map();
     this.parsedNodeMap = new Map();
-    this.actorIdToMVNodes = new Map();
+    this.actorId2MVNodes = new Map();
     this.shownActorSet = new Set(shownActorList);
 
+    // TODO: try to use BFS once to get all the structures
     for (const data of datas) {
       const { host, port } = data.node.host;
 
@@ -147,7 +148,7 @@ export default class StreamPlanParser {
     }
 
     // when StreamNode.type === 'materalize', actorIdToMvNodes will map actorID to that StreamNode
-    for (const MVNode of this.actorIdToMVNodes.values()) {
+    for (const MVNode of this.actorId2MVNodes.values()) {
       const actorId = MVNode.actorId;
       const chainViewList = new Set<number>();
       const shellNode = this.getShellNode(shellNodes, MVNode.actorId);
@@ -176,6 +177,7 @@ export default class StreamPlanParser {
   /**
    * Use ShellNode to pack StreamNodes that only has parentNodes,
    * use BFS to get single-view list return a map that maps tableRefId.tableId to single-view list
+   *
    * TODO:
    * What's the difference between single-view and chain-view anyway
    */
@@ -187,7 +189,7 @@ export default class StreamPlanParser {
       this.getShellNode(shellNodes, actor.actorId, false);
     }
 
-    for (const MVNode of this.actorIdToMVNodes.values()) {
+    for (const MVNode of this.actorId2MVNodes.values()) {
       const list = [];
       const actorId = MVNode.actorId;
       const shellNode = this.getShellNode(shellNodes, actorId, false);
@@ -196,7 +198,7 @@ export default class StreamPlanParser {
         shellNode,
         (n: ShellNode) => {
           list.push(n.id);
-          if (shellNode?.id !== n.id && this.actorIdToMVNodes.has(n.id)) {
+          if (shellNode?.id !== n.id && this.actorId2MVNodes.has(n.id)) {
             return true; // stop to traverse its next nodes
           }
         },
@@ -281,7 +283,7 @@ export default class StreamPlanParser {
     }
 
     if (newNode.type === "materialize") {
-      this.actorIdToMVNodes.set(actorId, newNode);
+      this.actorId2MVNodes.set(actorId, newNode);
     }
 
     return newNode;

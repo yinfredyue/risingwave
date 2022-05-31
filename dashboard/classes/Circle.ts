@@ -26,9 +26,9 @@ export class Circle extends DrawElement {
   }
 
   init(x: number, y: number, r: number) {
-    this.canvasElement?.set("left", x);
-    this.canvasElement?.set("top", y - r);
-    this.canvasElement?.set("radius", r);
+    this.canvasElement.left = x - r;
+    this.canvasElement.top = y - r;
+    this.canvasElement?.set("radius", r); // TODO: how to set custom property
 
     super._afterPosition();
     return this;

@@ -6,7 +6,7 @@
       {
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -45,7 +45,7 @@
       {
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -121,7 +121,7 @@
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
           "columnId": 6,
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -147,7 +147,7 @@
       {
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -186,7 +186,7 @@
       {
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -262,7 +262,7 @@
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
           "columnId": 6,
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -277,7 +277,7 @@
     ],
     "orderColumnIds": [6, 7],
     "orders": ["ASCENDING", "ASCENDING"],
-    "dependentRelations": [10, 8],
+    "dependentRelations": [8, 10],
     "distributionKeys": [6, 7],
     "pk": [6, 7]
   },
@@ -288,7 +288,7 @@
       {
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -327,7 +327,7 @@
       {
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -403,7 +403,7 @@
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
           "columnId": 6,
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -429,7 +429,7 @@
       {
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -468,7 +468,7 @@
       {
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -544,7 +544,7 @@
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
           "columnId": 6,
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -559,7 +559,7 @@
     ],
     "orderColumnIds": [6, 7],
     "orders": ["ASCENDING", "ASCENDING"],
-    "dependentRelations": [24, 22],
+    "dependentRelations": [22, 24],
     "distributionKeys": [6, 7],
     "pk": [6, 7]
   },
@@ -570,7 +570,7 @@
       {
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -609,7 +609,7 @@
       {
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },
@@ -685,7 +685,7 @@
         "columnDesc": {
           "columnType": { "typeName": "INT64", "isNullable": true },
           "columnId": 6,
-          "name": "_row_id#0"
+          "name": "_row_id"
         },
         "isHidden": true
       },

@@ -33,10 +33,10 @@ export type Element = {
 export class DrawElement {
   engine: CanvasEngine;
   canvasElement: FabricObjects;
-  eventHandler: Map<any, Function>;
+  eventHandler: Map<string, Function>;
 
   constructor({ canvasElement, engine }: Element) {
-    // Optimizing performance
+    // optimizing performance
     canvasElement.hasBorders = false;
     canvasElement.selectable = false;
     canvasElement.hasControls = false;
@@ -72,13 +72,13 @@ export class DrawElement {
   // TODO: this method is for migrating from d3.js to fabric.js.
   // This should be replaced by a more suitable way.
   position(x: number, y: number) {
-    this.canvasElement?.set("left", x);
-    this.canvasElement?.set("top", y);
+    this.canvasElement.top = y;
+    this.canvasElement.left = x;
     this._afterPosition();
     return this;
   }
 
-  on(event: any, callback: Function) {
+  on(event: string, callback: Function) {
     this.eventHandler.set(event, callback);
     return this;
   }

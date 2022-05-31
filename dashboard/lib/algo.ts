@@ -73,7 +73,8 @@ export function graphBfs(root: ShellNode, step: Function, neighborListKey?: stri
 }
 
 /**
- * Group nodes in the same connected component. The method will not change the input. The output contains the original references.
+ * Group nodes in the same connected component. The method will not change the input.
+ * The output contains the original references.
  * @returns {Array<Array<any>>} A list of groups containing
  * nodes in the same connected component
  */
@@ -81,6 +82,7 @@ export function getConnectedComponent(nodes: Fragments[]) {
   const node2shellNodes = new Map();
 
   for (const node of nodes) {
+    // TODO: why???
     const shellNode = {
       val: node,
       nextNodes: [],
@@ -89,6 +91,7 @@ export function getConnectedComponent(nodes: Fragments[]) {
     node2shellNodes.set(node, shellNode);
   }
 
+  // TODO: what is the point ???
   // make a shell non-directed graph from the original DAG.
   for (const node of nodes) {
     const shellNode = node2shellNodes.get(node);
@@ -101,14 +104,15 @@ export function getConnectedComponent(nodes: Fragments[]) {
     }
   }
 
+  // console.log(node2shellNodes);
+
   // bfs assign group number
   let cnt = 0;
-  for (let node of node2shellNodes.keys()) {
-    let shellNode = node2shellNodes.get(node);
-    if (shellNode.g === -1) {
-      shellNode.g = cnt++;
-      graphBfs(shellNode, (c: any) => {
-        c.g = shellNode.g;
+  for (const shell of node2shellNodes.values()) {
+    if (shell.g === -1) {
+      shell.g = cnt++;
+      graphBfs(shell, (c: any) => {
+        c.g = shell.g;
         return false;
       });
     }
@@ -120,5 +124,7 @@ export function getConnectedComponent(nodes: Fragments[]) {
     group[shellNode.g].push(node);
   }
 
+  // console.log(group);
+  // TODO: why not use adjacent graph?
   return group;
 }

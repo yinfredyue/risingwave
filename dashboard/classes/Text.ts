@@ -22,10 +22,9 @@ export class Text extends DrawElement {
   }
 
   position(x: number, y: number) {
-    const e = this.canvasElement;
-    e?.set("top", y);
-    e?.set("left", x);
-    super._afterPosition();
+    this.canvasElement.top = y;
+    this.canvasElement.left = x;
+    this._afterPosition();
     return this;
   }
 

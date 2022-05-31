@@ -23,6 +23,7 @@ export interface Actor {
   actorId: number;
   fragmentId: number;
   nodes: OperatorNode;
+  vnodeBitmap: string;
   dispatcher: Dispatcher[];
   upstreamActorId?: number[];
 }

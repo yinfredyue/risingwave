@@ -193,10 +193,8 @@ export class CanvasEngine {
     if (selectorSet) {
       const arr = Array.from<DrawElement>(selectorSet);
       if (arr.length > 0) {
-        const x = arr[0].canvasElement.get("left");
-        const y = arr[0].canvasElement.get("top");
-        // TODO: remove d3 selection
-        console.log("d3 get left and top: ", x, y);
+        const x = arr[0].canvasElement.left;
+        const y = arr[0].canvasElement.top;
         const scale = 1.0;
         this.canvas.setZoom(scale);
         const vpt = this.canvas.viewportTransform;

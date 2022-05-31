@@ -58,7 +58,7 @@ export class Group extends DrawElement {
 
   _appendCircle = () => {
     const props: Element = {
-      canvasElement: new fabric.Circle({ selectable: false, hoverCursor: "pointer" }),
+      canvasElement: new fabric.Circle({ hoverCursor: "pointer" }),
       engine: this.engine,
     };
     return new Circle(props);
@@ -66,7 +66,7 @@ export class Group extends DrawElement {
 
   _appendRect = () => {
     const props: Element = {
-      canvasElement: new fabric.Rect({ selectable: false, hoverCursor: "pointer" }),
+      canvasElement: new fabric.Rect({ hoverCursor: "pointer" }),
       engine: this.engine,
     };
     return new Rectangle(props);
@@ -74,7 +74,6 @@ export class Group extends DrawElement {
 
   _appendText = () => {
     return (content: string) => {
-      // TODO: find a better way to rotate text
       let rotation = -10;
       if (content?.includes("Fragment") || content?.includes(",")) {
         rotation = 0;
@@ -84,7 +83,6 @@ export class Group extends DrawElement {
         engine: this.engine,
         canvasElement: new fabric.Text(content || "undefined", {
           angle: rotation,
-          selectable: false,
           textAlign: "left",
         }),
       };
@@ -96,7 +94,7 @@ export class Group extends DrawElement {
     return (d: string) => {
       const props: Element = {
         engine: this.engine,
-        canvasElement: new fabric.Path(d, { selectable: false }),
+        canvasElement: new fabric.Path(d),
       };
       return new Path(props);
     };

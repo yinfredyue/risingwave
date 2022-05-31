@@ -1,4 +1,20 @@
-import { ActorProto, Actors } from "@interfaces/Actor";
+/*
+ * Copyright 2022 Singularity Data
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+import * as d3 from "d3";
 import { Group } from "@classes/Group";
 import StreamPlanParser from "./StreamPlanParser";
 import {
@@ -7,12 +23,11 @@ import {
   hashIpv4Index,
   newNumberArray,
 } from "@lib/util";
+import { ActorProto, Actors } from "@interfaces/Actor";
 import { Fragments, ShellNode, WorkerNode } from "@interfaces/Node";
 import { cloneDeep, max } from "lodash";
-import * as d3 from "d3";
 import { getConnectedComponent, treeBfs } from "@lib/algo";
 import { TwoGradient } from "@lib/color";
-import { StreamNode } from "./StreamNode";
 
 export class StreamChartHelper {
   topGroup: Group;
@@ -387,11 +402,11 @@ export class StreamChartHelper {
     const [boxWidth, boxHeight] = this.calculateActorBoxSize(rootNode);
     this.layoutActorBox(rootNode, baseX + boxWidth - actorBoxPadding, baseY + boxHeight / 2);
 
-    const onNodeClicked = (e, node, actor) => {
+    const onNodeClicked = (e: any, node: any, actor: any) => {
       this.onNodeClick && this.onNodeClick(e, node, actor);
     };
 
-    const onActorClick = (e, actor) => {
+    const onActorClick = (e: any, actor: any) => {
       this.onActorClick && this.onActorClick(e, actor);
     };
 
@@ -403,7 +418,7 @@ export class StreamChartHelper {
      * @param {string} color
      * @returns {number} width of this label
      */
-    const drawActorIdLabel = (g, x, y, actorIds, color) => {
+    const drawActorIdLabel = (g: any, x: any, y: any, actorIds: any, color: any) => {
       y = y - actorBoxStroke;
       let actorStr = actorIds.toString();
       let padding = 15;
@@ -432,7 +447,7 @@ export class StreamChartHelper {
       .attr("fill", this._actorBoxBackgroundColor(actor))
       .attr("rx", actorBoxRadius)
       .attr("stroke-width", actorBoxStroke)
-      .on("click", (e) => onActorClick(e, actor));
+      .on("click", (e: any) => onActorClick(e, actor));
 
     group
       .append("text")(`Fragment ${actor.fragmentId}`)
@@ -499,7 +514,7 @@ export class StreamChartHelper {
         .attr("fill", this._operatorColor(actor, node))
         .style("cursor", "pointer")
         .style("stroke-width", operatorNodeStrokeWidth)
-        .on("click", (e) => onNodeClicked(e, node, actor));
+        .on("click", (e: any) => onNodeClicked(e, node, actor));
       group
         .append("text")(node.type ? node.type : node.dispatchType)
         .position(node.x, node.y + operatorNodeRadius + 10)
@@ -700,12 +715,13 @@ export class StreamChartHelper {
       // TODO: remove duplicates
 
       // actor.rootNode!.actorId = actor.actorId;
-
       // treeBfs(actor.rootNode, (node: StreamNode) => {
       //   node.actorId = actor.actorId;
       //   return false; // continue traversing
       // });
 
+      // TODO: optimize this structure, since ShellNode already has nextNodes and parentNodes
+      // then you can get corresponding Actor by ShellNode id from actorId2Proto or getActor(id)
       const shellActor: Fragments = {
         actor: actor,
         nextNodes: [],
