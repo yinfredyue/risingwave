@@ -48,9 +48,9 @@ import { ActorProto, Actors } from "@interfaces/Actor";
 import { SelectedMateralizedView } from "../interfaces/MaterializedView";
 import { debounce } from "lodash";
 import { CanvasEngine } from "@classes/CanvasEngine";
-import createView from "@lib/streamPlan/streamChartHelper";
 import { computeNodeAddrToSideColor } from "@lib/util";
 import { StreamChartHelper } from "@classes/StreamChartHelper";
+import createView from "@lib/streamPlan/streamChartHelper";
 
 type Props = {
   data: Actors[];
@@ -194,9 +194,9 @@ export default function StreamingView({ data, mvList }: Props) {
         selectedWorkerNode,
         null
       );
+      setChartHelper(newView);
       setMvTableIdToChainViewActorList(newView.getMvTableIdToChainViewActorList());
       setMvTableIdToSingleViewActorList(newView.getMvTableIdToSingleViewActorList());
-      setChartHelper(newView);
     }
 
     return () => {

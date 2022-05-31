@@ -19,11 +19,10 @@ import types from "@classes/types";
 import { OperatorNode } from "@interfaces/Node";
 
 export class StreamNode extends BaseNode {
-  type: string | undefined;
+  typeInfo: any; // TODO: abstract typeInfo to key?
   dispatchType?: string;
+  type: string | undefined;
   downstreamActorId: number[];
-  // TODO: abstract typeInfo to key?
-  typeInfo: any;
 
   constructor(
     id: string,

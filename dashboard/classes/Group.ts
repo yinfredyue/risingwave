@@ -51,6 +51,7 @@ export class Group extends DrawElement {
   _appendGroup = () => {
     const props: Element = {
       engine: this.engine,
+      canvasElement: new fabric.Group(),
     };
     return new Group(props);
   };

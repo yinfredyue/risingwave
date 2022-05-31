@@ -24,7 +24,6 @@ export default class StreamPlanParser {
   shownActorSet: Set<number>;
   parsedNodeMap: Map<string, StreamNode>;
   actorId2Proto: Map<number, ActorProto>;
-  parsedActorMap: Map<number, ActorProto>;
   actorIdToMVNodes: Map<number, StreamNode>;
   fragmentRepresentedActors: Set<ActorProto>;
   mvTableIdToChainViewActorList: Map<number, number[]>;
@@ -33,7 +32,6 @@ export default class StreamPlanParser {
   constructor(datas: Actors[], shownActorList: number[] | null) {
     this.actorId2Proto = new Map();
     this.parsedNodeMap = new Map();
-    this.parsedActorMap = new Map();
     this.actorIdToMVNodes = new Map();
     this.shownActorSet = new Set(shownActorList);
 
@@ -56,9 +54,8 @@ export default class StreamPlanParser {
       }
     }
 
-    // TODO:
-    // Since all the actorProtos are parsed and stored in actorId2Proto,
-    // we may not need parsedActorMap and ~~parsedActorList~~
+    // since all the actorProtos are parsed and stored in actorId2Proto Map,
+    // we dont need ~~parsedActorMap~~ and ~~parsedActorList~~
     for (const actor of this.actorId2Proto.values()) {
       this.parseActor(actor);
     }
@@ -223,16 +220,12 @@ export default class StreamPlanParser {
    * since downstreamActorId only appears in dispatcher (./proto/stream_plan.proto)
    */
   parseActor(actorProto: ActorProto): ActorProto {
-    const actorId = actorProto.actorId;
-    if (this.parsedActorMap.has(actorId)) {
-      return this.parsedActorMap.get(actorId)!;
-    }
-
     let rootNode;
-    if (actorProto.dispatcher && actorProto.dispatcher[0].type) {
-      const { type, downstreamActorId } = actorProto.dispatcher[0];
+    const actorId = actorProto.actorId;
 
+    if (actorProto.dispatcher && actorProto.dispatcher[0].type) {
       const id = getNodeId(actorProto.nodes, actorId);
+      const { type, downstreamActorId } = actorProto.dispatcher[0];
 
       rootNode = new StreamNode(
         id,
@@ -251,7 +244,6 @@ export default class StreamPlanParser {
     }
     actorProto.rootNode = rootNode!;
 
-    this.parsedActorMap.set(actorId, actorProto);
     return actorProto;
   }
 
@@ -296,7 +288,7 @@ export default class StreamPlanParser {
   }
 
   getActor(actorId: number) {
-    return this.parsedActorMap.get(actorId);
+    return this.actorId2Proto.get(actorId);
   }
 
   getOperator(operatorId: string) {

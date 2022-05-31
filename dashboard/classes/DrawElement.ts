@@ -21,31 +21,32 @@ import { CanvasEngine } from "@classes/CanvasEngine";
 fabric.Object.prototype.noScaleCache = true;
 fabric.Object.prototype.objectCaching = false;
 fabric.Object.prototype.statefullCache = false;
-fabric.Object.prototype.hasRotatingPoint = false;
 fabric.Object.prototype.needsItsOwnCache = () => false;
+
+type FabricObjects = fabric.Object | fabric.Circle | fabric.Rect | fabric.Text;
 
 export type Element = {
   engine: CanvasEngine;
-  canvasElement?: fabric.Object;
+  canvasElement: FabricObjects;
 };
 
 export class DrawElement {
   engine: CanvasEngine;
-  canvasElement: fabric.Object;
+  canvasElement: FabricObjects;
   eventHandler: Map<any, Function>;
 
   constructor({ canvasElement, engine }: Element) {
-    if (canvasElement) {
-      engine.canvas.add(canvasElement);
-      // TODO: remove
-      canvasElement.on("mouse:down", (e: any) => {
-        console.log("canvasElement", e);
-      });
-    }
+    // Optimizing performance
+    canvasElement.hasBorders = false;
+    canvasElement.selectable = false;
+    canvasElement.hasControls = false;
+    canvasElement.hasRotatingPoint = false;
+
+    engine.canvas.add(canvasElement);
+    this.canvasElement = canvasElement;
 
     this.engine = engine;
     this.eventHandler = new Map();
-    this.canvasElement = canvasElement!;
   }
 
   // TODO: this method is for migrating from d3.js to fabric.js.
@@ -65,13 +66,12 @@ export class DrawElement {
   }
 
   _afterPosition() {
-    const ele = this.canvasElement;
-    ele && this.engine._addDrawElement(this);
+    this.canvasElement && this.engine._addDrawElement(this);
   }
 
   // TODO: this method is for migrating from d3.js to fabric.js.
   // This should be replaced by a more suitable way.
-  position(x: any, y: any) {
+  position(x: number, y: number) {
     this.canvasElement?.set("left", x);
     this.canvasElement?.set("top", y);
     this._afterPosition();

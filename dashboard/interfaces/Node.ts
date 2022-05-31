@@ -17,6 +17,7 @@
 import { Host } from "./Host";
 import { ParallelUnit } from "./ParallelUnit";
 import { ColumnDesc } from "./Column";
+import { ActorProto } from "./Actor";
 
 export interface Node {
   id: number;
@@ -207,4 +208,8 @@ export interface ShellNode {
   id: number;
   nextNodes?: ShellNode[];
   parentNodes: ShellNode[];
+}
+
+export interface Fragments extends ShellNode {
+  actor: ActorProto;
 }

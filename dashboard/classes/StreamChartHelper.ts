@@ -7,11 +7,12 @@ import {
   hashIpv4Index,
   newNumberArray,
 } from "@lib/util";
-import { WorkerNode } from "@interfaces/Node";
+import { Fragments, ShellNode, WorkerNode } from "@interfaces/Node";
 import { cloneDeep, max } from "lodash";
 import * as d3 from "d3";
 import { getConnectedComponent, treeBfs } from "@lib/algo";
 import { TwoGradient } from "@lib/color";
+import { StreamNode } from "./StreamNode";
 
 export class StreamChartHelper {
   topGroup: Group;
@@ -22,19 +23,19 @@ export class StreamChartHelper {
   streamPlan: StreamPlanParser;
 
   constructor(
-    g: Group,
+    group: Group,
     data: Actors[],
     onNodeClick: Function,
     onActorClick: Function,
     selectedWorkerNode: string,
     shownActorIdList: number[] | null
   ) {
-    this.topGroup = g;
-    this.streamPlan = new StreamPlanParser(data, shownActorIdList);
+    this.topGroup = group;
     this.onNodeClick = onNodeClick;
     this.onActorClick = onActorClick;
     this.selectedWorkerNode = selectedWorkerNode;
     this.selectedWorkerNodeStr = selectedWorkerNode;
+    this.streamPlan = new StreamPlanParser(data, shownActorIdList); // parse data (actors.json) to StreamNode
   }
 
   getMvTableIdToSingleViewActorList() {
@@ -489,7 +490,7 @@ export class StreamChartHelper {
     }
 
     // draw nodes
-    treeBfs(rootNode, (node) => {
+    treeBfs(rootNode, (node: any) => {
       node.d3Selection = group
         .append("circle")
         .init(node.x, node.y, operatorNodeRadius)
@@ -500,7 +501,7 @@ export class StreamChartHelper {
         .style("stroke-width", operatorNodeStrokeWidth)
         .on("click", (e) => onNodeClicked(e, node, actor));
       group
-        .append("text")(node.type ? node.type : node.dispatcherType)
+        .append("text")(node.type ? node.type : node.dispatchType)
         .position(node.x, node.y + operatorNodeRadius + 10)
         .attr("font-size", fontSize);
     });
@@ -679,9 +680,8 @@ export class StreamChartHelper {
   }
 
   /**
-   * A flow is an extracted connected component of actors of
-   * the raw response from the meta node. This method will first
-   * merge actors in the same fragment using some identifier
+   * A flow is an extracted connected component of actors of the raw response from the meta node.
+   * This method will first merge actors in the same fragment using some identifier
    * (currently it is the id of the operator before the dispatcher).
    * And then use `drawFlow()` to draw each connected component.
    */
@@ -691,35 +691,45 @@ export class StreamChartHelper {
     const baseY = 0;
     g.attr("id", "");
 
-    // Set<ActorProto>
+    // set<ActorProto> that actorProtos have same fragmentID
     const fragmentRepresentedActors = this.streamPlan.fragmentRepresentedActors;
 
     // get dag layout of these actors
-    const dagNodeMap = new Map();
+    const dagNodeMap = new Map<number, Fragments>();
     for (const actor of fragmentRepresentedActors) {
-      // actor.rootNode.actorId {operatorId}
-      actor.rootNode.actorId = actor.actorId;
-      treeBfs(actor.rootNode, (node: any) => {
-        node.actorId = actor.actorId;
-        return false;
-      });
-      dagNodeMap.set(actor.actorId, { id: actor.actorId, nextNodes: [], actor: actor });
+      // TODO: remove duplicates
+
+      // actor.rootNode!.actorId = actor.actorId;
+
+      // treeBfs(actor.rootNode, (node: StreamNode) => {
+      //   node.actorId = actor.actorId;
+      //   return false; // continue traversing
+      // });
+
+      const shellActor: Fragments = {
+        actor: actor,
+        nextNodes: [],
+        parentNodes: [],
+        id: actor.actorId,
+      };
+
+      dagNodeMap.set(actor.actorId, shellActor);
     }
+
     for (const actor of fragmentRepresentedActors) {
-      for (const outputActorNode of actor.output) {
-        const outputDagNode = dagNodeMap.get(outputActorNode.actorId);
-        if (outputDagNode) {
-          // the output actor node is in a represented actor
-          dagNodeMap.get(actor.actorId).nextNodes.push(outputDagNode);
+      if (actor.output.length) {
+        for (const ouputNode of actor.output) {
+          const outputDagNode = dagNodeMap.get(ouputNode.actorId);
+
+          if (outputDagNode) {
+            // the output actor node is in a represented actor
+            dagNodeMap.get(actor.actorId)!.nextNodes!.push(outputDagNode);
+          }
         }
       }
     }
-    const actorDagNodes = [];
-    for (const id of dagNodeMap.keys()) {
-      actorDagNodes.push(dagNodeMap.get(id));
-    }
 
-    const actorsList = getConnectedComponent(actorDagNodes);
+    const actorsList = getConnectedComponent([...dagNodeMap.values()]);
 
     let y = baseY;
     for (const actorDagList of actorsList) {

@@ -25,7 +25,7 @@ export class CanvasEngine {
   width: number;
   canvas: fabric.Canvas;
   clazzMap: Map<string, Set<DrawElement>>;
-  topGroup: Group;
+  // topGroup: Group;
   gridMapper: GridMapper;
   canvasElementToDrawElement: Map<any, any>;
   isDragging: boolean = false;
@@ -41,7 +41,6 @@ export class CanvasEngine {
     this.width = width;
     this.height = height;
     this.clazzMap = new Map();
-    this.topGroup = new Group({ engine: this });
     this.gridMapper = new GridMapper();
     this.canvasElementToDrawElement = new Map();
 
@@ -92,6 +91,7 @@ export class CanvasEngine {
     });
 
     this.canvas = canvas;
+    // this.topGroup = new Group({ engine: this, canvasElement: new fabric.Object() });
   }
 
   async moveCamera(deltaX: number, deltaY: number) {
@@ -217,7 +217,7 @@ export class CanvasEngine {
     const zoom = this.canvas.getZoom() * 1;
     this.canvas.setZoom(zoom);
     const vpt = this.canvas.viewportTransform;
-    console.log(vpt);
+
     if (vpt) {
       vpt[4] = 0;
       vpt[5] = 0;

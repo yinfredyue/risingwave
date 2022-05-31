@@ -17,6 +17,8 @@
 import { ActorProto, Actors } from "@interfaces/Actor";
 import { CanvasEngine } from "@classes/CanvasEngine";
 import { StreamChartHelper } from "@classes/StreamChartHelper";
+import { Group } from "@classes/Group";
+import { fabric } from "fabric";
 
 // Actor constant
 //
@@ -72,14 +74,17 @@ export default function createView(
   selectedWorkerNode: string,
   shownActorIdList: number[] | null
 ) {
+  // TODO: I remove CanvasEngine's group property, and transfer to StreamChartHelper
+  const group = new Group({ engine: engine, canvasElement: new fabric.Group() });
   const streamChartHelper = new StreamChartHelper(
-    engine.topGroup,
+    group,
     data,
     onNodeClick,
     onActorClick,
     selectedWorkerNode,
     shownActorIdList
   );
+
   streamChartHelper.drawManyFlow();
   return streamChartHelper;
 }

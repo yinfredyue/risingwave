@@ -15,7 +15,7 @@
  *
  */
 
-import { ShellNode } from "@interfaces/Node";
+import { Fragments, ShellNode } from "@interfaces/Node";
 import { newMatrix } from "./util";
 
 /**
@@ -28,6 +28,7 @@ import { newMatrix } from "./util";
  */
 export function treeBfs(root: any, step: Function) {
   const queue = [root];
+
   while (queue.length) {
     const c = queue.shift();
 
@@ -72,13 +73,11 @@ export function graphBfs(root: ShellNode, step: Function, neighborListKey?: stri
 }
 
 /**
- * Group nodes in the same connected component. The method will not
- * change the input. The output contains the original references.
- * @param {Array<{nextNodes: []}>} nodes
+ * Group nodes in the same connected component. The method will not change the input. The output contains the original references.
  * @returns {Array<Array<any>>} A list of groups containing
  * nodes in the same connected component
  */
-export function getConnectedComponent(nodes: any) {
+export function getConnectedComponent(nodes: Fragments[]) {
   const node2shellNodes = new Map();
 
   for (const node of nodes) {
@@ -93,10 +92,12 @@ export function getConnectedComponent(nodes: any) {
   // make a shell non-directed graph from the original DAG.
   for (const node of nodes) {
     const shellNode = node2shellNodes.get(node);
-    for (const nextNode of node.nextNodes) {
-      const nextShellNode = node2shellNodes.get(nextNode);
-      shellNode.nextNodes.push(nextShellNode);
-      nextShellNode.nextNodes.push(shellNode);
+    if (node.nextNodes) {
+      for (const nextNode of node.nextNodes) {
+        const nextShellNode = node2shellNodes.get(nextNode);
+        shellNode.nextNodes.push(nextShellNode);
+        nextShellNode.nextNodes.push(shellNode);
+      }
     }
   }
 
