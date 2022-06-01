@@ -708,8 +708,10 @@ export class StreamChartHelper {
 
     // set<ActorProto> that actorProtos have same fragmentID
     const fragmentRepresentedActors = this.streamPlan.fragmentRepresentedActors;
+    // console.log("drawManyFlow fragmentRepresentedActors:", fragmentRepresentedActors);
 
     // get dag layout of these actors
+    // TODO: this is also duplicates, since it just connect actors by fragments and nextNodes
     const dagNodeMap = new Map<number, Fragments>();
     for (const actor of fragmentRepresentedActors) {
       // TODO: remove duplicates
@@ -744,6 +746,7 @@ export class StreamChartHelper {
         }
       }
     }
+    console.log("[...dagNodeMap.values()]: ", [...dagNodeMap.values()]);
 
     const actorsList = getConnectedComponent([...dagNodeMap.values()]);
 

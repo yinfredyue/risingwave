@@ -164,7 +164,7 @@ export interface TopN {
 
 export interface OperatorNode {
   [key: string]: any;
-  operatorId: string;
+  operatorId?: string;
   topN?: TopN;
   chain?: Chain;
   merge?: Merge;
