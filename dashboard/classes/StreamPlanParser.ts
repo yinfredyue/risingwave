@@ -40,7 +40,7 @@ export default class StreamPlanParser {
     this.fragmentRepresentedActors = new Set();
     this.shownActorSet = new Set(shownActorList);
 
-    const fragmentId2actorList = new Map<number, ActorProto[]>();
+    const fragmentId2actorList = new Map<number, number[]>();
     // TODO: try to use BFS once to get all the structures
     // every actor will have unique actorId and fragmentId that will cover 3 actors
     // if an actor has upstreamActorId (3x) then it's not in a root fragment, otherwise it is the root fragment
@@ -66,9 +66,9 @@ export default class StreamPlanParser {
 
         if (!fragmentId2actorList.has(fragmentId)) {
           this.fragmentRepresentedActors.add(proto);
-          fragmentId2actorList.set(fragmentId, [proto]);
+          fragmentId2actorList.set(fragmentId, [proto.actorId]);
         } else {
-          fragmentId2actorList.get(fragmentId)!.push(proto);
+          fragmentId2actorList.get(fragmentId)!.push(proto.actorId);
         }
         this.actorId2Proto.set(actor.actorId, proto);
       }
@@ -77,15 +77,14 @@ export default class StreamPlanParser {
     const fragmentDownstreamNeighbour = new Map<number, number[]>();
     for (const [fragmentId, actorList] of fragmentId2actorList.entries()) {
       const downStreams = new Set<number>();
-      for (const actor of actorList) {
+      for (const actorId of actorList) {
+        const actor = this.actorId2Proto.get(actorId)!;
         this.parseActor(actor);
 
-        const actorsList = actorList.sort((a, b) => a.actorId - b.actorId);
-        actor.representedActorList = actorsList;
-        actor.representedWorkNodes = new Set();
+        actor.representedActorList = actorList;
 
-        for (const representedActor of actor.representedActorList) {
-          actor.representedWorkNodes.add(representedActor.computeNodeAddress);
+        if (actor.representedWorkNodes) {
+          actor.representedWorkNodes.add(actor.computeNodeAddress);
         }
 
         if (actor.dispatcher?.at(0)?.downstreamActorId) {
@@ -163,7 +162,7 @@ export default class StreamPlanParser {
 
       const representedList = this.actorId2Proto.get(actorId)!.representedActorList!;
       for (const actor of representedList) {
-        chainViewList.add(actor.actorId);
+        chainViewList.add(actor);
       }
 
       mvTableIdToChainViewActorList.set(MVNode.typeInfo.tableRefId.tableId, [
@@ -207,7 +206,7 @@ export default class StreamPlanParser {
 
       const representedList = this.actorId2Proto.get(actorId)!.representedActorList!;
       for (const actor of representedList) {
-        list.push(actor.actorId);
+        list.push(actor);
       }
       mvTableIdToSingleViewActorList.set(MVNode.typeInfo.tableRefId.tableId, list);
     }

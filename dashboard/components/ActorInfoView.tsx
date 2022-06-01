@@ -47,22 +47,14 @@ export function ActorInfoView({ actor }: Props) {
           alignItems="center"
         >
           <Typography variant="subtitle1" color="#1976D2">
-            Actor {act.actorId}
+            Actor {act}
           </Typography>
-          <Link
-            target="_blank"
-            rel="noopener noreferrer"
-            href={generateMessageTraceLink(act.actorId)}
-          >
-            <Button variant="outlined"> Trace Message of Actor #{act.actorId} </Button>
+          <Link target="_blank" rel="noopener noreferrer" href={generateMessageTraceLink(act)}>
+            <Button variant="outlined"> Trace Message of Actor #{act} </Button>
           </Link>
-          <Link
-            target="_blank"
-            rel="noopener noreferrer"
-            href={generateEpochTraceLink(act.actorId)}
-          >
+          <Link target="_blank" rel="noopener noreferrer" href={generateEpochTraceLink(act)}>
             <Button variant="outlined">
-              Trace Epoch {"-1"} of Actor #{act.actorId}
+              Trace Epoch {"-1"} of Actor #{act}
             </Button>
           </Link>
         </Stack>

@@ -34,7 +34,7 @@ export interface ActorProto extends Actor {
   rootNode: StreamNode | null;
   downstreamActorId?: number[];
   representedWorkNodes?: Set<string>;
-  representedActorList?: ActorProto[];
+  representedActorList?: number[];
 }
 
 export interface Actors {

@@ -438,8 +438,8 @@ export class StreamChartHelper {
     // draw box
     group.attr("id", "actor-" + actor.actorId);
     let actorRect = group.append("rect");
-    for (let representedActor of actor.representedActorList) {
-      actorRect.classed("actor-" + representedActor.actorId, true);
+    for (const representedActor of actor.representedActorList) {
+      actorRect.classed("actor-" + representedActor, true);
     }
     actorRect.classed("fragment-" + actor.fragmentId, true);
     actorRect
@@ -455,14 +455,17 @@ export class StreamChartHelper {
       .attr("font-size", fontSize);
 
     // draw compute node label
-    let computeNodeToActorIds = new Map();
-    for (let representedActor of actor.representedActorList) {
-      if (computeNodeToActorIds.has(representedActor.computeNodeAddress)) {
+    const computeNodeToActorIds = new Map();
+    for (const actorId of actor.representedActorList) {
+      const representedActor = this.streamPlan.getActor(actorId);
+      if (computeNodeToActorIds.has(representedActor?.computeNodeAddress)) {
         computeNodeToActorIds
-          .get(representedActor.computeNodeAddress)
-          .push(representedActor.actorId);
+          .get(representedActor?.computeNodeAddress)
+          .push(representedActor?.actorId);
       } else {
-        computeNodeToActorIds.set(representedActor.computeNodeAddress, [representedActor.actorId]);
+        computeNodeToActorIds.set(representedActor?.computeNodeAddress, [
+          representedActor?.actorId,
+        ]);
       }
     }
     let labelStartX = baseX + actorBoxStroke;
