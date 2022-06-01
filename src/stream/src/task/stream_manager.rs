@@ -641,7 +641,7 @@ impl LocalStreamManagerCore {
                     actor.run().await.expect("actor failed");
                 })),
             );
-          
+
             {
                 let actor_id_str = actor_id.to_string();
                 let metrics_monitor = monitor.clone();
@@ -651,7 +651,11 @@ impl LocalStreamManagerCore {
                         metrics
                             .actor_schedule_count
                             .with_label_values(&[&actor_id_str])
-                            .inc_by((interval.total_scheduled_duration.subsec_millis() as u64).try_into().unwrap());
+                            .inc_by(
+                                (interval.total_scheduled_duration.subsec_millis() as u64)
+                                    .try_into()
+                                    .unwrap(),
+                            );
 
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     }

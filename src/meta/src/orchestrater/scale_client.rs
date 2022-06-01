@@ -2,6 +2,7 @@ use anyhow::{anyhow, Ok};
 use hyper::{Body, Client, Request, Uri};
 use risingwave_common::error::Result;
 use serde::{Deserialize, Serialize};
+
 #[derive(Debug)]
 pub struct ScaleClient {
     address: String,

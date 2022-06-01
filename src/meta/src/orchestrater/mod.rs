@@ -1,5 +1,6 @@
-mod scale_client;
 mod graph_orchestrater;
+mod promql_client;
+mod scale_client;
 
 use risingwave_common::error::Result;
 use tokio::sync::mpsc::Receiver;
@@ -43,7 +44,6 @@ pub async fn start_orchestrater(
     });
     Ok((handler, shutdown_send))
 }
-
 
 pub async fn orchestrate() {
     // TODO Run orchestrate

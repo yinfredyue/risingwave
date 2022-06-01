@@ -55,9 +55,9 @@ pub async fn trace(
                     .with_label_values(&[&actor_id_string])
                     .inc_by(chunk.cardinality() as u64);
                 metrics
-                .executor_output_row_count
-                .with_label_values(&[&actor_id_string, &info.identity])
-                .inc_by(chunk.cardinality() as u64);
+                    .executor_output_row_count
+                    .with_label_values(&[&actor_id_string, &info.identity])
+                    .inc_by(chunk.cardinality() as u64);
                 event!(tracing::Level::TRACE, prev = %info.identity, msg = "chunk", "input = \n{:#?}", chunk);
             }
         }

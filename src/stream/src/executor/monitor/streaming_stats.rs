@@ -94,7 +94,7 @@ impl StreamingMetrics {
             actor_schedule_count,
             source_output_row_count,
             exchange_recv_size,
-            executor_output_row_count
+            executor_output_row_count,
         }
     }
 
