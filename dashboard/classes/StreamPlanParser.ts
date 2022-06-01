@@ -25,7 +25,7 @@ export default class StreamPlanParser {
   parsedNodeMap: Map<string, StreamNode>;
   actorId2Proto: Map<number, ActorProto>;
   actorId2MVNodes: Map<number, StreamNode>;
-  fragmentRepresentedActors: Set<ActorProto>;
+  fragmentRepresentedActors: Set<ActorProto>; // Randomly select a actor to represent its fragment
   mvTableIdToChainViewActorList: Map<number, number[]>;
   mvTableIdToSingleViewActorList: Map<number, number[]>;
 
@@ -33,12 +33,13 @@ export default class StreamPlanParser {
     this.actorId2Proto = new Map();
     this.parsedNodeMap = new Map();
     this.actorId2MVNodes = new Map();
+    this.fragmentRepresentedActors = new Set();
     this.shownActorSet = new Set(shownActorList);
 
+    const fragmentId2actorList = new Map<number, ActorProto[]>();
     // TODO: try to use BFS once to get all the structures
     for (const data of datas) {
       const { host, port } = data.node.host;
-
       for (const actor of data.actors) {
         if (shownActorList && !this.shownActorSet.has(actor.actorId)) {
           continue;
@@ -51,17 +52,31 @@ export default class StreamPlanParser {
           computeNodeAddress: `${host}:${port}`,
         };
 
+        if (!fragmentId2actorList.has(actor.fragmentId)) {
+          this.fragmentRepresentedActors.add(proto);
+          fragmentId2actorList.set(actor.fragmentId, [proto]);
+        } else {
+          fragmentId2actorList.get(actor.fragmentId)!.push(proto);
+        }
+
         this.actorId2Proto.set(actor.actorId, proto);
       }
     }
 
-    // since all the actorProtos are parsed and stored in actorId2Proto Map,
-    // we dont need ~~parsedActorMap~~ and ~~parsedActorList~~
     for (const actor of this.actorId2Proto.values()) {
       this.parseActor(actor);
-    }
+      const actorsList = fragmentId2actorList
+        .get(actor.fragmentId)!
+        .sort((a, b) => a.actorId - b.actorId);
 
-    this.fragmentRepresentedActors = this._constructRepresentedActorList();
+      actor.representedActorList = actorsList;
+      actor.representedWorkNodes = new Set();
+
+      for (const representedActor of actor.representedActorList) {
+        actor.representedWorkNodes.add(representedActor.computeNodeAddress);
+      }
+    }
+    // TODO: use BFS to search chain-view and single-view
     this.mvTableIdToChainViewActorList = this._constructChainViewMvList();
     this.mvTableIdToSingleViewActorList = this._constructSingleViewMvList();
   }
@@ -94,45 +109,6 @@ export default class StreamPlanParser {
 
     shellNodes.set(actorId, shellNode);
     return shellNode;
-  }
-
-  /**
-   * Randomly select a actor to represent its fragment,
-   * and append a property named `representedActorList`
-   * to store all the other actors in the same fragement.
-   *
-   * Actors are degree of parallelism of a fragment, such that one of
-   * the actor in a fragement can represent all the other actor in
-   * the same fragment.
-   *
-   * @returns A Set containing actors representing its fragment.
-   */
-  _constructRepresentedActorList() {
-    const fragmentId2actorList = new Map<number, ActorProto[]>();
-    const fragmentRepresentedActors = new Set<ActorProto>();
-
-    for (const actor of this.actorId2Proto.values()) {
-      if (!fragmentId2actorList.has(actor.fragmentId)) {
-        fragmentRepresentedActors.add(actor);
-        fragmentId2actorList.set(actor.fragmentId, [actor]);
-      } else {
-        fragmentId2actorList.get(actor.fragmentId)!.push(actor);
-      }
-    }
-
-    for (const actor of this.actorId2Proto.values()) {
-      const actorsList = fragmentId2actorList
-        .get(actor.fragmentId)!
-        .sort((a, b) => a.actorId - b.actorId);
-
-      actor.representedActorList = actorsList;
-      actor.representedWorkNodes = new Set();
-
-      for (const representedActor of actor.representedActorList) {
-        actor.representedWorkNodes.add(representedActor.computeNodeAddress);
-      }
-    }
-    return fragmentRepresentedActors;
   }
 
   /**
@@ -245,7 +221,7 @@ export default class StreamPlanParser {
       rootNode = this.parseNode(actorId, actorProto.nodes);
     }
     actorProto.rootNode = rootNode!;
-
+    console.log(actorProto);
     return actorProto;
   }
 

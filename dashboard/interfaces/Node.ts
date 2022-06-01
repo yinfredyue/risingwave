@@ -164,6 +164,7 @@ export interface TopN {
 
 export interface OperatorNode {
   [key: string]: any;
+  operatorId: string;
   topN?: TopN;
   chain?: Chain;
   merge?: Merge;
@@ -176,7 +177,6 @@ export interface OperatorNode {
   hashAgg?: HashAgg;
   pkIndices?: number[];
   hashJoin?: HashJoin;
-  operatorId?: string;
   appendOnly?: boolean;
   batchPlan?: BatchPlan;
   input?: OperatorNode[];

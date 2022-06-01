@@ -27,11 +27,11 @@ export class CanvasEngine {
   clazzMap: Map<string, Set<DrawElement>>;
   // topGroup: Group;
   gridMapper: GridMapper;
-  canvasElementToDrawElement: Map<any, any>;
   isDragging: boolean = false;
   selection: boolean = false;
   lastPosX: number | undefined;
   lastPosY: number | undefined;
+  canvasElementToDrawElement: Map<any, any>;
 
   constructor(canvasId: string, height: number, width: number) {
     const canvas = new fabric.Canvas(canvasId);
@@ -229,10 +229,10 @@ export class CanvasEngine {
    * free memory. All objects in the canvas will be removed.
    */
   cleanGraph() {
-    console.log("clean called", this.canvas);
+    console.log("clean called");
     try {
-      if (this.canvas._objects) {
-        this.canvas.dispose();
+      for (const object of this.canvas.getObjects()) {
+        this.canvas.remove(object);
       }
     } catch (err) {
       console.error(err);
