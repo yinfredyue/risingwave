@@ -31,6 +31,8 @@ use crate::vector_op::conjunction;
 use crate::vector_op::length::length_default;
 use crate::vector_op::lower::lower;
 use crate::vector_op::ltrim::ltrim;
+use crate::vector_op::md5::md5;
+use crate::vector_op::round::*;
 use crate::vector_op::rtrim::rtrim;
 use crate::vector_op::trim::trim;
 use crate::vector_op::upper::upper;
@@ -204,6 +206,22 @@ macro_rules! gen_unary_atm_expr  {
     };
 }
 
+macro_rules! gen_round_expr {
+    (
+        $expr_name:literal,
+        $child:expr,
+        $ret:expr,
+        $float64_round_func:ident,
+        $decimal_round_func:ident
+    ) => {
+        gen_unary_impl! {
+            [$expr_name, $child, $ret],
+            { float64, float64, $float64_round_func },
+            { decimal, decimal, $decimal_round_func },
+        }
+    };
+}
+
 pub fn new_unary_expr(
     expr_type: ProstType,
     return_type: DataType,
@@ -260,6 +278,11 @@ pub fn new_unary_expr(
             return_type,
             lower,
         )),
+        (ProstType::Md5, _, _) => Box::new(UnaryBytesExpression::<Utf8Array, _>::new(
+            child_expr,
+            return_type,
+            md5,
+        )),
         (ProstType::Ascii, _, _) => Box::new(UnaryExpression::<Utf8Array, I32Array, _>::new(
             child_expr,
             return_type,
@@ -278,6 +301,15 @@ pub fn new_unary_expr(
                     {decimal, decimal, decimal_abs},
                 }
             }
+        }
+        (ProstType::Ceil, _, _) => {
+            gen_round_expr! {"Ceil", child_expr, return_type, ceil_f64, ceil_decimal}
+        }
+        (ProstType::Floor, _, _) => {
+            gen_round_expr! {"Floor", child_expr, return_type, floor_f64, floor_decimal}
+        }
+        (ProstType::Round, _, _) => {
+            gen_round_expr! {"Ceil", child_expr, return_type, round_f64, round_decimal}
         }
         (expr, ret, child) => {
             return Err(ErrorCode::NotImplemented(format!(
@@ -368,7 +400,7 @@ mod tests {
                 .map(|x| Arc::new(x.into()))
                 .unwrap(),
         );
-        let data_chunk = DataChunk::builder().columns(vec![col1]).build();
+        let data_chunk = DataChunk::new(vec![col1], 100);
         let return_type = DataType {
             type_name: TypeName::Int32 as i32,
             is_nullable: false,
@@ -415,7 +447,7 @@ mod tests {
                 .map(|x| Arc::new(x.into()))
                 .unwrap(),
         );
-        let data_chunk = DataChunk::builder().columns(vec![col1]).build();
+        let data_chunk = DataChunk::new(vec![col1], 3);
         let return_type = DataType {
             type_name: TypeName::Int32 as i32,
             is_nullable: false,
@@ -468,7 +500,7 @@ mod tests {
                 .map(|x| Arc::new(x.into()))
                 .unwrap(),
         );
-        let data_chunk = DataChunk::builder().columns(vec![col1]).build();
+        let data_chunk = DataChunk::new(vec![col1], 1);
         let return_type = DataType {
             type_name: TypeName::Int16 as i32,
             is_nullable: false,
@@ -527,7 +559,7 @@ mod tests {
                 .map(|x| Arc::new(x.into()))
                 .unwrap(),
         );
-        let data_chunk = DataChunk::builder().columns(vec![col1]).build();
+        let data_chunk = DataChunk::new(vec![col1], 100);
         let expr = make_expression(kind, &[TypeName::Boolean], &[0]);
         let vec_executor = build_from_prost(&expr).unwrap();
         let res = vec_executor.eval(&data_chunk).unwrap();
@@ -570,7 +602,7 @@ mod tests {
                 .map(|x| Arc::new(x.into()))
                 .unwrap(),
         );
-        let data_chunk = DataChunk::builder().columns(vec![col1]).build();
+        let data_chunk = DataChunk::new(vec![col1], 100);
         let expr = make_expression(kind, &[TypeName::Date], &[0]);
         let vec_executor = build_from_prost(&expr).unwrap();
         let res = vec_executor.eval(&data_chunk).unwrap();
