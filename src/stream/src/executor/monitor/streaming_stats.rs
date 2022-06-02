@@ -22,8 +22,10 @@ pub struct StreamingMetrics {
     pub actor_row_count: GenericCounterVec<AtomicU64>,
     pub actor_processing_time: GenericGaugeVec<AtomicF64>,
     pub actor_barrier_time: GenericGaugeVec<AtomicF64>,
+    pub actor_schedule_count: GenericCounterVec<AtomicU64>,
     pub source_output_row_count: GenericCounterVec<AtomicU64>,
     pub exchange_recv_size: GenericCounterVec<AtomicU64>,
+    pub executor_output_row_count: GenericCounterVec<AtomicU64>,
 }
 
 impl StreamingMetrics {
@@ -31,6 +33,14 @@ impl StreamingMetrics {
         let actor_row_count = register_int_counter_vec_with_registry!(
             "stream_actor_row_count",
             "Total number of rows that have been output from each actor",
+            &["actor_id"],
+            registry
+        )
+        .unwrap();
+
+        let actor_schedule_count = register_int_counter_vec_with_registry!(
+            "stream_actor_schedule_count",
+            "Total sceduled duration for each actor (ms)",
             &["actor_id"],
             registry
         )
@@ -68,13 +78,23 @@ impl StreamingMetrics {
         )
         .unwrap();
 
+        let executor_output_row_count = register_int_counter_vec_with_registry!(
+            "executor_output_row_count",
+            "Total number of rows that have been output from executor",
+            &["actor_id", "executor_id"],
+            registry
+        )
+        .unwrap();
+
         Self {
             registry,
             actor_row_count,
             actor_processing_time,
             actor_barrier_time,
+            actor_schedule_count,
             source_output_row_count,
             exchange_recv_size,
+            executor_output_row_count,
         }
     }
 

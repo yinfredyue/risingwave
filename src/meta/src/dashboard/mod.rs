@@ -22,6 +22,7 @@ use axum::response::{Html, IntoResponse};
 use axum::routing::{get, get_service};
 use axum::Router;
 use risingwave_common::error::ErrorCode;
+use tokio::sync::mpsc::Sender;
 use tower::ServiceBuilder;
 use tower_http::add_extension::AddExtensionLayer;
 use tower_http::cors::{self, CorsLayer};
@@ -36,6 +37,7 @@ pub struct DashboardService<S: MetaStore> {
     pub dashboard_addr: SocketAddr,
     pub cluster_manager: ClusterManagerRef<S>,
     pub fragment_manager: FragmentManagerRef<S>,
+    pub orchestrate_sender: Sender<()>,
 
     // TODO: replace with catalog manager.
     pub meta_store: Arc<S>,
@@ -100,6 +102,11 @@ mod handlers {
         Ok(Json(materialized_views))
     }
 
+    pub async fn orchestrate<S: MetaStore>(Extension(srv): Extension<Service<S>>) -> Result<()> {
+        srv.orchestrate_sender.send(()).await.map_err(err)?;
+        Ok(())
+    }
+
     pub async fn list_actors<S: MetaStore>(
         Extension(srv): Extension<Service<S>>,
     ) -> Result<Json<Vec<ActorLocation>>> {
@@ -149,6 +156,7 @@ where
             .route("/clusters/:ty", get(list_clusters::<S>))
             .route("/actors", get(list_actors::<S>))
             .route("/fragments", get(list_table_fragments::<S>))
+            .route("/orchestrate", get(orchestrate::<S>))
             .route("/materialized_views", get(list_materialized_views::<S>))
             .layer(
                 ServiceBuilder::new()

@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+use core::time::Duration;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -74,7 +74,6 @@ pub struct LocalStreamManagerCore {
 
     /// Metrics of the stream manager
     streaming_metrics: Arc<StreamingMetrics>,
-
     /// The pool of compute clients.
     ///
     /// TODO: currently the client pool won't be cleared. Should remove compute clients when
@@ -634,13 +633,34 @@ impl LocalStreamManagerCore {
                 self.streaming_metrics.clone(),
                 actor_context,
             );
+            let monitor = tokio_metrics::TaskMonitor::new();
             self.handles.insert(
                 actor_id,
-                tokio::spawn(async move {
+                tokio::spawn(monitor.instrument(async move {
                     // unwrap the actor result to panic on error
                     actor.run().await.expect("actor failed");
-                }),
+                })),
             );
+
+            {
+                let actor_id_str = actor_id.to_string();
+                let metrics_monitor = monitor.clone();
+                let metrics = self.streaming_metrics.clone();
+                tokio::spawn(async move {
+                    for interval in metrics_monitor.intervals() {
+                        metrics
+                            .actor_schedule_count
+                            .with_label_values(&[&actor_id_str])
+                            .inc_by(
+                                (interval.total_scheduled_duration.subsec_millis() as u64)
+                                    .try_into()
+                                    .unwrap(),
+                            );
+
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                });
+            }
         }
 
         Ok(())
