@@ -115,7 +115,6 @@ impl StreamService for StreamServiceImpl {
         &self,
         request: Request<ForceStopActorsRequest>,
     ) -> std::result::Result<Response<ForceStopActorsResponse>, Status> {
-        tracing::info!("gogoho");
         let req = request.into_inner();
         let epoch = req.epoch.unwrap();
         self.mgr

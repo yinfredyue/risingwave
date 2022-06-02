@@ -118,7 +118,7 @@ pub async fn start(opts: MetaNodeOpts) {
     let max_heartbeat_interval = Duration::from_millis(opts.max_heartbeat_interval as u64);
     let checkpoint_interval =
         Duration::from_millis(compute_config.streaming.checkpoint_interval_ms as u64);
-
+    let in_flight_barrier_nums = compute_config.streaming.in_flight_barrier_nums as usize;
     tracing::info!("Meta server listening at {}", addr);
     let (join_handle, _shutdown_send) = rpc_serve(
         addr,
@@ -130,6 +130,7 @@ pub async fn start(opts: MetaNodeOpts) {
         MetaOpts {
             enable_recovery: !opts.disable_recovery,
             checkpoint_interval,
+            in_flight_barrier_nums,
         },
     )
     .await

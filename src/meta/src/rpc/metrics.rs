@@ -34,6 +34,11 @@ pub struct MetaMetrics {
     /// latency of each barrier
     pub barrier_latency: Histogram,
 
+    /// latency between each barrier send
+    pub barrier_send_latency: Histogram,
+    /// the nums of in-flight barrier
+    pub barrier_nums: IntGaugeVec,
+
     /// max committed epoch
     pub max_committed_epoch: IntGauge,
     /// num of uncommitted SSTs,
@@ -77,6 +82,21 @@ impl MetaMetrics {
             exponential_buckets(0.1, 1.5, 16).unwrap() // max 43s
         );
         let barrier_latency = register_histogram_with_registry!(opts, registry).unwrap();
+
+        let opts = histogram_opts!(
+            "meta_barrier_send_duration_seconds",
+            "barrier send latency",
+            exponential_buckets(0.0001, 2.0, 20).unwrap() // max 52s
+        );
+        let barrier_send_latency = register_histogram_with_registry!(opts, registry).unwrap();
+
+        let barrier_nums = register_int_gauge_vec_with_registry!(
+            "barrier_nums",
+            "num of of in_flight_barrier",
+            &["level_index"],
+            registry
+        )
+        .unwrap();
 
         let max_committed_epoch = register_int_gauge_with_registry!(
             "storage_max_committed_epoch",
@@ -176,6 +196,8 @@ impl MetaMetrics {
 
             grpc_latency,
             barrier_latency,
+            barrier_send_latency,
+            barrier_nums,
 
             max_committed_epoch,
             uncommitted_sst_num,

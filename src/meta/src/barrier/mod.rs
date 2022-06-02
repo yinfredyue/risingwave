@@ -41,7 +41,7 @@ use self::command::CommandContext;
 use self::info::BarrierActorInfo;
 use self::notifier::Notifier;
 use self::progress::CreateMviewProgressTracker;
-use crate::barrier::BarrierEpochState::{Complete, Fail};
+use crate::barrier::BarrierEpochState::{Complete, Fail, InFlight};
 use crate::cluster::{ClusterManagerRef, META_NODE_ID};
 use crate::hummock::HummockManagerRef;
 use crate::manager::{CatalogManagerRef, MetaSrvEnv};
@@ -184,10 +184,12 @@ pub struct GlobalBarrierManager<S: MetaStore> {
     wait_build_actor: Arc<AtomicBool>,
 
     command_ctx_queue: Arc<RwLock<VecDeque<EpochNode<S>>>>,
+
+    in_flight_barrier_nums: usize,
 }
 
 struct EpochNode<S> {
-    timer: HistogramTimer,
+    timer: Option<HistogramTimer>,
     result: Option<Result<Vec<InjectBarrierResponse>>>,
     states: BarrierEpochState,
     command_ctx: Arc<CommandContext<S>>,
@@ -195,7 +197,7 @@ struct EpochNode<S> {
 }
 #[derive(PartialEq)]
 enum BarrierEpochState {
-    Pending,
+    InFlight,
     Complete,
     Fail(RwError),
 }
@@ -215,10 +217,12 @@ where
     ) -> Self {
         let enable_recovery = env.opts.enable_recovery;
         let interval = env.opts.checkpoint_interval;
+        let in_flight_barrier_nums = env.opts.in_flight_barrier_nums;
         tracing::info!(
-            "Starting barrier manager with: interval={:?}, enable_recovery={}",
+            "Starting barrier manager with: interval={:?}, enable_recovery={} , in_flight_barrier_nums={}",
             interval,
-            enable_recovery
+            enable_recovery,
+            in_flight_barrier_nums,
         );
 
         Self {
@@ -234,6 +238,7 @@ where
             wait_recovery: Arc::new(AtomicBool::new(false)),
             wait_build_actor: Arc::new(AtomicBool::new(false)),
             command_ctx_queue: Arc::new(RwLock::new(VecDeque::new())),
+            in_flight_barrier_nums,
         }
     }
 
@@ -272,6 +277,7 @@ where
         let mut min_interval = tokio::time::interval(self.interval);
         min_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let (barrier_send_tx, mut barrier_send_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut barrier_timer: Option<HistogramTimer> = None;
         loop {
             tokio::select! {
                 biased;
@@ -323,6 +329,9 @@ where
                     if self.wait_build_actor.load(atomic::Ordering::SeqCst){
                         continue;
                     }
+                    if self.command_ctx_queue.read().await.iter().filter(|x| matches!(x.states, InFlight)).count() >= self.in_flight_barrier_nums{
+                        continue;
+                    }
                 }
                 // Wait for the minimal interval,
                 _ = min_interval.tick() => {
@@ -332,8 +341,16 @@ where
                     if self.wait_build_actor.load(atomic::Ordering::SeqCst){
                         continue;
                     }
+                    if self.command_ctx_queue.read().await.iter().filter(|x| matches!(x.states, InFlight)).count() >= self.in_flight_barrier_nums{
+                        continue;
+                    }
                 }
             }
+
+            if let Some(barrier_timer) = barrier_timer {
+                barrier_timer.observe_duration();
+            }
+            barrier_timer = Some(self.metrics.barrier_send_latency.start_timer());
             let (command, notifiers) = self.scheduled_barriers.pop_or_default().await;
 
             match command {
@@ -377,13 +394,14 @@ where
             let wait_recovery = self.wait_recovery.clone();
             let barrier_send_tx_clone = barrier_send_tx.clone();
             let wait_build_actor = self.wait_build_actor.clone();
+            let metrics = self.metrics.clone();
             let mut notifiers = notifiers;
             notifiers.iter_mut().for_each(Notifier::notify_to_send);
             let timer = self.metrics.barrier_latency.start_timer();
             self.command_ctx_queue.write().await.push_back(EpochNode {
-                timer,
+                timer: Some(timer),
                 result: None,
-                states: BarrierEpochState::Pending,
+                states: InFlight,
                 command_ctx: command_ctx.clone(),
                 notifiers,
             });
@@ -394,13 +412,28 @@ where
                 GlobalBarrierManager::run_inner(
                     env.clone(),
                     &command_ctx,
-                    command_ctx_queue,
+                    command_ctx_queue.clone(),
                     hummock_manager,
                     wait_recovery,
                     wait_build_actor,
                     barrier_send_tx_clone,
                 )
                 .await;
+                let command_ctx_queue = command_ctx_queue.read().await;
+                let in_flight_nums = command_ctx_queue
+                    .iter()
+                    .filter(|x| matches!(x.states, InFlight))
+                    .count();
+                metrics
+                    .barrier_nums
+                    .get_metric_with_label_values(&["in_flight"])
+                    .unwrap()
+                    .set(in_flight_nums as i64);
+                metrics
+                    .barrier_nums
+                    .get_metric_with_label_values(&["all_barrier"])
+                    .unwrap()
+                    .set(command_ctx_queue.len() as i64);
             });
         }
     }
@@ -415,22 +448,30 @@ where
         wait_build_actor: Arc<AtomicBool>,
         barrier_send_tx_clone: UnboundedSender<BarrierSendResult>,
     ) {
-        // Wait for all barriers collected<
+        // Wait for all barriers collected
         let result = GlobalBarrierManager::inject_barrier(env, command_context).await;
 
-        // let mut first_is_complete = false;
+        tracing::info!("epoch isover{:?}", command_context.prev_epoch);
         let mut command_ctx_queue_clone = command_ctx_queue.write().await;
-
+        tracing::info!("epoch len {:?}", command_ctx_queue_clone.len());
         if let Some(node) = command_ctx_queue_clone
             .iter_mut()
             .find(|x| x.command_ctx.prev_epoch == command_context.prev_epoch)
         {
-            assert!(matches!(node.states, BarrierEpochState::Pending));
+            assert!(matches!(node.states, InFlight));
             node.states = Complete;
             node.result = Some(result);
         };
         // first_is_complete = command_ctx_queue_clone.get(0).unwrap().states == Complete;
         if matches!(command_ctx_queue_clone.get(0).unwrap().states, Complete) {
+            tracing::info!(
+                "complete epoch{:?}",
+                command_ctx_queue_clone
+                    .get(0)
+                    .unwrap()
+                    .command_ctx
+                    .prev_epoch
+            );
             let result = GlobalBarrierManager::try_commit_epoch(
                 &mut command_ctx_queue_clone,
                 barrier_send_tx_clone.clone(),
@@ -448,7 +489,7 @@ where
         {
             let count = command_ctx_queue_clone
                 .iter()
-                .filter(|x| matches!(x.states, BarrierEpochState::Pending))
+                .filter(|x| matches!(x.states, InFlight))
                 .count();
             if count == 0 {
                 let new_epoch = command_ctx_queue_clone
@@ -472,8 +513,7 @@ where
                         }
                     };
 
-                    let timer = node.timer;
-                    timer.observe_duration();
+                    node.timer.unwrap().observe_duration();
                     node.notifiers
                         .into_iter()
                         .for_each(|notifier| notifier.notify_collection_failed(err.clone()));
@@ -501,7 +541,7 @@ where
         hummock_manager: HummockManagerRef<S>,
         wait_build_actor: Arc<AtomicBool>,
     ) -> Result<()> {
-        while let Some(node) = command_ctx_queue.get(0) {
+        while let Some(node) = command_ctx_queue.get_mut(0) {
             if matches!(node.states, Complete) {
                 if node.command_ctx.prev_epoch.0 != INVALID_EPOCH {
                     match &node.result {
@@ -530,18 +570,18 @@ where
                         }
                     };
                 }
+
+                node.timer.take().unwrap().observe_duration();
                 node.command_ctx.post_collect().await?;
 
                 // this barrier is commit (not err) , So this node need to pop;
                 let node = command_ctx_queue.pop_front().unwrap();
                 let EpochNode {
-                    timer,
                     result,
                     command_ctx,
                     mut notifiers,
                     ..
                 } = node;
-                timer.observe_duration();
                 let responses = result.unwrap().unwrap();
                 let new_epoch = command_ctx.curr_epoch;
                 // Notify about collected first.
