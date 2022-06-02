@@ -98,13 +98,15 @@ export function getConnectedComponent(nodes: Fragments[]) {
     if (node.nextNodes) {
       for (const nextNode of node.nextNodes) {
         const nextShellNode = node2shellNodes.get(nextNode);
+        // ???
         shellNode.nextNodes.push(nextShellNode);
         nextShellNode.nextNodes.push(shellNode);
       }
     }
   }
 
-  // console.log(node2shellNodes);
+  // TODO: this is literally an adjacent graph
+  console.log(node2shellNodes);
 
   // bfs assign group number
   let cnt = 0;
@@ -124,7 +126,7 @@ export function getConnectedComponent(nodes: Fragments[]) {
     group[shellNode.g].push(node);
   }
 
-  // console.log(group);
   // TODO: why not use adjacent graph?
+  console.log(group);
   return group;
 }

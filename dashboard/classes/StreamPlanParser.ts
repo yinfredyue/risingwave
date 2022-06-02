@@ -21,15 +21,16 @@ import { ActorProto, Actors } from "@interfaces/Actor";
 import { OperatorNode, ShellNode } from "@interfaces/Node";
 
 type Fragment = {
-  nextFragment: number[];
+  nextFragments: number[];
+  representActors: number[];
 };
 
 export default class StreamPlanParser {
   shownActorSet: Set<number>;
   parsedNodeMap: Map<string, StreamNode>;
   actorId2Proto: Map<number, ActorProto>;
+  adjacentFragments: Map<number, Fragment>;
   actorId2MVNodes: Map<number, StreamNode>;
-  fragmentRepresentedActors: Set<ActorProto>; // Randomly select a actor to represent its fragment
   mvTableIdToChainViewActorList: Map<number, number[]>;
   mvTableIdToSingleViewActorList: Map<number, number[]>;
 
@@ -37,10 +38,8 @@ export default class StreamPlanParser {
     this.actorId2Proto = new Map();
     this.parsedNodeMap = new Map();
     this.actorId2MVNodes = new Map();
-    this.fragmentRepresentedActors = new Set();
+    this.adjacentFragments = new Map();
     this.shownActorSet = new Set(shownActorList);
-
-    const fragmentId2actorList = new Map<number, number[]>();
     // TODO: try to use BFS once to get all the structures
     // every actor will have unique actorId and fragmentId that will cover 3 actors
     // if an actor has upstreamActorId (3x) then it's not in a root fragment, otherwise it is the root fragment
@@ -48,7 +47,7 @@ export default class StreamPlanParser {
 
     // so we need a Map that map fragmentId to actors
     // and a adjacent graph to store fragments' next fragment
-    // After this, we can remove fragmentRepresentedActors and dagNodeMap in StreamChartHelper
+    // After this, we can remove ~~fragmentRepresentedActors~~ and dagNodeMap in StreamChartHelper
     for (const data of datas) {
       const { host, port } = data.node.host;
       for (const actor of data.actors) {
@@ -64,24 +63,24 @@ export default class StreamPlanParser {
           computeNodeAddress: `${host}:${port}`,
         };
 
-        if (!fragmentId2actorList.has(fragmentId)) {
-          this.fragmentRepresentedActors.add(proto);
-          fragmentId2actorList.set(fragmentId, [proto.actorId]);
+        if (!this.adjacentFragments.has(fragmentId)) {
+          this.adjacentFragments.set(fragmentId, { nextFragments: [], representActors: [actorId] });
         } else {
-          fragmentId2actorList.get(fragmentId)!.push(proto.actorId);
+          this.adjacentFragments.get(fragmentId)!.representActors.push(proto.actorId);
         }
         this.actorId2Proto.set(actor.actorId, proto);
       }
     }
 
-    const fragmentDownstreamNeighbour = new Map<number, number[]>();
-    for (const [fragmentId, actorList] of fragmentId2actorList.entries()) {
+    for (const [fragmentId, fragments] of this.adjacentFragments.entries()) {
       const downStreams = new Set<number>();
-      for (const actorId of actorList) {
+      const { representActors } = fragments;
+
+      for (const actorId of representActors) {
         const actor = this.actorId2Proto.get(actorId)!;
         this.parseActor(actor);
 
-        actor.representedActorList = actorList;
+        actor.representedActorList = representActors;
 
         if (actor.representedWorkNodes) {
           actor.representedWorkNodes.add(actor.computeNodeAddress);
@@ -95,11 +94,14 @@ export default class StreamPlanParser {
         }
       }
       const downstreamNeighbours: number[] = [...downStreams.values()];
-      fragmentDownstreamNeighbour.set(fragmentId, downstreamNeighbours);
+      const fragment: Fragment = {
+        nextFragments: downstreamNeighbours,
+        representActors: representActors,
+      };
+      this.adjacentFragments.set(fragmentId, fragment);
     }
 
     // TODO: use BFS to search chain-view and single-view
-    console.log("adjacent graph", fragmentDownstreamNeighbour);
     this.mvTableIdToChainViewActorList = this._constructChainViewMvList();
     this.mvTableIdToSingleViewActorList = this._constructSingleViewMvList();
   }
@@ -222,16 +224,17 @@ export default class StreamPlanParser {
    */
   parseActor(actorProto: ActorProto): ActorProto {
     let rootNode;
-    const actorId = actorProto.actorId;
+    const { actorId } = actorProto;
     const { type, downstreamActorId } = actorProto.dispatcher[0];
 
+    // downstreamActorId maybe undefined
     if (type && downstreamActorId) {
-      const id = getNodeId(actorProto.nodes, actorId);
-
+      const id = getNodeId(actorProto.nodes.operatorId, actorId);
+      // TODO: why the nodeProto here is empty?
       rootNode = new StreamNode(
         id,
         actorId,
-        downstreamActorId!,
+        downstreamActorId,
         {
           operatorId: (100000 + actorId).toString(),
         },
@@ -253,7 +256,7 @@ export default class StreamPlanParser {
    * and set typeInfo and nextNodes
    */
   parseNode(actorId: number, nodeProto: OperatorNode) {
-    const id = getNodeId(nodeProto, actorId);
+    const id = getNodeId(nodeProto.operatorId, actorId);
     if (this.parsedNodeMap.has(id)) {
       return this.parsedNodeMap.get(id);
     }
@@ -275,9 +278,7 @@ export default class StreamPlanParser {
 
     if (newNode.type === "merge" && newNode.typeInfo.upstreamActorId) {
       for (const actorId of newNode.typeInfo.upstreamActorId) {
-        if (this.actorId2Proto.has(actorId)) {
-          this.actorId2Proto.get(actorId)!.output.push(newNode);
-        }
+        this.actorId2Proto.get(actorId)!.output.push(newNode);
       }
     }
 

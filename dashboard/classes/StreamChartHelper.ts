@@ -14,7 +14,6 @@
  * limitations under the License.
  *
  */
-import * as d3 from "d3";
 import { Group } from "@classes/Group";
 import StreamPlanParser from "./StreamPlanParser";
 import {
@@ -28,14 +27,15 @@ import { Fragments, ShellNode, WorkerNode } from "@interfaces/Node";
 import { cloneDeep, max } from "lodash";
 import { getConnectedComponent, treeBfs } from "@lib/algo";
 import { TwoGradient } from "@lib/color";
+import { linkHorizontal, curveBasis, line } from "d3-shape";
 
 export class StreamChartHelper {
   topGroup: Group;
+  streamPlan: StreamPlanParser;
   onNodeClick: Function;
   onActorClick: Function;
   selectedWorkerNode: string;
   selectedWorkerNodeStr: string;
-  streamPlan: StreamPlanParser;
 
   constructor(
     group: Group,
@@ -50,7 +50,7 @@ export class StreamChartHelper {
     this.onActorClick = onActorClick;
     this.selectedWorkerNode = selectedWorkerNode;
     this.selectedWorkerNodeStr = selectedWorkerNode;
-    this.streamPlan = new StreamPlanParser(data, shownActorIdList); // parse data (actors.json) to StreamNode
+    this.streamPlan = new StreamPlanParser(data, shownActorIdList);
   }
 
   getMvTableIdToSingleViewActorList() {
@@ -142,10 +142,10 @@ export class StreamChartHelper {
    * @param {Array<Node>} nodes An array of node: {nextNodes: [...]}
    * @returns {Map<Node, [number, number]>} position of each node
    */
-  dagLayout(nodes: any) {
-    const sorted = [];
-    const _nodes = [];
+  dagLayout(nodes: any[]) {
     const node2dagNode = new Map();
+
+    // TODO: refactor by using onetime BFS
     const visit = (n: any) => {
       if (n.temp) {
         throw Error("This is not a DAG");
@@ -153,10 +153,10 @@ export class StreamChartHelper {
       if (!n.perm) {
         n.temp = true;
         let maxG = -1;
-        for (let nextNode of n.node.nextNodes) {
+        for (const nextNode of n.node.nextNodes) {
           node2dagNode.get(nextNode).isInput = false;
           n.isOutput = false;
-          let g = visit(node2dagNode.get(nextNode));
+          const g = visit(node2dagNode.get(nextNode));
           if (g > maxG) {
             maxG = g;
           }
@@ -164,60 +164,118 @@ export class StreamChartHelper {
         n.temp = false;
         n.perm = true;
         n.g = maxG + 1;
-        sorted.unshift(n.node);
       }
       return n.g;
     };
-    for (let node of nodes) {
-      let dagNode = { node: node, temp: false, perm: false, isInput: true, isOutput: true };
+
+    for (const node of nodes) {
+      const dagNode = { node: node, temp: false, perm: false, isInput: true, isOutput: true };
       node2dagNode.set(node, dagNode);
-      _nodes.push(dagNode);
     }
+
     let maxLayer = 0;
-    for (let node of _nodes) {
-      let g = visit(node);
+    // console.log("before topsort", node2dagNode);
+    // TODO: use bfs to maintain g
+    for (const node of node2dagNode.values()) {
+      const g = visit(node);
       if (g > maxLayer) {
         maxLayer = g;
       }
     }
+    // console.log("after topsort", node2dagNode);
+
     // use the bottom up strategy to construct generation number
     // makes the generation number of root node the samllest
     // to make the computation easier, need to flip it back.
-    for (let node of _nodes) {
+    for (const node of node2dagNode.values()) {
       // node.g = node.isInput ? 0 : (maxLayer - node.g); // TODO: determine which is more suitable
       node.g = maxLayer - node.g;
     }
 
-    let layers = [];
+    const layers: any[] = [];
+    const myLayer: any[] = [];
+
+    const topoSort = () => {
+      const indegree = new Map<number, number>();
+      const edges = this.streamPlan.adjacentFragments;
+
+      for (const [fragmentId, fragment] of edges) {
+        if (!indegree.get(fragmentId)) indegree.set(fragmentId, 0);
+
+        if (fragment.nextFragments.length) {
+          for (const next of fragment.nextFragments) {
+            if (!indegree.get(next)) indegree.set(next, 0);
+            indegree.set(next, indegree.get(next)! + 1);
+          }
+        }
+      }
+
+      const queue: number[] = [];
+      for (const [fragmentId, ind] of indegree.entries()) {
+        if (ind === 0) {
+          queue.push(fragmentId);
+        }
+      }
+
+      let maxLayer = -1;
+      while (queue.length) {
+        const size = queue.length;
+        for (let i = 0; i < size; ++i) {
+          if (myLayer[maxLayer + 1] === undefined) {
+            myLayer[maxLayer + 1] = {};
+            myLayer[maxLayer + 1].fragments = [];
+          }
+          const fragment = queue.shift()!;
+
+          myLayer[maxLayer + 1].fragments.push(fragment);
+
+          const nextFragments = edges.get(fragment)?.nextFragments!;
+          for (const next of nextFragments) {
+            indegree.set(next, indegree.get(next)! - 1);
+            if (indegree.get(next) === 0) {
+              queue.push(next);
+            }
+          }
+        }
+        maxLayer++;
+      }
+      return maxLayer;
+    };
+
+    topoSort();
+    console.log("myLayer", myLayer);
+
     for (let i = 0; i < maxLayer + 1; ++i) {
       layers.push({
         nodes: [],
         occupyRow: new Set(),
       });
     }
-    let node2Layer = new Map();
-    let node2Row = new Map();
-    for (let node of _nodes) {
+
+    console.log("layers", layers);
+    const node2Layer = new Map();
+    const node2Row = new Map();
+    for (const node of node2dagNode.values()) {
       layers[node.g].nodes.push(node.node);
       node2Layer.set(node.node, node.g);
     }
 
     // layers to rtn
-    let rtn = new Map();
+    const rtn = new Map();
 
     const putNodeInPosition = (node, row) => {
       node2Row.set(node, row);
       layers[node2Layer.get(node)].occupyRow.add(row);
     };
 
-    const occupyLine = (ls, le, r) => {
+    const occupyLine = (ls: any, le: any, r: any) => {
       // layer start, layer end, row
       for (let i = ls; i <= le; ++i) {
         layers[i].occupyRow.add(r);
       }
     };
 
-    const hasOccupied = (layer, row) => layers[layer].occupyRow.has(row);
+    const hasOccupied = (layer: any, row: any) => layers[layer].occupyRow.has(row);
 
     const isStraightLineOccupied = (ls, le, r) => {
       // layer start, layer end, row
@@ -232,12 +290,12 @@ export class StreamChartHelper {
       return false;
     };
 
-    for (let node of nodes) {
+    for (const node of nodes) {
       node.nextNodes.sort((a, b) => node2Layer.get(b) - node2Layer.get(a));
     }
 
-    for (let layer of layers) {
-      for (let node of layer.nodes) {
+    for (const layer of layers) {
+      for (const node of layer.nodes) {
         if (!node2Row.has(node)) {
           // checking node is not placed.
           for (let nextNode of node.nextNodes) {
@@ -277,10 +335,11 @@ export class StreamChartHelper {
         }
       }
     }
-    for (let node of nodes) {
+
+    for (const node of nodes) {
       rtn.set(node.id, [node2Layer.get(node), node2Row.get(node)]);
     }
-
+    // console.log("daglayout, rtn", rtn);
     return rtn;
   }
 
@@ -384,20 +443,26 @@ export class StreamChartHelper {
    * @param {number} props.baseY [optinal] The y coordination of the lef-top corner. default: 0
    * @returns {Group} The group element of this tree
    */
-  drawActorBox(props: any) {
-    if (props.g === undefined) {
+  drawActorBox(
+    _actor: any,
+    _g: Group,
+    _rootNode: any,
+    _x: number,
+    _y: number,
+    _strokeColor: string,
+    _linkColor: string
+  ) {
+    if (_g === undefined) {
       throw Error("Invalid Argument: Target group cannot be undefined.");
     }
 
-    const actor = props.actor;
-    const group = props.g.append("g");
-    const rootNode = props.rootNode || [];
-    const baseX = props.x === undefined ? 0 : props.x;
-    const baseY = props.y === undefined ? 0 : props.y;
-    const strokeColor = props.strokeColor || "white";
-    const linkColor = props.linkColor || "gray";
-
-    group.attr("class", actor.computeNodeAddress);
+    const actor = _actor;
+    const group = _g.append("g").attr("class", actor.computeNodeAddress);
+    const rootNode = _rootNode || [];
+    const baseX = _x === undefined ? 0 : _x;
+    const baseY = _y === undefined ? 0 : _y;
+    const strokeColor = _strokeColor || "white";
+    const linkColor = _linkColor || "gray";
 
     const [boxWidth, boxHeight] = this.calculateActorBoxSize(rootNode);
     this.layoutActorBox(rootNode, baseX + boxWidth - actorBoxPadding, baseY + boxHeight / 2);
@@ -493,12 +558,13 @@ export class StreamChartHelper {
         });
       }
     });
-    const linkGen = d3.linkHorizontal();
+    // TODO: find a way to remove d3 and implement own path generator
+    const linkGen = linkHorizontal();
     for (let link of linkData) {
+      // console.log("linkgen function and link", linkGen(link));
       group
         .append("path")(linkGen(link))
         .attr("stroke-dasharray", `${internalLinkStrokeWidth / 2},${internalLinkStrokeWidth / 2}`)
-        // .attr("d", linkGen(link))
         .attr("fill", "none")
         .attr("class", "actor-" + actor.actorId)
         .classed("interal-link", true)
@@ -532,6 +598,7 @@ export class StreamChartHelper {
       height: boxHeight + actorBoxPadding * 2,
     };
   }
+
   /**
    *
    * @param {{
@@ -547,24 +614,25 @@ export class StreamChartHelper {
    * @param {number} props.baseY [optional] The y coordination of left-top corner. default: 0.
    * @returns {{group: Group, width: number, height: number}} The size of the flow
    */
-  drawFlow(props: { g: any; baseX: any; baseY: any; actorDagList: any }) {
-    if (props.g === undefined) {
+  drawFlow(group: Group, x: any, y: any, list: any) {
+    if (group === undefined) {
       throw Error("Invalid Argument: Target group cannot be undefined.");
     }
 
-    const g = props.g;
-    const actorDagList = props.actorDagList || [];
-    const baseX = props.baseX || 0;
-    const baseY = props.baseY || 0;
+    const g = group;
+    const baseX = x || 0;
+    const baseY = y || 0;
+    const actorDagList = list || [];
+    const layoutPositionMapper = this.dagLayout(actorDagList);
+    // console.log("layoutPositionMapper", layoutPositionMapper);
 
-    let layoutPositionMapper = this.dagLayout(actorDagList);
     const actors = [];
-    for (let actorDag of actorDagList) {
+    for (const actorDag of actorDagList) {
       actors.push(actorDag.actor);
     }
 
     // calculate actor box size
-    for (let actor of actors) {
+    for (const actor of actors) {
       [actor.boxWidth, actor.boxHeight] = this.calculateActorBoxSize(actor.rootNode);
       [actor.layer, actor.row] = layoutPositionMapper.get(actor.actorId);
     }
@@ -606,31 +674,31 @@ export class StreamChartHelper {
     });
 
     // Draw fragment (represent by one actor)
-    const group = g.append("g");
-    const linkLayerBackground = group.append("g");
-    const linkLayer = group.append("g");
-    const fragmentLayer = group.append("g");
+    const appendGourp = g.append("g");
+    const linkLayerBackground = appendGourp.append("g");
+    const linkLayer = appendGourp.append("g");
+    const fragmentLayer = appendGourp.append("g");
     linkLayerBackground.attr("class", "linkLayerBackground");
     linkLayer.attr("class", "linkLayer");
     fragmentLayer.attr("class", "fragmentLayer");
 
-    let actorBoxList = [];
-    for (let actor of actors) {
-      let actorBox = this.drawActorBox({
-        actor: actor,
-        g: fragmentLayer,
-        rootNode: actor.rootNode,
-        x: baseX + layer2x[actor.layer],
-        y: baseY + row2y[actor.row],
-        strokeColor: "white",
-        linkColor: "white",
-      });
+    const actorBoxList = [];
+    for (const actor of actors) {
+      const actorBox = this.drawActorBox(
+        actor,
+        fragmentLayer,
+        actor.rootNode,
+        baseX + layer2x[actor.layer],
+        baseY + row2y[actor.row],
+        "white",
+        "white"
+      );
       actorBoxList.push(actorBox);
     }
 
     // Draw link between (represent by one actor)
-    const getLinkBetweenPathStr = (start, end, compensation) => {
-      const lineGen = d3.line().curve(d3.curveBasis);
+    const getLinkBetweenPathStr = (start: any, end: any, compensation: any) => {
+      const lineGen = line().curve(curveBasis);
       let pathStr = lineGen([
         end,
         [start[0] + compensation + actorBoxPadding + connectionGap + bendGap * 2, end[1]],
@@ -704,40 +772,29 @@ export class StreamChartHelper {
    * And then use `drawFlow()` to draw each connected component.
    */
   drawManyFlow() {
-    const g = this.topGroup;
-    const baseX = 0;
-    const baseY = 0;
-    g.attr("id", "");
-
-    // set<ActorProto> that actorProtos have same fragmentID
-    const fragmentRepresentedActors = this.streamPlan.fragmentRepresentedActors;
-    // console.log("drawManyFlow fragmentRepresentedActors:", fragmentRepresentedActors);
-
-    // get dag layout of these actors
+    const fragments = this.streamPlan.adjacentFragments;
     // TODO: this is also duplicates, since it just connect actors by fragments and nextNodes
+    // get dag layout of these actors
     const dagNodeMap = new Map<number, Fragments>();
-    for (const actor of fragmentRepresentedActors) {
-      // TODO: remove duplicates
 
-      // actor.rootNode!.actorId = actor.actorId;
-      // treeBfs(actor.rootNode, (node: StreamNode) => {
-      //   node.actorId = actor.actorId;
-      //   return false; // continue traversing
-      // });
-
-      // TODO: optimize this structure, since ShellNode already has nextNodes and parentNodes
-      // then you can get corresponding Actor by ShellNode id from actorId2Proto or getActor(id)
+    for (const [_, fragment] of fragments.entries()) {
+      const { representActors } = fragment;
+      const actor = this.streamPlan.getActor(representActors[0])!;
       const shellActor: Fragments = {
         actor: actor,
         nextNodes: [],
         parentNodes: [],
-        id: actor.actorId,
+        id: representActors[0],
       };
-
       dagNodeMap.set(actor.actorId, shellActor);
+      // TODO: optimize this structure, since ShellNode already has nextNodes and parentNodes
+      // then you can get corresponding Actor by ShellNode id from actorId2Proto or getActor(id)
     }
 
-    for (const actor of fragmentRepresentedActors) {
+    for (const [_, fragment] of fragments.entries()) {
+      const { representActors } = fragment;
+      const actor = this.streamPlan.getActor(representActors[0])!;
+
       if (actor.output.length) {
         for (const ouputNode of actor.output) {
           const outputDagNode = dagNodeMap.get(ouputNode.actorId);
@@ -749,18 +806,18 @@ export class StreamChartHelper {
         }
       }
     }
+    // TODO: is dagNodeMap an adjacent graph??
     console.log("[...dagNodeMap.values()]: ", [...dagNodeMap.values()]);
-
+    // console.log("fragments", fragments);
+    // TODO:
+    // since the length of dagNodeMap is the same as the number of  fragemenes
+    // we can use adjacent graph to replace and then remove dagNodeMap
+    const g = this.topGroup.attr("id", "");
     const actorsList = getConnectedComponent([...dagNodeMap.values()]);
 
-    let y = baseY;
+    let y = 0;
     for (const actorDagList of actorsList) {
-      const flowChart = this.drawFlow({
-        g: g,
-        baseX: baseX,
-        baseY: y,
-        actorDagList: actorDagList,
-      });
+      const flowChart = this.drawFlow(g, 0, y, actorDagList);
       y += flowChart.height + gapBetweenFlowChart;
     }
   }

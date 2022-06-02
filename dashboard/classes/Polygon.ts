@@ -16,7 +16,7 @@
  */
 import { DrawElement, Element } from "./DrawElement";
 
-export class Polygan extends DrawElement {
+export class Polygon extends DrawElement {
   constructor({ canvasElement, engine }: Element) {
     super({ canvasElement, engine });
   }

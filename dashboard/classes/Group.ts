@@ -19,7 +19,7 @@ import { fabric } from "fabric";
 import { Text } from "./Text";
 import { Circle } from "./Circle";
 import { Rectangle } from "./Rectangle";
-import { Polygan } from "./Polygan";
+import { Polygon } from "./Polygon";
 import { Path } from "./Path";
 
 type FuncDispatcher = {
@@ -40,10 +40,10 @@ export class Group extends DrawElement {
 
     this.dispatcher = {
       g: this._appendGroup,
-      circle: this._appendCircle,
       rect: this._appendRect,
       text: this._appendText,
       path: this._appendPath,
+      circle: this._appendCircle,
       polygon: this._appendPolygan,
     };
   }
@@ -101,10 +101,12 @@ export class Group extends DrawElement {
   };
 
   _appendPolygan = () => {
+    const arr = [{ x: 1, y: 1 }];
     const props: Element = {
+      canvasElement: new fabric.Polygon(arr),
       engine: this.engine,
     };
-    return new Polygan(props);
+    return new Polygon(props);
   };
 
   append = (type: string) => {

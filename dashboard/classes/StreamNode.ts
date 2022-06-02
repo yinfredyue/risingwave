@@ -14,8 +14,8 @@
  * limitations under the License.
  *
  */
-import { BaseNode } from "@classes/BaseNode";
 import types from "@classes/types";
+import { BaseNode } from "@classes/BaseNode";
 import { OperatorNode } from "@interfaces/Node";
 
 export class StreamNode extends BaseNode {

@@ -9,6 +9,7 @@ specifiers:
   '@testing-library/jest-dom': ^5.16.2
   '@testing-library/react': ^12.1.2
   '@types/d3': ^7.1.0
+  '@types/d3-shape': ^3.1.0
   '@types/fabric': ^4.5.7
   '@types/lodash': ^4.14.182
   '@types/node': ^17.0.32
@@ -31,6 +32,7 @@ dependencies:
   '@emotion/styled': 11.8.1_tudpwpcq2yi62ycnz4uambfsyu
   '@mui/icons-material': 5.8.0_axlfm53k4sap2uvubal2catgva
   '@mui/material': 5.8.1_eyysfasz5ra4hl45gmtiyjby5m
+  '@types/d3-shape': 3.1.0
   d3: 7.4.4
   fabric: 5.2.1
   lodash: 4.17.21
@@ -902,7 +904,6 @@ packages:
 
   /@types/d3-path/3.0.0:
     resolution: {integrity: sha512-0g/A+mZXgFkQxN3HniRDbXMN79K3CdTpLsevj+PXiTcb2hVyvkZUBg37StmgCQkaD84cUJ4uaDAWq7UJOQy2Tg==}
-    dev: true
 
   /@types/d3-polygon/3.0.0:
     resolution: {integrity: sha512-D49z4DyzTKXM0sGKVqiTDTYr+DHg/uxsiWDAkNrwXYuiZVd9o9wXZIo+YsHkifOiyBkmSWlEngHCQme54/hnHw==}
@@ -934,7 +935,6 @@ packages:
     resolution: {integrity: sha512-jYIYxFFA9vrJ8Hd4Se83YI6XF+gzDL1aC5DCsldai4XYYiVNdhtpGbA/GM6iyQ8ayhSp3a148LY34hy7A4TxZA==}
     dependencies:
       '@types/d3-path': 3.0.0
-    dev: true
 
   /@types/d3-time-format/4.0.0:
     resolution: {integrity: sha512-yjfBUe6DJBsDin2BMIulhSHmr5qNR5Pxs17+oW4DoVPyVIXZ+m6bs7j1UVKP08Emv6jRmYrYqxYzO63mQxy1rw==}

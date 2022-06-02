@@ -21,8 +21,8 @@ function generateNewNodeId() {
   return "g" + ++cnt;
 }
 
-export function getNodeId(nodeProto: OperatorNode, actorId: number) {
-  return `${actorId}:${nodeProto.operatorId ? "o" + nodeProto.operatorId : generateNewNodeId()}`;
+export function getNodeId(operatorId: string | undefined, actorId: number) {
+  return `${actorId}:${operatorId ? "o" + operatorId : generateNewNodeId()}`;
 }
 
 export class BaseNode {
