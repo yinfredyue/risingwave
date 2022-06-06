@@ -99,41 +99,49 @@ fn load_config(opts: &MetaNodeOpts) -> ComputeNodeConfig {
     risingwave_common::config::load_config(&opts.config_path)
 }
 
+use std::future::Future;
+use std::pin::Pin;
+
 /// Start meta node
-pub async fn start(opts: MetaNodeOpts) {
-    let compute_config = load_config(&opts);
-    let addr = opts.host.parse().unwrap();
-    let dashboard_addr = opts.dashboard_host.map(|x| x.parse().unwrap());
-    let prometheus_addr = opts.prometheus_host.map(|x| x.parse().unwrap());
-    let backend = match opts.backend {
-        Backend::Etcd => MetaStoreBackend::Etcd {
-            endpoints: opts
-                .etcd_endpoints
-                .split(',')
-                .map(|x| x.to_string())
-                .collect(),
-        },
-        Backend::Mem => MetaStoreBackend::Mem,
-    };
-    let max_heartbeat_interval = Duration::from_millis(opts.max_heartbeat_interval as u64);
-    let checkpoint_interval =
-        Duration::from_millis(compute_config.streaming.checkpoint_interval_ms as u64);
-    let in_flight_barrier_nums = compute_config.streaming.in_flight_barrier_nums as usize;
-    tracing::info!("Meta server listening at {}", addr);
-    let (join_handle, _shutdown_send) = rpc_serve(
-        addr,
-        prometheus_addr,
-        dashboard_addr,
-        backend,
-        max_heartbeat_interval,
-        opts.dashboard_ui_path,
-        MetaOpts {
-            enable_recovery: !opts.disable_recovery,
-            checkpoint_interval,
-            in_flight_barrier_nums,
-        },
-    )
-    .await
-    .unwrap();
-    join_handle.await.unwrap();
+pub fn start(opts: MetaNodeOpts) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    // WARNING: don't change the function signature. Making it `async fn` will cause
+    // slow compile in release mode.
+    Box::pin(async move {
+        let compute_config = load_config(&opts);
+        let addr = opts.host.parse().unwrap();
+        let dashboard_addr = opts.dashboard_host.map(|x| x.parse().unwrap());
+        let prometheus_addr = opts.prometheus_host.map(|x| x.parse().unwrap());
+        let backend = match opts.backend {
+            Backend::Etcd => MetaStoreBackend::Etcd {
+                endpoints: opts
+                    .etcd_endpoints
+                    .split(',')
+                    .map(|x| x.to_string())
+                    .collect(),
+            },
+            Backend::Mem => MetaStoreBackend::Mem,
+        };
+        let max_heartbeat_interval = Duration::from_millis(opts.max_heartbeat_interval as u64);
+        let checkpoint_interval =
+            Duration::from_millis(compute_config.streaming.checkpoint_interval_ms as u64);
+        let in_flight_barrier_nums = compute_config.streaming.in_flight_barrier_nums as usize;
+
+        tracing::info!("Meta server listening at {}", addr);
+        let (join_handle, _shutdown_send) = rpc_serve(
+            addr,
+            prometheus_addr,
+            dashboard_addr,
+            backend,
+            max_heartbeat_interval,
+            opts.dashboard_ui_path,
+            MetaOpts {
+                enable_recovery: !opts.disable_recovery,
+                checkpoint_interval,
+                in_flight_barrier_nums,
+            },
+        )
+        .await
+        .unwrap();
+        join_handle.await.unwrap();
+    })
 }

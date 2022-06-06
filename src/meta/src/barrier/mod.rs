@@ -51,6 +51,7 @@ use crate::storage::MetaStore;
 use crate::stream::FragmentManagerRef;
 
 mod command;
+mod concurrent_checkpoint_test;
 mod info;
 mod notifier;
 mod progress;
@@ -259,21 +260,23 @@ where
         if self.enable_recovery {
             // handle init, here we simply trigger a recovery process to achieve the consistency. We
             // may need to avoid this when we have more state persisted in meta store.
-            let new_epoch = state.prev_epoch.next();
-            assert!(new_epoch > state.prev_epoch);
-            state.prev_epoch = new_epoch;
+            let new_epoch = state.in_flight_prev_epoch.next();
+            assert!(new_epoch > state.in_flight_prev_epoch);
+            state.in_flight_prev_epoch = new_epoch;
 
             let (new_epoch, actors_to_track, create_mview_progress) =
-                self.recovery(state.prev_epoch).await;
+                self.recovery(state.in_flight_prev_epoch).await;
             tracker.add(new_epoch, actors_to_track, vec![]);
             for progress in create_mview_progress {
                 tracker.update(progress);
             }
-            state.prev_epoch = new_epoch;
-            state.update(env.meta_store()).await.unwrap();
+            state.in_flight_prev_epoch = new_epoch;
+            state
+                .update_inflight_prev_epoch(env.meta_store())
+                .await
+                .unwrap();
         }
         let mut is_first = true;
-        let mut last_epoch = state.prev_epoch.0;
         let mut min_interval = tokio::time::interval(self.interval);
         min_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let (barrier_send_tx, mut barrier_send_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -293,8 +296,8 @@ where
                             for progress in responses.into_iter().flat_map(|r| r.create_mview_progress) {
                                 tracker.update(progress);
                             }
-
-                        state.prev_epoch = new_epoch;
+                        assert!(new_epoch > state.commit_prev_epoch);
+                        state.commit_prev_epoch = new_epoch;
 
                         }
                         Some(BarrierSendResult::Err{new_epoch,err_msg}) => {
@@ -308,8 +311,8 @@ where
                                 for progress in create_mview_progress {
                                     tracker.update(progress);
                                 }
-                                state.prev_epoch = new_epoch;
-                                last_epoch = new_epoch.0;
+                                state.commit_prev_epoch = new_epoch;
+                                state.in_flight_prev_epoch = new_epoch;
                                 is_first = true;
                                 self.wait_recovery.store(false,atomic::Ordering::SeqCst);
                             } else {
@@ -318,7 +321,8 @@ where
                         }
                         _=>{}
                     }
-                    state.update(self.env.meta_store()).await.unwrap();
+                    state.update_inflight_prev_epoch(self.env.meta_store()).await.unwrap();
+                    state.update_commit_prev_epoch(self.env.meta_store()).await.unwrap();
                     continue;
                 }
                 // there's barrier scheduled.
@@ -369,15 +373,19 @@ where
                 notifiers.iter_mut().for_each(Notifier::notify_collected);
                 continue;
             }
-            let prev_epoch = Epoch::from(last_epoch);
+            let prev_epoch = state.in_flight_prev_epoch;
             let new_epoch = prev_epoch.next();
-            last_epoch = new_epoch.0;
+            state.in_flight_prev_epoch = new_epoch;
             assert!(
                 new_epoch > prev_epoch,
                 "new{:?},prev{:?}",
                 new_epoch,
                 prev_epoch
             );
+            state
+                .update_inflight_prev_epoch(self.env.meta_store())
+                .await
+                .unwrap();
 
             let command_ctx = Arc::new(CommandContext::new(
                 self.fragment_manager.clone(),
@@ -424,12 +432,8 @@ where
                     .iter()
                     .filter(|x| matches!(x.states, InFlight))
                     .count();
-                metrics
-                    .in_flight_barrier_nums
-                    .set(in_flight_nums as i64);
-                metrics
-                    .all_barrier_nums
-                    .set(command_ctx_queue.len() as i64);
+                metrics.in_flight_barrier_nums.set(in_flight_nums as i64);
+                metrics.all_barrier_nums.set(command_ctx_queue.len() as i64);
             });
         }
     }
@@ -447,9 +451,7 @@ where
         // Wait for all barriers collected
         let result = GlobalBarrierManager::inject_barrier(env, command_context).await;
 
-        tracing::info!("epoch isover{:?}", command_context.prev_epoch);
         let mut command_ctx_queue_clone = command_ctx_queue.write().await;
-        tracing::info!("epoch len {:?}", command_ctx_queue_clone.len());
         if let Some(node) = command_ctx_queue_clone
             .iter_mut()
             .find(|x| x.command_ctx.prev_epoch == command_context.prev_epoch)
@@ -459,15 +461,7 @@ where
             node.result = Some(result);
         };
 
-        if matches!(command_ctx_queue_clone.get(0).unwrap().states, Complete) {
-            tracing::info!(
-                "complete epoch{:?}",
-                command_ctx_queue_clone
-                    .get(0)
-                    .unwrap()
-                    .command_ctx
-                    .prev_epoch
-            );
+        if matches!(command_ctx_queue_clone.front().unwrap().states, Complete) {
             let result = GlobalBarrierManager::try_commit_epoch(
                 &mut command_ctx_queue_clone,
                 barrier_send_tx_clone.clone(),
@@ -481,7 +475,7 @@ where
             }
         }
         if command_ctx_queue_clone.len() > 0
-            && matches!(command_ctx_queue_clone.get(0).unwrap().states, Fail(_))
+            && matches!(command_ctx_queue_clone.front().unwrap().states, Fail(_))
         {
             let count = command_ctx_queue_clone
                 .iter()
@@ -637,7 +631,6 @@ where
                 };
                 let is_first = command_context.is_first;
                 let env = env.clone();
-                // tracing::info!("barrier:{:?}", barrier);
                 async move {
                     let mut client = env.stream_client_pool().get(node).await?;
 
