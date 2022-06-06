@@ -211,5 +211,6 @@ export interface ShellNode {
 }
 
 export interface Fragments extends ShellNode {
+  g: number;
   actor: ActorProto;
 }

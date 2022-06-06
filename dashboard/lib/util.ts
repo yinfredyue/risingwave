@@ -38,7 +38,7 @@ export function newNumberArray(length: number) {
 }
 
 export function newMatrix(n: number) {
-  const rtn: number[][] = [];
+  const rtn: any[][] = [];
   iter(n, () => {
     rtn.push([]);
   });

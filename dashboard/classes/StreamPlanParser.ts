@@ -20,7 +20,8 @@ import { StreamNode } from "@classes/StreamNode";
 import { ActorProto, Actors } from "@interfaces/Actor";
 import { OperatorNode, ShellNode } from "@interfaces/Node";
 
-type Fragment = {
+export type Fragment = {
+  prevFragments: number[];
   nextFragments: number[];
   representActors: number[];
 };
@@ -64,7 +65,11 @@ export default class StreamPlanParser {
         };
 
         if (!this.adjacentFragments.has(fragmentId)) {
-          this.adjacentFragments.set(fragmentId, { nextFragments: [], representActors: [actorId] });
+          this.adjacentFragments.set(fragmentId, {
+            prevFragments: [],
+            nextFragments: [],
+            representActors: [actorId],
+          });
         } else {
           this.adjacentFragments.get(fragmentId)!.representActors.push(proto.actorId);
         }
@@ -74,6 +79,8 @@ export default class StreamPlanParser {
 
     for (const [fragmentId, fragments] of this.adjacentFragments.entries()) {
       const downStreams = new Set<number>();
+      const upStreams = new Set<number>();
+
       const { representActors } = fragments;
 
       for (const actorId of representActors) {
@@ -92,12 +99,28 @@ export default class StreamPlanParser {
             downStreams.add(this.actorId2Proto.get(actorid)!.fragmentId);
           }
         }
+
+        if (actor.upstreamActorId) {
+          for (const actorId of actor.upstreamActorId) {
+            upStreams.add(this.actorId2Proto.get(actorId)!.fragmentId);
+          }
+        }
+
+        if (actor.nodes.chain) {
+          for (const actorId of actor.nodes.input?.at(0)?.merge?.upstreamActorId!) {
+            upStreams.add(this.actorId2Proto.get(actorId)!.fragmentId);
+          }
+        }
       }
       const downstreamNeighbours: number[] = [...downStreams.values()];
+      const upstreamNeighbours: number[] = [...upStreams.values()];
+
       const fragment: Fragment = {
         nextFragments: downstreamNeighbours,
         representActors: representActors,
+        prevFragments: upstreamNeighbours,
       };
+
       this.adjacentFragments.set(fragmentId, fragment);
     }
 

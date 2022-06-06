@@ -91,7 +91,7 @@ export function getConnectedComponent(nodes: Fragments[]) {
     node2shellNodes.set(node, shellNode);
   }
 
-  // TODO: what is the point ???
+  // TODO:
   // make a shell non-directed graph from the original DAG.
   for (const node of nodes) {
     const shellNode = node2shellNodes.get(node);
@@ -106,9 +106,10 @@ export function getConnectedComponent(nodes: Fragments[]) {
   }
 
   // TODO: this is literally an adjacent graph
-  console.log(node2shellNodes);
+  console.log("new map", node2shellNodes);
 
   // bfs assign group number
+  // TODO: optimize this
   let cnt = 0;
   for (const shell of node2shellNodes.values()) {
     if (shell.g === -1) {

@@ -57,7 +57,7 @@ export class DrawElement {
 
   // TODO: this method is for migrating from d3.js to fabric.js.
   // This should be replaced by a more suitable way.
-  attr(key: string, value: any) {
+  attr(key: string, value: string | number) {
     const settings = this._attrMap(key, value);
     if (settings.length === 2) {
       this.canvasElement?.set(settings[0], settings[1]);
