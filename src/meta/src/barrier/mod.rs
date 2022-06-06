@@ -425,14 +425,10 @@ where
                     .filter(|x| matches!(x.states, InFlight))
                     .count();
                 metrics
-                    .barrier_nums
-                    .get_metric_with_label_values(&["in_flight"])
-                    .unwrap()
+                    .in_flight_barrier_nums
                     .set(in_flight_nums as i64);
                 metrics
-                    .barrier_nums
-                    .get_metric_with_label_values(&["all_barrier"])
-                    .unwrap()
+                    .all_barrier_nums
                     .set(command_ctx_queue.len() as i64);
             });
         }
@@ -462,7 +458,7 @@ where
             node.states = Complete;
             node.result = Some(result);
         };
-        // first_is_complete = command_ctx_queue_clone.get(0).unwrap().states == Complete;
+
         if matches!(command_ctx_queue_clone.get(0).unwrap().states, Complete) {
             tracing::info!(
                 "complete epoch{:?}",
@@ -481,7 +477,7 @@ where
             .await;
             if result.is_err() {
                 wait_recovery.store(true, atomic::Ordering::SeqCst);
-                command_ctx_queue_clone.get_mut(0).unwrap().states = Fail(result.unwrap_err());
+                command_ctx_queue_clone.front_mut().unwrap().states = Fail(result.unwrap_err());
             }
         }
         if command_ctx_queue_clone.len() > 0
@@ -541,7 +537,7 @@ where
         hummock_manager: HummockManagerRef<S>,
         wait_build_actor: Arc<AtomicBool>,
     ) -> Result<()> {
-        while let Some(node) = command_ctx_queue.get_mut(0) {
+        while let Some(node) = command_ctx_queue.front_mut() {
             if matches!(node.states, Complete) {
                 if node.command_ctx.prev_epoch.0 != INVALID_EPOCH {
                     match &node.result {
