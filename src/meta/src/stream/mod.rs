@@ -17,6 +17,7 @@ mod scheduler;
 mod source_manager;
 mod stream_graph;
 mod stream_manager;
+#[cfg(test)]
 mod test_fragmenter;
 
 pub use meta::*;
