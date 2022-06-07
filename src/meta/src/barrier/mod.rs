@@ -51,7 +51,6 @@ use crate::storage::MetaStore;
 use crate::stream::FragmentManagerRef;
 
 mod command;
-mod concurrent_checkpoint_test;
 mod info;
 mod notifier;
 mod progress;

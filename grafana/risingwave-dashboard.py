@@ -287,6 +287,20 @@ def quantile(f, percentiles):
 def section_streaming(panels):
     return [
         panels.row("Streaming"),
+        panels.timeseries_count(
+            "Barrier Number",[
+                panels.target("all_barrier_nums", "all_barrier"),
+                panels.target("in_flight_barrier_nums", "in_flight_barrier"),
+            ]),
+        panels.timeseries_latency(
+            "Barrier Send Latency",
+            quantile(lambda quantile, legend: panels.target(
+                f"histogram_quantile({quantile}, sum(rate(meta_barrier_send_duration_seconds_bucket[1m])) by (le))", f"barrier_send_latency_p{legend}"
+            ), [50, 90, 99, 999]) + [
+                panels.target(
+                    "rate(meta_barrier_send_duration_seconds_sum[1m]) / rate(meta_barrier_send_duration_seconds_count[1m])", "barrier_send_latency_avg"
+                ),
+            ]),
         panels.timeseries_latency(
             "Barrier Latency",
             quantile(lambda quantile, legend: panels.target(
