@@ -67,6 +67,21 @@ impl<S: StateStore> JoinEntryState<S> {
         }
     }
 
+
+    pub(crate) fn with_empty_cache(
+        keyspace: Keyspace<S>,
+        data_types: Arc<[DataType]>,
+        pk_data_types: Arc<[DataType]>,
+    ) -> Self {
+        Self {
+            cached: Some(BTreeMap::new()),
+            flush_buffer: BTreeMap::new(),
+            data_types,
+            pk_data_types,
+            keyspace,
+        }
+    }
+
     pub async fn with_cached_state(
         keyspace: Keyspace<S>,
         data_types: Arc<[DataType]>,
@@ -150,6 +165,28 @@ impl<S: StateStore> JoinEntryState<S> {
         Ok(())
     }
 
+    pub(crate) fn apply_flush_buffer(
+        &mut self,
+        flush_buffer: &BTreeMap<PkType, FlushStatus<StateValueType>>,
+    ) {
+        if let Some(cached) = &mut self.cached {
+            for (pk, row) in flush_buffer {
+                match row.as_option() {
+                    Some(row) => {
+                        cached.insert(pk.clone(), row.clone());
+                    }
+                    None => {
+                        cached.remove(pk);
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn flush_buffer(&self) -> &BTreeMap<PkType, FlushStatus<StateValueType>> {
+        &self.flush_buffer
+    }
+
     // Fetch cache from the state store.
     async fn populate_cache(&mut self, epoch: u64) -> Result<()> {
         assert!(self.cached.is_none());
@@ -209,6 +246,10 @@ impl<S: StateStore> JoinEntryState<S> {
             self.populate_cache(epoch).await.unwrap();
         }
         self.cached.as_mut().unwrap().values_mut()
+    }
+
+    pub(crate) fn is_cached(&self) -> bool {
+        self.cached.is_some()
     }
 }
 

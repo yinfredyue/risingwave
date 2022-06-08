@@ -12,10 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::VecDeque;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use futures::stream::{FuturesOrdered, Stream};
 use futures::StreamExt;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
-use madsim::collections::HashSet;
+use madsim::collections::{HashMap, HashSet};
 use risingwave_common::array::{Array, ArrayRef, Op, Row, RowRef, StreamChunk};
 use risingwave_common::catalog::Schema;
 use risingwave_common::error::{internal_error, Result, RwError};
@@ -56,6 +62,12 @@ pub mod SideType {
     use super::SideTypePrimitive;
     pub const Left: SideTypePrimitive = 0;
     pub const Right: SideTypePrimitive = 1;
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+enum KeyType<K> {
+    Left(K),
+    Right(K),
 }
 
 const fn is_outer_side(join_type: JoinTypePrimitive, side_type: SideTypePrimitive) -> bool {
@@ -461,51 +473,218 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         }
     }
 
+    fn prefetch_message(
+        &mut self,
+        msg: AlignedMessage,
+        io_queue: &mut FuturesOrdered<
+            Pin<Box<dyn futures::Future<Output = (KeyType<K>, JoinEntryState<S>)> + Send>>,
+        >,
+        inflight_io_set: &mut HashSet<KeyType<K>>,
+    ) -> Result<(AlignedMessage, HashSet<KeyType<K>>)> {
+        let mut msg_io_set = HashSet::new();
+        match msg {
+            AlignedMessage::Left(chunk) => {
+                let chunk = chunk.compact()?;
+                let (data_chunk, ops) = chunk.into_parts();
+                let keys = K::build(&self.side_l.key_indices, &data_chunk)?;
+
+                for key in &keys {
+                    // We fetch the keys on the right side
+                    if self.side_r.ht.get_cached(&key).is_none() {
+                        msg_io_set.insert(KeyType::Right(key.clone()));
+                        // This is the first time fetching the key
+                        if inflight_io_set.insert(KeyType::Right(key.clone())) {
+                            let key = key.clone();
+                            let table_info = self.side_r.ht.table_info();
+                            io_queue.push(Box::pin(async move {
+                                let state = JoinHashMap::fetch_cached_state_inner(
+                                    &key,
+                                    table_info.as_ref(),
+                                )
+                                .await
+                                .unwrap()
+                                .unwrap_or_else(|| {
+                                    JoinHashMap::init_with_empty_cache_inner(&key, table_info.as_ref())
+                                        .unwrap()
+                                });
+
+                                (KeyType::Right(key), state)
+                            }));
+                        }
+                    }
+                }
+                Ok((
+                    AlignedMessage::Left(StreamChunk::from_parts(ops, data_chunk)),
+                    msg_io_set,
+                ))
+            }
+            AlignedMessage::Right(chunk) => {
+                let chunk = chunk.compact()?;
+                let (data_chunk, ops) = chunk.into_parts();
+                let keys = K::build(&self.side_r.key_indices, &data_chunk)?;
+
+                for key in &keys {
+                    // We fetch the keys on the left side
+                    if self.side_l.ht.get_cached(&key).is_none() {
+                        msg_io_set.insert(KeyType::Left(key.clone()));
+                        // This is the first time fetching the key
+                        if inflight_io_set.insert(KeyType::Left(key.clone())) {
+                            let key = key.clone();
+                            let table_info = self.side_l.ht.table_info();
+                            io_queue.push(Box::pin(async move {
+                                let state = JoinHashMap::fetch_cached_state_inner(
+                                    &key,
+                                    table_info.as_ref(),
+                                )
+                                .await
+                                .unwrap()
+                                .unwrap_or_else(|| {
+                                    JoinHashMap::init_with_empty_cache_inner(&key, table_info.as_ref())
+                                        .unwrap()
+                                });
+                                (KeyType::Left(key), state)
+                            }));
+                        }
+                    }
+                }
+                Ok((
+                    AlignedMessage::Right(StreamChunk::from_parts(ops, data_chunk)),
+                    msg_io_set,
+                ))
+            }
+            AlignedMessage::Barrier(_) => Ok((msg, msg_io_set)),
+        }
+    }
+
+    fn new_io_queue() -> FuturesOrdered<
+        Pin<Box<dyn futures::Future<Output = (KeyType<K>, JoinEntryState<S>)> + Send>>,
+    > {
+        FuturesOrdered::new()
+    }
+
     #[try_stream(ok = Message, error = StreamExecutorError)]
     async fn into_stream(mut self) {
         let input_l = self.input_l.take().unwrap();
         let input_r = self.input_r.take().unwrap();
         let aligned_stream = barrier_align(input_l.execute(), input_r.execute());
-        #[for_await]
-        for msg in aligned_stream {
-            match msg? {
-                AlignedMessage::Left(chunk) => {
-                    #[for_await]
-                    for chunk in Self::eq_join_oneside::<{ SideType::Left }>(
-                        self.epoch,
-                        &mut self.side_l,
-                        &mut self.side_r,
-                        &self.output_data_types,
-                        &mut self.cond,
-                        chunk,
-                        self.append_only_optimize,
-                    ) {
-                        yield chunk.map_err(StreamExecutorError::hash_join_error)?;
+        futures::pin_mut!(aligned_stream);
+
+        let mut msg_queue = VecDeque::<(AlignedMessage, HashSet<KeyType<K>>)>::new();
+        let mut inflight_io_set = HashSet::<KeyType<K>>::new();
+        let mut io_queue = Self::new_io_queue();
+        futures::pin_mut!(io_queue);
+        let always_ready = futures::future::ready(());
+
+        let mut max_queue_depth = 16;
+
+        let mut stream_ended = false;
+
+        const ADDITIVE_INCREASE: usize = 2;
+        const MULTIPLICATIVE_DECREASE: f64 = 0.9;
+        const IDLE_SLEEP_TIME_US: u64 = 100;
+
+        loop {
+            // If queue is not full and stream has not ended, try to pull messages from upstream,
+            // scheduling any necessary I/O for prefetching.
+            while msg_queue.len() < max_queue_depth && !stream_ended {
+                match futures::future::select(aligned_stream.next(), always_ready.clone()).await {
+                    futures::future::Either::Left((maybe_msg, _)) => {
+                        if let Some(msg) = maybe_msg {
+                            let msg = msg?;
+                            let (msg, msg_io_set) = self
+                                .prefetch_message(msg, &mut io_queue, &mut inflight_io_set)
+                                .map_err(StreamExecutorError::hash_join_error)?;
+                            inflight_io_set.extend(&mut msg_io_set.clone().into_iter());
+                            msg_queue.push_front((msg, msg_io_set));
+                        } else {
+                            stream_ended = true;
+                            break;
+                        }
+                    }
+                    // If the queue from upstream is not ready, break for now.
+                    // We will try to yield messages or sleep until there are new messages
+                    futures::future::Either::Right(_) => break,
+                }
+            }
+
+            // if let Ok(true) =
+            //     backpressure.compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed)
+            // {
+            //     // There is downstream backpressure, so we decrease the queue depth.
+            //     max_queue_depth =
+            //         (max_queue_depth as f64 * MULTIPLICATIVE_DECREASE).ceil() as usize;
+            // } else if msg_queue.len() == max_queue_depth {
+            //     // there is source side pressure, so we increase the queue depth.
+            //     max_queue_depth += ADDITIVE_INCREASE;
+            // }
+
+            // Poll the IO futures so that they make progress.
+            // If the next message is ready, process it and yield its output.
+            if let Some((msg, msg_io_set)) = msg_queue.pop_back() {
+                loop {
+                    // While I/O are complete, remove them from the in-flight io set.
+                    match futures::future::select(io_queue.next(), always_ready.clone()).await {
+                        futures::future::Either::Left((maybe_io_result, _)) => {
+                            if let Some((key_type, state)) = maybe_io_result {
+                                // assert that the key was in the set
+                                assert!(inflight_io_set.remove(&key_type));
+                                match key_type {
+                                    KeyType::Right(key) => {
+                                        self.side_r.ht.insert_cached(key, state);
+                                    }
+                                    KeyType::Left(key) => {
+                                        self.side_l.ht.insert_cached(key, state);
+                                    }
+                                }
+                            } else {
+                                // The I/O queue is exhausted
+                                break;
+                            }
+                        }
+                        // The I/O futures have made no progress, break for now.
+                        // We will try to yield messages or sleep until there are new messages
+                        futures::future::Either::Right(_) => break,
                     }
                 }
-                AlignedMessage::Right(chunk) => {
-                    #[for_await]
-                    for chunk in Self::eq_join_oneside::<{ SideType::Right }>(
-                        self.epoch,
-                        &mut self.side_l,
-                        &mut self.side_r,
-                        &self.output_data_types,
-                        &mut self.cond,
-                        chunk,
-                        self.append_only_optimize,
-                    ) {
-                        yield chunk.map_err(StreamExecutorError::hash_join_error)?;
+
+                if inflight_io_set.is_disjoint(&msg_io_set) {
+                    // Process the message and yield output chunks
+                    match msg {
+                        AlignedMessage::Left(chunk) => {
+                            #[for_await]
+                            for chunk in self.eq_join_oneside::<{ SideType::Left }>(chunk) {
+                                yield chunk.map_err(StreamExecutorError::hash_join_error)?;
+                            }
+                        }
+                        AlignedMessage::Right(chunk) => {
+                            #[for_await]
+                            for chunk in self.eq_join_oneside::<{ SideType::Right }>(chunk) {
+                                yield chunk.map_err(StreamExecutorError::hash_join_error)?;
+                            }
+                        }
+                        AlignedMessage::Barrier(barrier) => {
+                            self.flush_data()
+                                .await
+                                .map_err(StreamExecutorError::hash_join_error)?;
+                            let epoch = barrier.epoch.curr;
+                            self.side_l.ht.update_epoch(epoch);
+                            self.side_r.ht.update_epoch(epoch);
+                            self.epoch = epoch;
+                            yield Message::Barrier(barrier);
+                        }
                     }
+                } else {
+                    // Message is not yet ready
+                    msg_queue.push_back((msg, msg_io_set));
+                    tokio::time::sleep(std::time::Duration::from_micros(IDLE_SLEEP_TIME_US)).await;
                 }
-                AlignedMessage::Barrier(barrier) => {
-                    self.flush_data()
-                        .await
-                        .map_err(StreamExecutorError::hash_join_error)?;
-                    let epoch = barrier.epoch.curr;
-                    self.side_l.ht.update_epoch(epoch);
-                    self.side_r.ht.update_epoch(epoch);
-                    self.epoch = epoch;
-                    yield Message::Barrier(barrier);
+            } else {
+                if stream_ended {
+                    break; // end the stream
+                } else {
+                    // There are no messages to yield from the queue and no messages ready from
+                    // upstream. Sleep and try polling upstream again.
+                    tokio::time::sleep(std::time::Duration::from_micros(IDLE_SLEEP_TIME_US)).await;
                 }
             }
         }
@@ -534,7 +713,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
     async fn hash_eq_match<'a>(
         key: &'a K,
         ht: &'a mut JoinHashMap<K, S>,
-    ) -> Option<&'a mut HashValueType<S>> {
+    ) -> Option<&'a mut JoinEntryState<S>> {
         if key.has_null() {
             None
         } else {
@@ -570,16 +749,15 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
     }
 
     #[try_stream(ok = Message, error = RwError)]
-    async fn eq_join_oneside<'a, const SIDE: SideTypePrimitive>(
-        epoch: u64,
-        mut side_l: &'a mut JoinSide<K, S>,
-        mut side_r: &'a mut JoinSide<K, S>,
-        output_data_types: &'a [DataType],
-        cond: &'a mut Option<RowExpression>,
-        chunk: StreamChunk,
-        append_only_optimize: bool,
-    ) {
-        let chunk = chunk.compact()?;
+    async fn eq_join_oneside<const SIDE: SideTypePrimitive>(&mut self, chunk: StreamChunk) {
+        let epoch = self.epoch;
+        let output_data_types = &self.output_data_types;
+        let mut side_l = &mut self.side_l;
+        let mut side_r = &mut self.side_r;
+        let cond = &mut self.cond;
+        let append_only_optimize = self.append_only_optimize;
+
+        // Compaction is already performed during the prefetch phase.
         let (data_chunk, ops) = chunk.into_parts();
 
         let (side_update, side_match) = if SIDE == SideType::Left {
@@ -674,8 +852,12 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                             Some(v) => {
                                 // Since join key contains pk and pk is unique, there should be only
                                 // one row if matched
-                                debug_assert!(1 == matched_pks.len());
-                                v.remove(matched_pks.remove(0));
+                                if matched_pks.len() > 0 {
+                                    debug_assert!(1 == matched_pks.len());
+                                    v.remove(matched_pks.remove(0));
+                                } else {
+                                    entry_value.insert(pk, JoinRow::new(value, degree));
+                                }
                             }
                             None => {
                                 entry_value.insert(pk, JoinRow::new(value, degree));
