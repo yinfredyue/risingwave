@@ -504,8 +504,11 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                                 .await
                                 .unwrap()
                                 .unwrap_or_else(|| {
-                                    JoinHashMap::init_with_empty_cache_inner(&key, table_info.as_ref())
-                                        .unwrap()
+                                    JoinHashMap::init_with_empty_cache_inner(
+                                        &key,
+                                        table_info.as_ref(),
+                                    )
+                                    .unwrap()
                                 });
 
                                 (KeyType::Right(key), state)
@@ -539,8 +542,11 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                                 .await
                                 .unwrap()
                                 .unwrap_or_else(|| {
-                                    JoinHashMap::init_with_empty_cache_inner(&key, table_info.as_ref())
-                                        .unwrap()
+                                    JoinHashMap::init_with_empty_cache_inner(
+                                        &key,
+                                        table_info.as_ref(),
+                                    )
+                                    .unwrap()
                                 });
                                 (KeyType::Left(key), state)
                             }));
@@ -575,13 +581,13 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         futures::pin_mut!(io_queue);
         let always_ready = futures::future::ready(());
 
-        let mut max_queue_depth = 256;
+        let mut max_queue_depth = 128;
 
         let mut stream_ended = false;
 
         const ADDITIVE_INCREASE: usize = 2;
         const MULTIPLICATIVE_DECREASE: f64 = 0.9;
-        const IDLE_SLEEP_TIME_US: u64 = 100;
+        const IDLE_SLEEP_TIME_US: u64 = 500;
 
         loop {
             // If queue is not full and stream has not ended, try to pull messages from upstream,
@@ -606,6 +612,8 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                     futures::future::Either::Right(_) => break,
                 }
             }
+
+            println!("msg queue len: {:?}", msg_queue.len());
 
             // if let Ok(true) =
             //     backpressure.compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed)
