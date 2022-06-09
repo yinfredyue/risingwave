@@ -56,7 +56,7 @@ impl ExecutorBuilder for HashJoinExecutorBuilder {
         };
         trace!("Join non-equi condition: {:?}", condition);
 
-        let prefetch_queue_depth = params.environment.config().prefetch_queue_depth;
+        let prefetch_queue_depth = params.env.config().prefetch_queue_depth;
 
         let key_indices = node
             .get_distribution_keys()

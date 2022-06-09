@@ -996,6 +996,7 @@ mod tests {
             ks_l,
             ks_r,
             false,
+            64,
         );
         (tx_l, tx_r, Box::new(executor).execute())
     }
@@ -1031,6 +1032,7 @@ mod tests {
             ks_l,
             ks_r,
             true,
+            64,
         );
         (tx_l, tx_r, Box::new(executor).execute())
     }
