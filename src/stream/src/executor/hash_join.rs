@@ -627,21 +627,23 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                 }
             }
 
-            println!(
-                "max queue depth: {:?}, msg queue len: {:?}, consecutive_no_wait {}",
-                max_queue_depth,
-                msg_queue.len(),
-                consecutive_no_wait,
-            );
-
             if processed_msg && msg_uuid % AIMD_ADJUST_RATE_MSGS == 0 {
+                println!(
+                    "max queue depth: {:?}, msg queue len: {:?}, consecutive_no_wait {}, inflight_ios: {}",
+                    max_queue_depth,
+                    msg_queue.len(),
+                    consecutive_no_wait,
+                    inflight_io_set.len()
+                );
                 processed_msg = false;
                 if backpressure {
                     backpressure = false;
+                    println!("MD");
                     // There is downstream backpressure, so we decrease the queue depth.
                     max_queue_depth =
                         (max_queue_depth as f64 * MULTIPLICATIVE_DECREASE).ceil() as usize;
                 } else if msg_queue.len() == max_queue_depth {
+                    println!("AI");
                     // there is source side pressure, so we increase the queue depth.
                     max_queue_depth += ADDITIVE_INCREASE;
                 }
