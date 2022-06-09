@@ -91,6 +91,9 @@ pub struct StreamingConfig {
     // pub chunk_size: u32,
     #[serde(default = "default::checkpoint_interval_ms")]
     pub checkpoint_interval_ms: u32,
+
+    #[serde(default = "default::prefetch_queue_depth")]
+    pub prefetch_queue_depth: usize,
 }
 
 impl Default for StreamingConfig {
@@ -268,6 +271,10 @@ mod default {
 
     pub fn checkpoint_interval_ms() -> u32 {
         100
+    }
+
+    pub fn prefetch_queue_depth() -> usize {
+        128
     }
 
     pub fn share_buffer_upload_concurrency() -> usize {

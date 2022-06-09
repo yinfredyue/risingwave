@@ -5,6 +5,7 @@ heartbeat_interval_ms = 1000
 
 [streaming]
 checkpoint_interval_ms = 100
+prefetch_queue_depth = 64
 
 [storage]
 shared_buffer_capacity_mb = 2048

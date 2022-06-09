@@ -201,6 +201,9 @@ pub struct HashJoinExecutor<K: HashKey, S: StateStore, const T: JoinTypePrimitiv
 
     /// Whether the logic can be optimized for append-only stream
     append_only_optimize: bool,
+
+    /// Depth of the I/O prefetch queue
+    prefetch_queue_depth: usize,
 }
 
 impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> std::fmt::Debug
@@ -376,6 +379,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         ks_l: Keyspace<S>,
         ks_r: Keyspace<S>,
         append_only: bool,
+        prefetch_queue_depth: usize,
     ) -> Self {
         let side_l_column_n = input_l.schema().len();
 
@@ -470,6 +474,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
             key_indices,
             epoch: 0,
             append_only_optimize,
+            prefetch_queue_depth,
         }
     }
 
@@ -583,7 +588,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         futures::pin_mut!(io_queue);
         let always_ready = futures::future::ready(());
 
-        let mut max_queue_depth = 512;
+        let mut max_queue_depth = self.prefetch_queue_depth;
 
         let mut stream_ended = false;
         let mut barrier_in_queue = false;

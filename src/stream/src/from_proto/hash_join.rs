@@ -56,6 +56,8 @@ impl ExecutorBuilder for HashJoinExecutorBuilder {
         };
         trace!("Join non-equi condition: {:?}", condition);
 
+        let prefetch_queue_depth = params.environment.config().prefetch_queue_depth;
+
         let key_indices = node
             .get_distribution_keys()
             .iter()
@@ -115,6 +117,7 @@ impl ExecutorBuilder for HashJoinExecutorBuilder {
             keyspace_l: Keyspace::table_root(store.clone(), &left_table_id),
             keyspace_r: Keyspace::table_root(store, &right_table_id),
             append_only,
+            prefetch_queue_depth,
         };
 
         for_all_join_types! { impl_create_hash_join_executor };
@@ -138,6 +141,7 @@ struct HashJoinExecutorDispatcherArgs<S: StateStore> {
     keyspace_l: Keyspace<S>,
     keyspace_r: Keyspace<S>,
     append_only: bool,
+    prefetch_queue_depth: usize,
 }
 
 impl<S: StateStore, const T: JoinTypePrimitive> HashKeyDispatcher
@@ -160,6 +164,7 @@ impl<S: StateStore, const T: JoinTypePrimitive> HashKeyDispatcher
             args.keyspace_l,
             args.keyspace_r,
             args.append_only,
+            args.prefetch_queue_depth,
         )))
     }
 }
