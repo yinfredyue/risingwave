@@ -595,10 +595,12 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         let mut processed_msg = false;
         let mut backpressure = false;
         let mut consecutive_no_wait = 0;
+        let mut msg_uuid: u64 = 0;
 
         const ADDITIVE_INCREASE: usize = 2;
         const MULTIPLICATIVE_DECREASE: f64 = 0.75;
         const IDLE_SLEEP_TIME_US: u64 = 500;
+        const AIMD_ADJUST_RATE_MSGS: u64 = 16;
 
         loop {
             // If queue is not full and stream has not ended, try to pull messages from upstream,
@@ -626,12 +628,13 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
             }
 
             println!(
-                "max queue depth: {:?}, msg queue len: {:?}",
+                "max queue depth: {:?}, msg queue len: {:?}, consecutive_no_wait {}",
                 max_queue_depth,
-                msg_queue.len()
+                msg_queue.len(),
+                consecutive_no_wait,
             );
 
-            if processed_msg {
+            if processed_msg && msg_uuid % AIMD_ADJUST_RATE_MSGS == 0 {
                 processed_msg = false;
                 if backpressure {
                     backpressure = false;
@@ -674,6 +677,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                 }
 
                 if inflight_io_set.is_disjoint(&msg_io_set) {
+                    msg_uuid += 1;
                     processed_msg = true;
                     consecutive_no_wait += 1;
                     if consecutive_no_wait > self.prefetch_queue_depth {
