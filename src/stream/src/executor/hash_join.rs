@@ -480,7 +480,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
             Pin<Box<dyn futures::Future<Output = (KeyType<K>, JoinEntryState<S>)> + Send>>,
         >,
         inflight_io_set: &mut HashSet<KeyType<K>>,
-    ) -> Result<(AlignedMessage, HashSet<KeyType<K>>)> {
+    ) -> Result<(bool, AlignedMessage, HashSet<KeyType<K>>)> {
         let mut msg_io_set = HashSet::new();
         match msg {
             AlignedMessage::Left(chunk) => {
@@ -517,6 +517,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                     }
                 }
                 Ok((
+                    false,
                     AlignedMessage::Left(StreamChunk::from_parts(ops, data_chunk)),
                     msg_io_set,
                 ))
@@ -554,11 +555,12 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                     }
                 }
                 Ok((
+                    false,
                     AlignedMessage::Right(StreamChunk::from_parts(ops, data_chunk)),
                     msg_io_set,
                 ))
             }
-            AlignedMessage::Barrier(_) => Ok((msg, msg_io_set)),
+            AlignedMessage::Barrier(_) => Ok((true, msg, msg_io_set)),
         }
     }
 
@@ -584,6 +586,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         let mut max_queue_depth = 128;
 
         let mut stream_ended = false;
+        let mut barrier_in_queue = false;
 
         const ADDITIVE_INCREASE: usize = 2;
         const MULTIPLICATIVE_DECREASE: f64 = 0.9;
@@ -592,14 +595,15 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         loop {
             // If queue is not full and stream has not ended, try to pull messages from upstream,
             // scheduling any necessary I/O for prefetching.
-            while msg_queue.len() < max_queue_depth && !stream_ended {
+            while msg_queue.len() < max_queue_depth && !barrier_in_queue && !stream_ended {
                 match futures::future::select(aligned_stream.next(), always_ready.clone()).await {
                     futures::future::Either::Left((maybe_msg, _)) => {
                         if let Some(msg) = maybe_msg {
                             let msg = msg?;
-                            let (msg, msg_io_set) = self
+                            let (is_barrier, msg, msg_io_set) = self
                                 .prefetch_message(msg, &mut io_queue, &mut inflight_io_set)
                                 .map_err(StreamExecutorError::hash_join_error)?;
+                            barrier_in_queue = is_barrier;
                             inflight_io_set.extend(&mut msg_io_set.clone().into_iter());
                             msg_queue.push_front((msg, msg_io_set));
                         } else {
@@ -678,6 +682,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                             self.side_l.ht.update_epoch(epoch);
                             self.side_r.ht.update_epoch(epoch);
                             self.epoch = epoch;
+                            barrier_in_queue = false;
                             yield Message::Barrier(barrier);
                         }
                     }
