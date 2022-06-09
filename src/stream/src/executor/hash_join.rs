@@ -592,9 +592,12 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
 
         let mut stream_ended = false;
         let mut barrier_in_queue = false;
+        let mut processed_msg = false;
+        let mut backpressure = false;
+        let mut consecutive_no_wait = 0;
 
         const ADDITIVE_INCREASE: usize = 2;
-        const MULTIPLICATIVE_DECREASE: f64 = 0.9;
+        const MULTIPLICATIVE_DECREASE: f64 = 0.75;
         const IDLE_SLEEP_TIME_US: u64 = 500;
 
         loop {
@@ -622,18 +625,24 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                 }
             }
 
-            println!("msg queue len: {:?}", msg_queue.len());
+            println!(
+                "max queue depth: {:?}, msg queue len: {:?}",
+                max_queue_depth,
+                msg_queue.len()
+            );
 
-            // if let Ok(true) =
-            //     backpressure.compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed)
-            // {
-            //     // There is downstream backpressure, so we decrease the queue depth.
-            //     max_queue_depth =
-            //         (max_queue_depth as f64 * MULTIPLICATIVE_DECREASE).ceil() as usize;
-            // } else if msg_queue.len() == max_queue_depth {
-            //     // there is source side pressure, so we increase the queue depth.
-            //     max_queue_depth += ADDITIVE_INCREASE;
-            // }
+            if processed_msg {
+                processed_msg = false;
+                if backpressure {
+                    backpressure = false;
+                    // There is downstream backpressure, so we decrease the queue depth.
+                    max_queue_depth =
+                        (max_queue_depth as f64 * MULTIPLICATIVE_DECREASE).ceil() as usize;
+                } else if msg_queue.len() == max_queue_depth {
+                    // there is source side pressure, so we increase the queue depth.
+                    max_queue_depth += ADDITIVE_INCREASE;
+                }
+            }
 
             // Poll the IO futures so that they make progress.
             // If the next message is ready, process it and yield its output.
@@ -665,6 +674,11 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                 }
 
                 if inflight_io_set.is_disjoint(&msg_io_set) {
+                    processed_msg = true;
+                    consecutive_no_wait += 1;
+                    if consecutive_no_wait > self.prefetch_queue_depth {
+                        backpressure = true;
+                    }
                     // Process the message and yield output chunks
                     match msg {
                         AlignedMessage::Left(chunk) => {
@@ -692,6 +706,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                         }
                     }
                 } else {
+                    consecutive_no_wait = 0;
                     // Message is not yet ready
                     msg_queue.push_back((msg, msg_io_set));
                     tokio::time::sleep(std::time::Duration::from_micros(IDLE_SLEEP_TIME_US)).await;
