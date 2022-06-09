@@ -4036,6 +4036,7 @@ dependencies = [
  "derivative",
  "either",
  "etcd-client",
+ "fail",
  "futures",
  "hex",
  "hyper",

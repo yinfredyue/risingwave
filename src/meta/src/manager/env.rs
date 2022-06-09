@@ -69,6 +69,16 @@ impl Default for MetaOpts {
     }
 }
 
+impl MetaOpts {
+    pub fn test(enable_recovery: bool , checkpoint_interval : u64, in_flight_barrier_nums:usize) -> Self {
+        Self {
+            enable_recovery,
+            checkpoint_interval: Duration::from_millis(checkpoint_interval),
+            in_flight_barrier_nums,
+        }
+    }
+}
+
 impl<S> MetaSrvEnv<S>
 where
     S: MetaStore,
@@ -136,6 +146,10 @@ impl MetaSrvEnv<MemStore> {
     // Instance for test.
     pub async fn for_test() -> Self {
         // change to sync after refactor `IdGeneratorManager::new` sync.
+        Self::for_test_opts(MetaOpts::default().into()).await
+    }
+    pub async fn for_test_opts(opts: Arc<MetaOpts>) -> Self {
+        // change to sync after refactor `IdGeneratorManager::new` sync.
         let meta_store = Arc::new(MemStore::default());
         let id_gen_manager = Arc::new(IdGeneratorManager::new(meta_store.clone()).await);
         let notification_manager = Arc::new(NotificationManager::new());
@@ -148,7 +162,7 @@ impl MetaSrvEnv<MemStore> {
             notification_manager,
             hash_mapping_manager,
             stream_client_pool,
-            opts: MetaOpts::default().into(),
+            opts,
         }
     }
 }

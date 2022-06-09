@@ -17,6 +17,7 @@ use std::iter::once;
 use std::sync::atomic::AtomicBool;
 use std::sync::{atomic, Arc};
 use std::time::Duration;
+use fail::fail_point;
 
 use futures::future::try_join_all;
 use itertools::Itertools;
@@ -325,28 +326,12 @@ where
                     continue;
                 }
                 // there's barrier scheduled.
-                _ = self.scheduled_barriers.wait_one() => {
-                    if self.wait_recovery.load(atomic::Ordering::SeqCst){
-                        continue;
-                    }
-                    if self.wait_build_actor.load(atomic::Ordering::SeqCst){
-                        continue;
-                    }
-                    if self.command_ctx_queue.read().await.iter().filter(|x| matches!(x.states, InFlight)).count() >= self.in_flight_barrier_nums{
-                        continue;
-                    }
+                _ = self.scheduled_barriers.wait_one() ,if self.pause_inject_barrier().await => {
+
                 }
                 // Wait for the minimal interval,
-                _ = min_interval.tick() => {
-                    if self.wait_recovery.load(atomic::Ordering::SeqCst){
-                        continue;
-                    }
-                    if self.wait_build_actor.load(atomic::Ordering::SeqCst){
-                        continue;
-                    }
-                    if self.command_ctx_queue.read().await.iter().filter(|x| matches!(x.states, InFlight)).count() >= self.in_flight_barrier_nums{
-                        continue;
-                    }
+                _ = min_interval.tick() ,if self.pause_inject_barrier().await => {
+                    
                 }
             }
 
@@ -476,6 +461,7 @@ where
         if command_ctx_queue_clone.len() > 0
             && matches!(command_ctx_queue_clone.front().unwrap().states, Fail(_))
         {
+            fail_point!("inject_barrier_err_success");
             let count = command_ctx_queue_clone
                 .iter()
                 .filter(|x| matches!(x.states, InFlight))
@@ -605,6 +591,9 @@ where
         env: MetaSrvEnv<S>,
         command_context: &CommandContext<S>,
     ) -> Result<Vec<InjectBarrierResponse>> {
+        fail_point!("inject_barrier_err", |_| Err(RwError::from(ErrorCode::InternalError(
+            "inject_barrier_err".to_string(),
+        ))));
         let mutation = command_context.to_mutation().await?;
         let info = &command_context.info;
 
@@ -657,6 +646,20 @@ where
         });
 
         try_join_all(collect_futures).await
+    }
+
+    /// Pause inject barrier until True
+    async fn pause_inject_barrier(&self) -> bool{
+        !(self.wait_recovery.load(atomic::Ordering::SeqCst)
+            || self.wait_build_actor.load(atomic::Ordering::SeqCst)
+            || self
+                .command_ctx_queue
+                .read()
+                .await
+                .iter()
+                .filter(|x| matches!(x.states, InFlight))
+                .count()
+                >= self.in_flight_barrier_nums)
     }
 
     /// Resolve actor information from cluster and fragment manager.

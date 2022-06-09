@@ -33,6 +33,7 @@ paste = "1"
 prometheus = "0.13"
 prost = "0.10"
 rand = "0.8"
+fail = "0.5"
 risingwave_common = { path = "../common" }
 risingwave_connector = { path = "../connector" }
 risingwave_hummock_sdk = { path = "../storage/hummock_sdk" }
@@ -70,3 +71,4 @@ risingwave_frontend = { path = "../frontend" }
 
 [features]
 test = []
+failpoints = ["fail/failpoints"]

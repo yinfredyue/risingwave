@@ -646,7 +646,7 @@ jobs:
           cargo doc --document-private-items --no-deps
       - name: Run rust failpoints test
         run: |
-          cargo nextest run failpoints  --features failpoints --no-fail-fast
+          `cargo nextest run failpoints  --features failpoints --no-fail-fast`
       - name: Run rust doc check
         run: |
           cargo test --doc
