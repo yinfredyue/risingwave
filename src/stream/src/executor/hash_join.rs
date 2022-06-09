@@ -583,7 +583,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         futures::pin_mut!(io_queue);
         let always_ready = futures::future::ready(());
 
-        let mut max_queue_depth = 128;
+        let mut max_queue_depth = 512;
 
         let mut stream_ended = false;
         let mut barrier_in_queue = false;
