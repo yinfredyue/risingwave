@@ -12,5 +12,5 @@ sstable_size_mb = 256
 block_size_kb = 1024
 bloom_false_positive = 0.01
 data_directory = "hummock_001"
-block_cache_capacity_mb = 4096
+block_cache_capacity_mb = 2048
 meta_cache_capacity_mb = 1024
