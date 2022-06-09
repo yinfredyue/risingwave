@@ -26,7 +26,7 @@ use risingwave_pb::catalog::Source;
 use risingwave_pb::common::{ActorInfo, ParallelUnitMapping, WorkerType};
 use risingwave_pb::meta::table_fragments::{ActorState, ActorStatus};
 use risingwave_pb::stream_plan::stream_node::NodeBody;
-use risingwave_pb::stream_plan::{ActorMapping, DispatcherType, StreamNode, StreamSourceState};
+use risingwave_pb::stream_plan::{ActorMapping, DispatcherType, StreamNode};
 use risingwave_pb::stream_service::{
     BroadcastActorInfoTableRequest, BuildActorsRequest, HangingChannel, UpdateActorsRequest,
 };
@@ -37,7 +37,7 @@ use super::ScheduledLocations;
 use crate::barrier::{BarrierManagerRef, Command};
 use crate::cluster::{ClusterManagerRef, ParallelUnitId, WorkerId};
 use crate::manager::{HashMappingManagerRef, MetaSrvEnv};
-use crate::model::{ActorId, DispatcherId, TableFragments};
+use crate::model::{ActorId, DispatcherId, FragmentId, TableFragments};
 use crate::storage::MetaStore;
 use crate::stream::{FragmentManagerRef, Scheduler, SourceManagerRef};
 
@@ -293,7 +293,7 @@ where
             mut upstream_node_actors,
             table_sink_map,
             dependent_table_ids,
-            affiliated_source,
+            affiliated_source: _,
             table_id_offset: _,
             internal_table_id_set: _,
         }: CreateMaterializedViewContext,
@@ -434,62 +434,7 @@ where
             .collect();
 
         table_fragments.set_actor_status(actor_info);
-        let mut actor_map = table_fragments.actor_map();
-
-        let mut source_actors_group_by_fragment = HashMap::new();
-        for fragment in table_fragments.fragments() {
-            let mut source_actors = HashMap::new();
-            for actor in &fragment.actors {
-                if let Some(source_id) =
-                    TableFragments::fetch_stream_source_id(actor.nodes.as_ref().unwrap())
-                {
-                    source_actors
-                        .entry(source_id)
-                        .or_insert(vec![])
-                        .push(actor.actor_id as ActorId)
-                }
-            }
-
-            for (source_id, actors) in source_actors {
-                source_actors_group_by_fragment
-                    .entry(source_id)
-                    .or_insert(vec![])
-                    .push(actors)
-            }
-        }
-
-        let split_assignment = self
-            .source_manager
-            .schedule_split_for_actors(source_actors_group_by_fragment, affiliated_source)
-            .await?;
-
-        // patch source actors with splits
-        for (actor_id, actor) in &mut actor_map {
-            if let Some(splits) = split_assignment.get(actor_id) {
-                let mut node = actor.nodes.as_mut().unwrap();
-                while !node.input.is_empty() {
-                    node = node.input.first_mut().unwrap();
-                }
-
-                if let Some(NodeBody::Source(s)) = node.node_body.as_mut() {
-                    log::debug!(
-                        "patching source node #{} with splits {:?}",
-                        actor_id,
-                        splits
-                    );
-
-                    if !splits.is_empty() {
-                        s.stream_source_state = Some(StreamSourceState {
-                            split_type: splits.first().unwrap().get_type(),
-                            stream_source_splits: splits
-                                .iter()
-                                .map(|split| split.to_json_bytes().to_vec())
-                                .collect(),
-                        });
-                    }
-                }
-            }
-        }
+        let actor_map = table_fragments.actor_map();
 
         // Actors on each stream node will need to know where their upstream lies. `actor_info`
         // includes such information. It contains: 1. actors in the current create
@@ -627,17 +572,38 @@ where
                 .to_rw_result_with(|| format!("failed to connect to {}", node_id))?;
         }
 
+        let mut source_fragments = HashMap::new();
+        for fragment in table_fragments.fragments() {
+            for actor in &fragment.actors {
+                if let Some(source_id) =
+                    TableFragments::fetch_stream_source_id(actor.nodes.as_ref().unwrap())
+                {
+                    source_fragments
+                        .entry(source_id)
+                        .or_insert(vec![])
+                        .push(fragment.fragment_id as FragmentId);
+                }
+            }
+        }
+
         // Add table fragments to meta store with state: `State::Creating`.
         self.fragment_manager
             .start_create_table_fragments(table_fragments.clone())
             .await?;
+
         let table_id = table_fragments.table_id();
+        let init_split_assignment = self
+            .source_manager
+            .pre_allocate_splits(&table_id, source_fragments.clone())
+            .await?;
+
         if let Err(err) = self
             .barrier_manager
             .run_command(Command::CreateMaterializedView {
                 table_fragments,
                 table_sink_map,
                 dispatches,
+                source_state: init_split_assignment.clone(),
             })
             .await
         {
@@ -645,6 +611,10 @@ where
                 .cancel_create_table_fragments(&table_id)
                 .await?;
             return Err(err);
+        } else {
+            self.source_manager
+                .patch_update(Some(source_fragments), Some(init_split_assignment))
+                .await;
         }
 
         Ok(())
@@ -682,7 +652,6 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use std::thread::sleep;
     use std::time::Duration;
-    use tokio::sync::Notify;
 
     use risingwave_common::catalog::TableId;
     use risingwave_common::error::tonic_err;
@@ -699,19 +668,22 @@ mod tests {
         DropActorsResponse, InjectBarrierRequest, InjectBarrierResponse, UpdateActorsResponse, *,
     };
     use tokio::sync::oneshot::Sender;
+    #[cfg(feature = "failpoints")]
+    use tokio::sync::Notify;
     use tokio::task::JoinHandle;
     use tonic::{Request, Response, Status};
 
     use super::*;
     use crate::barrier::GlobalBarrierManager;
     use crate::cluster::ClusterManager;
+    use crate::hummock::compaction_group::manager::CompactionGroupManager;
     use crate::hummock::HummockManager;
     use crate::manager::{CatalogManager, MetaSrvEnv};
-    use crate::MetaOpts;
     use crate::model::ActorId;
     use crate::rpc::metrics::MetaMetrics;
     use crate::storage::MemStore;
     use crate::stream::{FragmentManager, SourceManager};
+    use crate::MetaOpts;
 
     struct FakeFragmentState {
         actor_streams: Mutex<HashMap<ActorId, StreamActor>>,
@@ -846,7 +818,7 @@ mod tests {
             });
             sleep(Duration::from_secs(1));
 
-            let env = MetaSrvEnv::for_test_opts(Arc::new(MetaOpts::test(true,100,10))).await;
+            let env = MetaSrvEnv::for_test_opts(Arc::new(MetaOpts::test(true))).await;
             let cluster_manager =
                 Arc::new(ClusterManager::new(env.clone(), Duration::from_secs(3600)).await?);
             let host = HostAddress {
@@ -861,9 +833,16 @@ mod tests {
             let catalog_manager = Arc::new(CatalogManager::new(env.clone()).await?);
             let fragment_manager = Arc::new(FragmentManager::new(env.clone()).await?);
             let meta_metrics = Arc::new(MetaMetrics::new());
+            let compaction_group_manager =
+                Arc::new(CompactionGroupManager::new(env.clone()).await.unwrap());
             let hummock_manager = Arc::new(
-                HummockManager::new(env.clone(), cluster_manager.clone(), meta_metrics.clone())
-                    .await?,
+                HummockManager::new(
+                    env.clone(),
+                    cluster_manager.clone(),
+                    meta_metrics.clone(),
+                    compaction_group_manager.clone(),
+                )
+                .await?,
             );
             let barrier_manager = Arc::new(GlobalBarrierManager::new(
                 env.clone(),
@@ -1146,7 +1125,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "failpoints")]
+    #[cfg(all(test, feature = "failpoints"))]
     async fn test_failpoints_drop_mv_recovery() {
         let inject_barrier_err = "inject_barrier_err";
         let inject_barrier_err_success = "inject_barrier_err_success";
@@ -1198,7 +1177,8 @@ mod tests {
         services
             .global_stream_manager
             .create_materialized_view(table_fragments, ctx)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         for actor in actors {
             let mut scheduled_actor = services
@@ -1237,24 +1217,27 @@ mod tests {
         let sink_actor_ids = services
             .fragment_manager
             .get_table_sink_actor_ids(&table_id)
-            .await.unwrap();
+            .await
+            .unwrap();
         let actor_ids = services
             .fragment_manager
             .get_table_actor_ids(&table_id)
-            .await.unwrap();
+            .await
+            .unwrap();
         assert_eq!(sink_actor_ids, (0..5).collect::<Vec<u32>>());
         assert_eq!(actor_ids, (0..5).collect::<Vec<u32>>());
         let notify = Arc::new(Notify::new());
         let notify1 = notify.clone();
 
         // test recovery.
-        fail::cfg(inject_barrier_err,"return").unwrap();
-        tokio::spawn(async move{
+        fail::cfg(inject_barrier_err, "return").unwrap();
+        tokio::spawn(async move {
             fail::cfg_callback(inject_barrier_err_success, move || {
-                    fail::remove(inject_barrier_err);
-                    fail::remove(inject_barrier_err_success);
+                fail::remove(inject_barrier_err);
+                fail::remove(inject_barrier_err_success);
                 notify.notify_one();
-            }).unwrap();
+            })
+            .unwrap();
         });
         notify1.notified().await;
 
@@ -1262,14 +1245,16 @@ mod tests {
             .global_stream_manager
             .fragment_manager
             .select_table_fragments_by_table_id(&table_id)
-            .await.unwrap();
+            .await
+            .unwrap();
         assert_eq!(4, table_fragments.internal_table_ids().len());
 
         // test drop materialized_view
         services
             .global_stream_manager
             .drop_materialized_view(&table_fragments.table_id())
-            .await.unwrap();
+            .await
+            .unwrap();
 
         // test get table_fragment;
         let select_err_1 = services

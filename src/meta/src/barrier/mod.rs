@@ -17,8 +17,8 @@ use std::iter::once;
 use std::sync::atomic::AtomicBool;
 use std::sync::{atomic, Arc};
 use std::time::Duration;
-use fail::fail_point;
 
+use fail::fail_point;
 use futures::future::try_join_all;
 use itertools::Itertools;
 use prometheus::HistogramTimer;
@@ -331,7 +331,7 @@ where
                 }
                 // Wait for the minimal interval,
                 _ = min_interval.tick() ,if self.pause_inject_barrier().await => {
-                    
+
                 }
             }
 
@@ -591,9 +591,9 @@ where
         env: MetaSrvEnv<S>,
         command_context: &CommandContext<S>,
     ) -> Result<Vec<InjectBarrierResponse>> {
-        fail_point!("inject_barrier_err", |_| Err(RwError::from(ErrorCode::InternalError(
-            "inject_barrier_err".to_string(),
-        ))));
+        fail_point!("inject_barrier_err", |_| Err(RwError::from(
+            ErrorCode::InternalError("inject_barrier_err".to_string(),)
+        )));
         let mutation = command_context.to_mutation().await?;
         let info = &command_context.info;
 
@@ -649,7 +649,7 @@ where
     }
 
     /// Pause inject barrier until True
-    async fn pause_inject_barrier(&self) -> bool{
+    async fn pause_inject_barrier(&self) -> bool {
         !(self.wait_recovery.load(atomic::Ordering::SeqCst)
             || self.wait_build_actor.load(atomic::Ordering::SeqCst)
             || self

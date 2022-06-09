@@ -33,7 +33,9 @@
 #![feature(type_alias_impl_trait)]
 #![feature(map_first_last)]
 #![feature(drain_filter)]
+#![feature(custom_test_frameworks)]
 #![cfg_attr(coverage, feature(no_coverage))]
+#![test_runner(risingwave_test_runner::test_runner::run_failpont_tests)]
 
 mod barrier;
 pub mod cluster;
