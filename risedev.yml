@@ -70,7 +70,8 @@ risedev:
     - use: frontend
 
   full:
-    - use: minio
+    - use: aws-s3
+      bucket: single-node-s3
     - use: etcd
     - use: meta-node
     - use: compute-node
@@ -79,9 +80,9 @@ risedev:
     - use: prometheus
     - use: grafana
     - use: zookeeper
-      persist-data: true
+      persist-data: false
     - use: kafka
-      persist-data: true
+      persist-data: false
 
   ##########################################
   ### Configuration used for ./risedev p ###
