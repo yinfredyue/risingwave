@@ -615,7 +615,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                             let (is_barrier, msg, msg_io_set) = self
                                 .prefetch_message(msg, &mut io_queue, &mut inflight_io_set)
                                 .map_err(StreamExecutorError::hash_join_error)?;
-                            barrier_in_queue = is_barrier;
+                            // barrier_in_queue = is_barrier;
                             inflight_io_set.extend(&mut msg_io_set.clone().into_iter());
                             msg_queue.push_front((msg, msg_io_set));
                         } else {
@@ -629,7 +629,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                 }
             }
 
-            if processed_msg && msg_uuid % self.aimd_adjust_rate_msgs == 0 {
+            if msg_uuid % 1024 == 0 {
                 println!(
                     "max queue depth: {:?}, msg queue len: {:?}, consecutive_no_wait {}, inflight_ios: {}",
                     max_queue_depth,
@@ -637,6 +637,9 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                     consecutive_no_wait,
                     inflight_io_set.len()
                 );
+            }
+
+            if processed_msg && msg_uuid % self.aimd_adjust_rate_msgs == 0 {
                 processed_msg = false;
                 if backpressure {
                     backpressure = false;
