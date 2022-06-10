@@ -620,6 +620,10 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
 
                             barrier_in_queue = is_barrier;
                             if is_barrier {
+                                println!(
+                                    "time since last barrier: {:?}us",
+                                    barrier_entry_time.elapsed().as_micros()
+                                );
                                 barrier_entry_time = std::time::Instant::now();
                             }
                             inflight_io_set.extend(&mut msg_io_set.clone().into_iter());
@@ -726,7 +730,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                             self.side_l.ht.update_epoch(epoch);
                             self.side_r.ht.update_epoch(epoch);
                             self.epoch = epoch;
-                            println!("time elapsed: {:?}us", now.elapsed().as_micros());
+                            println!("flush time: {:?}us", now.elapsed().as_micros());
                             barrier_in_queue = false;
                             yield Message::Barrier(barrier);
                         }
