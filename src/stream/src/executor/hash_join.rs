@@ -707,7 +707,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                         AlignedMessage::Barrier(barrier) => {
                             // we need to have processed all inflight I/Os by the time we process a
                             // barrier
-                            assert!(inflight_io_set.is_empty());
+                            // assert!(inflight_io_set.is_empty());
                             self.flush_data()
                                 .await
                                 .map_err(StreamExecutorError::hash_join_error)?;
