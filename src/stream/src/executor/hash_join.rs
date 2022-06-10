@@ -635,7 +635,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                 }
             }
 
-            if msg_uuid % 1024 == 0 {
+            if msg_uuid % 32 == 0 {
                 println!(
                     "max queue depth: {:?}, msg queue len: {:?}, consecutive_no_wait {}, inflight_ios: {}",
                     max_queue_depth,
