@@ -600,6 +600,8 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         let mut consecutive_no_wait = 0;
         let mut msg_uuid: u64 = 0;
 
+        let mut barrier_entry_time = std::time::Instant::now();
+
         const ADDITIVE_INCREASE: usize = 2;
         const MULTIPLICATIVE_DECREASE: f64 = 0.75;
         const IDLE_SLEEP_TIME_US: u64 = 500;
@@ -615,7 +617,11 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                             let (is_barrier, msg, msg_io_set) = self
                                 .prefetch_message(msg, &mut io_queue, &mut inflight_io_set)
                                 .map_err(StreamExecutorError::hash_join_error)?;
-                            // barrier_in_queue = is_barrier;
+
+                            barrier_in_queue = is_barrier;
+                            if is_barrier {
+                                barrier_entry_time = std::time::Instant::now();
+                            }
                             inflight_io_set.extend(&mut msg_io_set.clone().into_iter());
                             msg_queue.push_front((msg, msg_io_set));
                         } else {
@@ -687,7 +693,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                     msg_uuid += 1;
                     processed_msg = true;
                     consecutive_no_wait += 1;
-                    if consecutive_no_wait > self.prefetch_queue_depth {
+                    if consecutive_no_wait > 4 * self.prefetch_queue_depth {
                         backpressure = true;
                     }
                     // Process the message and yield output chunks
@@ -705,9 +711,14 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                             }
                         }
                         AlignedMessage::Barrier(barrier) => {
+                            println!(
+                                "barrier in_queue time: {:?}us",
+                                barrier_entry_time.elapsed().as_micros()
+                            );
                             // we need to have processed all inflight I/Os by the time we process a
                             // barrier
-                            // assert!(inflight_io_set.is_empty());
+                            assert!(inflight_io_set.is_empty());
+                            let now = std::time::Instant::now();
                             self.flush_data()
                                 .await
                                 .map_err(StreamExecutorError::hash_join_error)?;
@@ -715,6 +726,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                             self.side_l.ht.update_epoch(epoch);
                             self.side_r.ht.update_epoch(epoch);
                             self.epoch = epoch;
+                            println!("time elapsed: {:?}us", now.elapsed().as_micros());
                             barrier_in_queue = false;
                             yield Message::Barrier(barrier);
                         }
