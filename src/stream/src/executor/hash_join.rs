@@ -204,6 +204,9 @@ pub struct HashJoinExecutor<K: HashKey, S: StateStore, const T: JoinTypePrimitiv
 
     /// Depth of the I/O prefetch queue
     prefetch_queue_depth: usize,
+
+    /// Number of msgs seen before adjusting AIMD flow control. Set to u64::MAX to disable AIMD.
+    aimd_adjust_rate_msgs: u64,
 }
 
 impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> std::fmt::Debug
@@ -380,6 +383,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         ks_r: Keyspace<S>,
         append_only: bool,
         prefetch_queue_depth: usize,
+        aimd_adjust_rate_msgs: u64,
     ) -> Self {
         let side_l_column_n = input_l.schema().len();
 
@@ -475,6 +479,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
             epoch: 0,
             append_only_optimize,
             prefetch_queue_depth,
+            aimd_adjust_rate_msgs,
         }
     }
 
@@ -600,7 +605,6 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         const ADDITIVE_INCREASE: usize = 2;
         const MULTIPLICATIVE_DECREASE: f64 = 0.75;
         const IDLE_SLEEP_TIME_US: u64 = 500;
-        const AIMD_ADJUST_RATE_MSGS: u64 = 16;
 
         loop {
             // If queue is not full and stream has not ended, try to pull messages from upstream,
@@ -627,7 +631,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                 }
             }
 
-            if processed_msg && msg_uuid % AIMD_ADJUST_RATE_MSGS == 0 {
+            if processed_msg && msg_uuid % self.aimd_adjust_rate_msgs == 0 {
                 println!(
                     "max queue depth: {:?}, msg queue len: {:?}, consecutive_no_wait {}, inflight_ios: {}",
                     max_queue_depth,
@@ -700,6 +704,9 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                             }
                         }
                         AlignedMessage::Barrier(barrier) => {
+                            // we need to have processed all inflight I/Os by the time we process a
+                            // barrier
+                            assert!(inflight_io_set.is_empty());
                             self.flush_data()
                                 .await
                                 .map_err(StreamExecutorError::hash_join_error)?;
@@ -1018,6 +1025,7 @@ mod tests {
             ks_r,
             false,
             64,
+            u64::MAX,
         );
         (tx_l, tx_r, Box::new(executor).execute())
     }
@@ -1054,6 +1062,7 @@ mod tests {
             ks_r,
             true,
             64,
+            u64::MAX,
         );
         (tx_l, tx_r, Box::new(executor).execute())
     }

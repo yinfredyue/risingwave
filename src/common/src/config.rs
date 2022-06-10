@@ -94,6 +94,10 @@ pub struct StreamingConfig {
 
     #[serde(default = "default::prefetch_queue_depth")]
     pub prefetch_queue_depth: usize,
+
+    /// Number of msgs seen before adjusting AIMD flow control. Set to u64::MAX to disable AIMD
+    #[serde(default = "default::aimd_adjust_rate_msgs")]
+    pub aimd_adjust_rate_msgs: u64,
 }
 
 impl Default for StreamingConfig {
@@ -275,6 +279,10 @@ mod default {
 
     pub fn prefetch_queue_depth() -> usize {
         128
+    }
+
+    pub fn aimd_adjust_rate_msgs() -> u64 {
+        u64::MAX
     }
 
     pub fn share_buffer_upload_concurrency() -> usize {
