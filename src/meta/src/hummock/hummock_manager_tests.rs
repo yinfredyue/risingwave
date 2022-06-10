@@ -205,7 +205,7 @@ async fn test_hummock_compaction_task() {
         .unwrap()
         .unwrap();
     hummock_manager
-        .assign_compaction_task(&compact_task, context_id, async { true })
+        .assign_compaction_task(&compact_task, context_id)
         .await
         .unwrap();
     assert_eq!(
@@ -255,7 +255,7 @@ async fn test_hummock_compaction_task() {
         .unwrap()
         .unwrap();
     hummock_manager
-        .assign_compaction_task(&compact_task, context_id, async { true })
+        .assign_compaction_task(&compact_task, context_id)
         .await
         .unwrap();
     assert_eq!(compact_task.get_task_id(), 3);

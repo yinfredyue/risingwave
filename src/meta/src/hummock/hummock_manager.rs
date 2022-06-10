@@ -665,17 +665,12 @@ where
     }
 
     /// Assigns a compaction task to a compactor
-    pub async fn assign_compaction_task<T: Future<Output = bool>>(
+    pub async fn assign_compaction_task(
         &self,
         compact_task: &CompactTask,
         assignee_context_id: HummockContextId,
-        send_task: T,
     ) -> Result<()> {
         let mut compaction_guard = self.compaction.write().await;
-        if !send_task.await {
-            return Err(Error::CompactorUnreachable(assignee_context_id));
-        }
-
         let compaction = compaction_guard.deref_mut();
         let mut compact_task_assignment =
             VarTransaction::new(&mut compaction.compact_task_assignment);
@@ -1341,5 +1336,29 @@ where
             return sender.try_send(compaction_group);
         }
         false
+    }
+
+    pub async fn unassign_compaction_task(&self, task_id: u64) -> Result<()> {
+        let mut compaction_guard = self.compaction.write().await;
+
+        // to unssigned the task on meta_store by task_id
+        let compaction = compaction_guard.deref_mut();
+        let mut compact_task_assignment =
+            VarTransaction::new(&mut compaction.compact_task_assignment);
+        let assignee_context_id = match compact_task_assignment.remove(&task_id) {
+            None => {
+                // The task is not found.
+                return Ok(());
+            }
+            Some(assignment) => assignment.context_id,
+        };
+        commit_multi_var!(self, Some(assignee_context_id), compact_task_assignment)?;
+
+        // remove from memory
+        for compact_status in compaction.compaction_statuses.values_mut() {
+            compact_status.cancel_compaction_tasks_if(|pending_task_id| pending_task_id == task_id);
+        }
+
+        Ok(())
     }
 }

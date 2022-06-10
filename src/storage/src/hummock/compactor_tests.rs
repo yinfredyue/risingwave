@@ -115,7 +115,7 @@ mod tests {
             .unwrap()
             .unwrap();
         hummock_manager_ref
-            .assign_compaction_task(&compact_task, worker_node.id, async { true })
+            .assign_compaction_task(&compact_task, worker_node.id)
             .await
             .unwrap();
 
@@ -219,7 +219,7 @@ mod tests {
             .unwrap()
             .unwrap();
         hummock_manager_ref
-            .assign_compaction_task(&compact_task, worker_node.id, async { true })
+            .assign_compaction_task(&compact_task, worker_node.id)
             .await
             .unwrap();
 
@@ -306,7 +306,7 @@ mod tests {
         compact_task.existing_table_ids.push(2);
 
         hummock_manager_ref
-            .assign_compaction_task(&compact_task, worker_node.id, async { true })
+            .assign_compaction_task(&compact_task, worker_node.id)
             .await
             .unwrap();
 

@@ -164,9 +164,11 @@ where
                 .await
                 .unwrap_or(false)
             };
+
+            // 2.2.1 assign_compaction_task
             match self
                 .hummock_manager
-                .assign_compaction_task(&compact_task, compactor.context_id(), send_task)
+                .assign_compaction_task(&compact_task, compactor.context_id())
                 .await
             {
                 Ok(_) => {
@@ -178,7 +180,7 @@ where
                     );
                     // Reschedule it in case there are more tasks from this compaction group.
                     request_channel.try_send(compaction_group);
-                    return true;
+                    // return true;
                 }
                 Err(err) => {
                     tracing::warn!(
@@ -194,6 +196,31 @@ where
                         _ => {}
                     }
                     continue 'send_task;
+                }
+            }
+
+            // 2.2.2 send_task
+            if send_task.await {
+                return true;
+            }
+
+            loop {
+                match self
+                    .hummock_manager
+                    .unassign_compaction_task(compact_task.task_id)
+                    .await
+                {
+                    Ok(_) => {
+                        continue 'send_task;
+                    }
+
+                    Err(error) => {
+                        tracing::info!(
+                            "unassign_compaction_task fail {} task_id {}",
+                            error,
+                            compact_task.task_id
+                        );
+                    }
                 }
             }
         }
