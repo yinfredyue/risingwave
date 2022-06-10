@@ -13,15 +13,13 @@
 // limitations under the License.
 
 use std::collections::VecDeque;
-use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
 
-use futures::stream::{FuturesOrdered, Stream};
+use futures::stream::FuturesOrdered;
 use futures::StreamExt;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
-use madsim::collections::{HashMap, HashSet};
+use madsim::collections::HashSet;
 use risingwave_common::array::{Array, ArrayRef, Op, Row, RowRef, StreamChunk};
 use risingwave_common::catalog::Schema;
 use risingwave_common::error::{internal_error, Result, RwError};
@@ -589,7 +587,7 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
 
         let mut msg_queue = VecDeque::<(AlignedMessage, HashSet<KeyType<K>>)>::new();
         let mut inflight_io_set = HashSet::<KeyType<K>>::new();
-        let mut io_queue = Self::new_io_queue();
+        let io_queue = Self::new_io_queue();
         futures::pin_mut!(io_queue);
         let always_ready = futures::future::ready(());
 
