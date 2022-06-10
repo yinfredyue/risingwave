@@ -39,6 +39,7 @@ use crate::hummock;
 use crate::hummock::compaction_group::manager::CompactionGroupManager;
 use crate::hummock::CompactionScheduler;
 use crate::manager::{CatalogManager, MetaOpts, MetaSrvEnv, UserManager};
+use crate::orchestrater::{start_orchestrater, OrchestraterConfig};
 use crate::rpc::metrics::MetaMetrics;
 use crate::rpc::service::cluster_service::ClusterServiceImpl;
 use crate::rpc::service::heartbeat_service::HeartbeatServiceImpl;
@@ -140,12 +141,14 @@ pub async fn rpc_serve_with_store<S: MetaStore>(
         .unwrap(),
     );
 
+    let (orchestrate_send, orchestrate_recv) = tokio::sync::mpsc::channel(10);
     if let Some(dashboard_addr) = dashboard_addr {
         let dashboard_service = DashboardService {
             dashboard_addr,
             cluster_manager: cluster_manager.clone(),
             fragment_manager: fragment_manager.clone(),
             meta_store: env.meta_store_ref(),
+            orchestrate_sender: orchestrate_send,
         };
         // TODO: join dashboard service back to local thread.
         tokio::spawn(dashboard_service.serve(ui_path));
@@ -247,6 +250,18 @@ pub async fn rpc_serve_with_store<S: MetaStore>(
         );
         sub_tasks.push(GlobalBarrierManager::start(barrier_manager).await);
     }
+
+    sub_tasks.push(
+        start_orchestrater(
+            OrchestraterConfig {
+                periodically: false,
+                interval_ms: 2000,
+            },
+            orchestrate_recv,
+        )
+        .await
+        .unwrap(),
+    );
 
     let (shutdown_send, mut shutdown_recv) = tokio::sync::oneshot::channel();
     let join_handle = tokio::spawn(async move {

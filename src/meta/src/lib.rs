@@ -41,6 +41,7 @@ mod dashboard;
 pub mod hummock;
 pub mod manager;
 mod model;
+mod orchestrater;
 pub mod rpc;
 pub mod storage;
 mod stream;
