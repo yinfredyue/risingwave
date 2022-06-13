@@ -134,7 +134,7 @@ impl<S: StateStore> SourceExecutor<S> {
 
 struct SourceReader {
     /// The reader for stream source.
-    stream_reader: Arc<Mutex<Box<SourceStreamReaderImpl>>>,
+    stream_reader: Arc<Mutex<(Box<SourceStreamReaderImpl>, bool)>>,
     /// The reader for barrier.
     barrier_receiver: UnboundedReceiver<Barrier>,
     /// Expected barrier latency in ms. If there are no barrier within the expected barrier
@@ -145,7 +145,7 @@ struct SourceReader {
 impl SourceReader {
     #[try_stream(ok = StreamChunkWithState, error = RwError)]
     async fn stream_reader(
-        stream_reader: Arc<Mutex<Box<SourceStreamReaderImpl>>>,
+        stream_reader: Arc<Mutex<(Box<SourceStreamReaderImpl>, bool)>>,
         notifier: Arc<Notify>,
         expected_barrier_latency_ms: u64,
     ) {
@@ -155,7 +155,10 @@ impl SourceReader {
             // We allow data to flow for `expected_barrier_latency_ms` milliseconds.
             while now.elapsed().as_millis() < expected_barrier_latency_ms as u128 {
                 let mut reader_guard = stream_reader.lock().await;
-                let chunk_result = reader_guard.next().await;
+                if reader_guard.1 {
+                    break;
+                }
+                let chunk_result = reader_guard.0.next().await;
                 drop(reader_guard);
                 match chunk_result {
                     Ok(chunk) => yield chunk,
@@ -309,11 +312,12 @@ impl<S: StateStore> SourceExecutor<S> {
         };
 
         // todo: use epoch from msg to restore state from state store
-        let stream_reader = Arc::new(Mutex::new(
+        let stream_reader = Arc::new(Mutex::new((
             self.build_stream_source_reader(recover_state)
                 .await
                 .map_err(StreamExecutorError::source_error)?,
-        ));
+            false,
+        )));
 
         let reader = SourceReader {
             stream_reader: stream_reader.clone(),
@@ -334,28 +338,43 @@ impl<S: StateStore> SourceExecutor<S> {
                                 .await
                                 .map_err(StreamExecutorError::source_error)?;
 
-                            if let Some(Mutation::SourceChangeSplit(mapping)) =
-                                barrier.mutation.as_deref()
-                            {
-                                if let Some(target_splits) = mapping.get(&self.actor_id).cloned() {
-                                    match self.get_diff(target_splits) {
-                                        None => {}
-                                        Some(target_state) => {
-                                            log::info!(
-                                                "actor {:?} apply source split change to {:?}",
-                                                self.actor_id,
-                                                target_state
-                                            );
-                                            let reader = self
-                                                .build_stream_source_reader(Some(
-                                                    target_state.clone(),
-                                                ))
-                                                .await
-                                                .map_err(StreamExecutorError::source_error)?;
-                                            *stream_reader.lock().await = reader;
-                                            self.stream_source_splits = target_state;
+                            if let Some(mutation) = barrier.mutation.as_deref() {
+                                match mutation {
+                                    Mutation::SourceChangeSplit(mapping) => {
+                                        if let Some(target_splits) =
+                                            mapping.get(&self.actor_id).cloned()
+                                        {
+                                            match self.get_diff(target_splits) {
+                                                None => {}
+                                                Some(target_state) => {
+                                                    log::info!(
+                                                        "actor {:?} apply source split change to {:?}",
+                                                        self.actor_id,
+                                                        target_state
+                                                    );
+                                                    let reader = self
+                                                        .build_stream_source_reader(Some(
+                                                            target_state.clone(),
+                                                        ))
+                                                        .await
+                                                        .map_err(
+                                                            StreamExecutorError::source_error,
+                                                        )?;
+                                                    let mut reader_guard =
+                                                        stream_reader.lock().await;
+                                                    reader_guard.0 = reader;
+                                                    self.stream_source_splits = target_state;
+                                                }
+                                            }
                                         }
                                     }
+                                    Mutation::Pause(_) => {
+                                        stream_reader.lock().await.1 = true;
+                                    }
+                                    Mutation::Resume(_) => {
+                                        stream_reader.lock().await.1 = false;
+                                    }
+                                    _ => {}
                                 }
                             }
                             self.state_cache.clear();
