@@ -30,6 +30,7 @@ use risingwave_common::buffer::Bitmap;
 use risingwave_common::catalog::{ColumnDesc, ColumnId, Field, Schema};
 use risingwave_common::hash::HashCode;
 use risingwave_common::types::{DataType, Datum};
+use risingwave_common::util::hash_util::CRC32FastBuilder;
 use risingwave_common::util::sort_util::OrderType;
 use risingwave_expr::expr::AggKind;
 use risingwave_expr::*;
@@ -448,12 +449,13 @@ pub async fn generate_managed_agg_state<S: StateStore>(
     for ((idx, agg_call), keyspace) in agg_calls.iter().enumerate().zip_eq(keyspace) {
         // TODO: in pure in-memory engine, we should not do this serialization.
 
-        // The prefix of the state is `table_id/[group_key]`
+        // The prefix of the state is `table_id/vnode/[group_key]`
         let keyspace = if let Some(key) = key {
+            let vnode = key.hash_row().to_vnode();
             let bytes = key.serialize().unwrap();
-            keyspace.append(bytes)
+            keyspace.append_vnode(vnode).append(bytes)
         } else {
-            keyspace.clone()
+            keyspace.append_default_vnode()
         };
 
         let mut managed_state = ManagedStateImpl::create_managed_state(

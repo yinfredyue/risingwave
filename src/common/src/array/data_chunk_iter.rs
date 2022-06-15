@@ -26,6 +26,7 @@ use crate::types::{
     deserialize_datum_from, deserialize_datum_not_null_from, serialize_datum_into,
     serialize_datum_not_null_into, DataType, Datum, DatumRef, ToOwnedDatum,
 };
+use crate::util::hash_util::CRC32FastBuilder;
 use crate::util::sort_util::OrderType;
 use crate::util::value_encoding::{deserialize_datum, serialize_datum};
 
@@ -284,8 +285,14 @@ impl Row {
         self.0.iter()
     }
 
-    /// Hash row data all in one
-    pub fn hash_row<H>(&self, hash_builder: &H) -> HashCode
+    /// Hash row data all in one.
+    pub fn hash_row(&self) -> HashCode {
+        let hash_builder = CRC32FastBuilder {};
+        self.hash_row_with_hash_builder(&hash_builder)
+    }
+
+    /// Hash row data all in one with hash builder provided.
+    pub fn hash_row_with_hash_builder<H>(&self, hash_builder: &H) -> HashCode
     where
         H: BuildHasher,
     {
@@ -470,9 +477,9 @@ mod tests {
             Some(ScalarImpl::Float64(5.0.into())),
             Some(ScalarImpl::Decimal("-233.3".parse().unwrap())),
         ]);
-        assert_ne!(row1.hash_row(&hash_builder), row2.hash_row(&hash_builder));
+        assert_ne!(row1.hash_row_with_hash_builder(&hash_builder), row2.hash_row_with_hash_builder(&hash_builder));
 
         let row_default = Row::default();
-        assert_eq!(row_default.hash_row(&hash_builder).0, 0);
+        assert_eq!(row_default.hash_row_with_hash_builder(&hash_builder).0, 0);
     }
 }

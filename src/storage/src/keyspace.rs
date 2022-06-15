@@ -18,6 +18,7 @@ use std::ops::RangeBounds;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use risingwave_common::catalog::TableId;
+use risingwave_common::hash::VirtualNode;
 use risingwave_hummock_sdk::key::next_key;
 
 use crate::error::StorageResult;
@@ -69,6 +70,16 @@ impl<S: StateStore> Keyspace<S> {
     #[must_use]
     pub fn append_u16(&self, val: u16) -> Self {
         self.append(val.to_be_bytes().to_vec())
+    }
+
+    /// Appends vnode (which is a u16 value) to the prefix of the keyspace.
+    pub fn append_vnode(&self, vnode: VirtualNode) -> Self {
+        self.append_u16(vnode)
+    }
+
+    /// Appends the default vnode to the prefix of the keyspace. Used for singleton executor.
+    pub fn append_default_vnode(&self) -> Self {
+        self.append_u16(0)
     }
 
     /// Treats the keyspace as a single key, and returns the key.
