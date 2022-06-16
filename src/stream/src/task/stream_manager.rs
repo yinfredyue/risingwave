@@ -30,7 +30,6 @@ use risingwave_pb::stream_plan::stream_node::NodeBody;
 use risingwave_pb::{stream_plan, stream_service};
 use risingwave_rpc_client::ComputeClientPool;
 use risingwave_storage::{dispatch_state_store, StateStore, StateStoreImpl};
-use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
 
 use super::{unique_executor_id, unique_operator_id, CollectResult};
@@ -88,8 +87,6 @@ pub struct LocalStreamManagerCore {
 /// `LocalStreamManager` manages all stream executors in this project.
 pub struct LocalStreamManager {
     core: Mutex<LocalStreamManagerCore>,
-
-    wait_epoch_sender: Mutex<watch::Sender<u64>>,
 }
 
 pub struct ExecutorParams {
@@ -140,7 +137,6 @@ impl LocalStreamManager {
     fn with_core(core: LocalStreamManagerCore) -> Self {
         Self {
             core: Mutex::new(core),
-            wait_epoch_sender: Mutex::new(watch::channel(INVALID_EPOCH).0),
         }
     }
 
@@ -163,66 +159,60 @@ impl LocalStreamManager {
         Self::with_core(LocalStreamManagerCore::for_test())
     }
 
-    /// Broadcast a barrier to all senders. Returns a receiver which will get notified when this
-    /// barrier is finished.
-    fn send_barrier(
+    /// Broadcast a barrier to all senders. Save a receiver in barrier manager
+    pub fn send_barrier(
         &self,
         barrier: &Barrier,
         actor_ids_to_send: impl IntoIterator<Item = ActorId>,
         actor_ids_to_collect: impl IntoIterator<Item = ActorId>,
-    ) -> Result<oneshot::Receiver<CollectResult>> {
+    ) -> Result<()> {
         let core = self.core.lock();
         let mut barrier_manager = core.context.lock_barrier_manager();
-        let rx = barrier_manager
-            .send_barrier(barrier, actor_ids_to_send, actor_ids_to_collect)?
-            .expect("no rx for local mode");
-        Ok(rx)
+        barrier_manager.send_barrier(barrier, actor_ids_to_send, actor_ids_to_collect)?;
+        Ok(())
     }
 
-    /// Broadcast a barrier to all senders. Returns when the barrier is fully collected.
-    pub async fn send_and_collect_barrier(
+    /// drain collect rx less than `prev_epoch` in barrier manager.
+    pub fn drain_collect_rx(&self, prev_epoch: u64) {
+        let core = self.core.lock();
+        let mut barrier_manager = core.context.lock_barrier_manager();
+        barrier_manager.drain_collect_rx(prev_epoch);
+    }
+
+    /// Use `prev_epoch` to find collect rx. And wait for all actor to be collected before
+    /// returning.
+    pub async fn collect_barrier_and_sync(
         &self,
-        barrier: &Barrier,
-        actor_ids_to_send: impl IntoIterator<Item = ActorId>,
-        actor_ids_to_collect: impl IntoIterator<Item = ActorId>,
+        prev_epoch: u64,
         need_sync: bool,
-        is_first: bool,
-    ) -> Result<CollectResult> {
-        let mut wait_epoch_receiver = self.wait_epoch_sender.lock().subscribe();
-        if !is_first {
-            while barrier.epoch.prev != *wait_epoch_receiver.borrow() {
-                wait_epoch_receiver.changed().await.unwrap();
-            }
-        }
-
-        let rx = self.send_barrier(barrier, actor_ids_to_send, actor_ids_to_collect)?;
-        self.wait_epoch_sender
-            .lock()
-            .send(barrier.epoch.curr)
-            .unwrap();
-
+    ) -> CollectResult {
+        let rx = {
+            let core = self.core.lock();
+            let mut barrier_manager = core.context.lock_barrier_manager();
+            barrier_manager.remove_collect_rx(prev_epoch)
+        };
         // Wait for all actors finishing this barrier.
         let mut collect_result = rx.await.unwrap();
 
         // Sync states from shared buffer to S3 before telling meta service we've done.
         if need_sync {
             dispatch_state_store!(self.state_store(), store, {
-                match store.sync(Some(barrier.epoch.prev)).await {
+                match store.sync(Some(prev_epoch)).await {
                     Ok(_) => {
                         collect_result.synced_sstables =
-                            store.get_uncommitted_ssts(barrier.epoch.prev);
+                        store.get_uncommitted_ssts(prev_epoch);
                     }
                     // TODO: Handle sync failure by propagating it
                     // back to global barrier manager
                     Err(e) => panic!(
-                        "Failed to sync state store after receiving barrier {:?} due to {}",
-                        barrier, e
+                        "Failed to sync state store after receiving barrier prev_epoch {:?} due to {}",
+                        prev_epoch, e
                     ),
                 }
             });
         }
 
-        Ok(collect_result)
+        collect_result
     }
 
     /// Broadcast a barrier to all senders. Returns immediately, and caller won't be notified when
@@ -235,6 +225,7 @@ impl LocalStreamManager {
         let mut barrier_manager = core.context.lock_barrier_manager();
         assert!(barrier_manager.is_local_mode());
         barrier_manager.send_barrier(barrier, empty(), empty())?;
+        barrier_manager.remove_collect_rx(barrier.epoch.prev);
         Ok(())
     }
 
@@ -258,20 +249,16 @@ impl LocalStreamManager {
         if actor_ids_to_send.is_empty() || actor_ids_to_collect.is_empty() {
             return Ok(());
         }
-        let barrier = Barrier {
+        let barrier = &Barrier {
             epoch,
             mutation: Some(Arc::new(Mutation::Stop(actor_ids_to_collect.clone()))),
             span: tracing::Span::none(),
         };
 
-        self.send_and_collect_barrier(
-            &barrier,
-            actor_ids_to_send,
-            actor_ids_to_collect,
-            false,
-            false,
-        )
-        .await?;
+        self.drain_collect_rx(barrier.epoch.prev);
+        self.send_barrier(barrier, actor_ids_to_send, actor_ids_to_collect)?;
+        self.collect_barrier_and_sync(barrier.epoch.prev, false)
+            .await;
         self.core.lock().drop_all_actors();
 
         Ok(())

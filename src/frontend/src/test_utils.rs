@@ -19,10 +19,9 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 use pgwire::pg_response::PgResponse;
-use pgwire::pg_server::{BoxedError, Session, SessionManager};
+use pgwire::pg_server::{BoxedError, Session, SessionManager, UserAuthenticator};
 use risingwave_common::catalog::{
     TableId, DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, DEFAULT_SUPPER_USER,
-    DEFAULT_SUPPER_USER_PASSWORD,
 };
 use risingwave_common::error::Result;
 use risingwave_pb::catalog::table::OptionalAssociatedSourceId;
@@ -30,8 +29,8 @@ use risingwave_pb::catalog::{
     Database as ProstDatabase, Schema as ProstSchema, Source as ProstSource, Table as ProstTable,
 };
 use risingwave_pb::stream_plan::StreamFragmentGraph;
-use risingwave_pb::user::auth_info::EncryptionType;
-use risingwave_pb::user::{AuthInfo, GrantPrivilege, UserInfo};
+use risingwave_pb::user::{GrantPrivilege, UserInfo};
+use risingwave_rpc_client::error::Result as RpcResult;
 use risingwave_sqlparser::ast::Statement;
 use risingwave_sqlparser::parser::Parser;
 use tempfile::{Builder, NamedTempFile};
@@ -58,7 +57,11 @@ pub struct LocalFrontend {
 impl SessionManager for LocalFrontend {
     type Session = SessionImpl;
 
-    fn connect(&self, _database: &str) -> std::result::Result<Arc<Self::Session>, BoxedError> {
+    fn connect(
+        &self,
+        _database: &str,
+        _user_name: &str,
+    ) -> std::result::Result<Arc<Self::Session>, BoxedError> {
         Ok(self.session_ref())
     }
 }
@@ -113,6 +116,8 @@ impl LocalFrontend {
         Arc::new(SessionImpl::new(
             self.env.clone(),
             DEFAULT_DATABASE_NAME.to_string(),
+            DEFAULT_SUPPER_USER.to_string(),
+            UserAuthenticator::None,
         ))
     }
 }
@@ -126,20 +131,27 @@ pub struct MockCatalogWriter {
 
 #[async_trait::async_trait]
 impl CatalogWriter for MockCatalogWriter {
-    async fn create_database(&self, db_name: &str) -> Result<()> {
+    async fn create_database(&self, db_name: &str, owner: String) -> Result<()> {
         self.catalog.write().create_database(ProstDatabase {
             name: db_name.to_string(),
             id: self.gen_id(),
+            owner,
         });
         Ok(())
     }
 
-    async fn create_schema(&self, db_id: DatabaseId, schema_name: &str) -> Result<()> {
+    async fn create_schema(
+        &self,
+        db_id: DatabaseId,
+        schema_name: &str,
+        owner: String,
+    ) -> Result<()> {
         let id = self.gen_id();
         self.catalog.write().create_schema(ProstSchema {
             id,
             name: schema_name.to_string(),
             database_id: db_id,
+            owner,
         });
         self.add_schema_id(id, db_id);
         Ok(())
@@ -218,11 +230,13 @@ impl MockCatalogWriter {
         catalog.write().create_database(ProstDatabase {
             name: DEFAULT_DATABASE_NAME.to_string(),
             id: 0,
+            owner: DEFAULT_SUPPER_USER.to_string(),
         });
         catalog.write().create_schema(ProstSchema {
             id: 0,
             name: DEFAULT_SCHEMA_NAME.to_string(),
             database_id: 0,
+            owner: DEFAULT_SUPPER_USER.to_string(),
         });
         let mut map: HashMap<u32, DatabaseId> = HashMap::new();
         map.insert(0_u32, 0_u32);
@@ -373,10 +387,6 @@ impl MockUserInfoWriter {
             is_supper: true,
             can_create_db: true,
             can_login: true,
-            auth_info: Some(AuthInfo {
-                encryption_type: EncryptionType::Plaintext as i32,
-                encrypted_value: Vec::from(DEFAULT_SUPPER_USER_PASSWORD.as_bytes()),
-            }),
             ..Default::default()
         });
         Self { user_info }
@@ -387,19 +397,19 @@ pub struct MockFrontendMetaClient {}
 
 #[async_trait::async_trait]
 impl FrontendMetaClient for MockFrontendMetaClient {
-    async fn pin_snapshot(&self, _epoch: u64) -> Result<u64> {
+    async fn pin_snapshot(&self, _epoch: u64) -> RpcResult<u64> {
         Ok(0)
     }
 
-    async fn flush(&self) -> Result<()> {
+    async fn flush(&self) -> RpcResult<()> {
         Ok(())
     }
 
-    async fn unpin_snapshot(&self, _epoch: u64) -> Result<()> {
+    async fn unpin_snapshot(&self, _epoch: u64) -> RpcResult<()> {
         Ok(())
     }
 
-    async fn unpin_snapshot_before(&self, _epoch: u64) -> Result<()> {
+    async fn unpin_snapshot_before(&self, _epoch: u64) -> RpcResult<()> {
         Ok(())
     }
 }

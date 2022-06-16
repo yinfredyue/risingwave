@@ -13,10 +13,11 @@
 // limitations under the License.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use futures::future::try_join_all;
 use risingwave_common::catalog::TableId;
-use risingwave_common::error::{Result, RwError, ToRwResult};
+use risingwave_common::error::{Result, RwError};
 use risingwave_common::util::epoch::Epoch;
 use risingwave_connector::SplitImpl;
 use risingwave_pb::common::ActorInfo;
@@ -84,24 +85,22 @@ impl Command {
 
 /// [`CommandContext`] is used for generating barrier and doing post stuffs according to the given
 /// [`Command`].
-pub struct CommandContext<S> {
+pub struct CommandContext<S: MetaStore> {
     fragment_manager: FragmentManagerRef<S>,
 
     client_pool: StreamClientPoolRef,
 
     /// Resolved info in this barrier loop.
     // TODO: this could be stale when we are calling `post_collect`, check if it matters
-    pub info: BarrierActorInfo,
+    pub info: Arc<BarrierActorInfo>,
 
     pub prev_epoch: Epoch,
     pub curr_epoch: Epoch,
 
     pub command: Command,
-
-    pub is_first: bool,
 }
 
-impl<S> CommandContext<S> {
+impl<S: MetaStore> CommandContext<S> {
     pub fn new(
         fragment_manager: FragmentManagerRef<S>,
         client_pool: StreamClientPoolRef,
@@ -109,16 +108,14 @@ impl<S> CommandContext<S> {
         prev_epoch: Epoch,
         curr_epoch: Epoch,
         command: Command,
-        is_first: bool,
     ) -> Self {
         Self {
             fragment_manager,
             client_pool,
-            info,
+            info: Arc::new(info),
             prev_epoch,
             curr_epoch,
             command,
-            is_first,
         }
     }
 }
@@ -207,7 +204,7 @@ where
                             request_id,
                             actor_ids: actors.to_owned(),
                         };
-                        client.drop_actors(request).await.to_rw_result()?;
+                        client.drop_actors(request).await?;
 
                         Ok::<_, RwError>(())
                     }
@@ -223,7 +220,7 @@ where
                 table_fragments,
                 dispatches,
                 table_sink_map,
-                source_state: _source_state,
+                source_state: _,
             } => {
                 let mut dependent_table_actors = Vec::with_capacity(table_sink_map.len());
                 for (table_id, actors) in table_sink_map {

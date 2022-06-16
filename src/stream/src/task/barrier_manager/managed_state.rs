@@ -15,7 +15,7 @@
 use std::collections::{HashMap, HashSet};
 use std::iter::once;
 
-use risingwave_pb::stream_service::inject_barrier_response::CreateMviewProgress;
+use risingwave_pb::stream_service::barrier_complete_response::CreateMviewProgress;
 use tokio::sync::oneshot;
 
 use super::progress::ChainState;
@@ -71,7 +71,7 @@ impl ManagedBarrierState {
         };
 
         if to_notify {
-            let inner = self.map.remove(&curr_epoch);
+            let inner = self.map.remove(&curr_epoch).unwrap();
 
             let create_mview_progress = std::mem::take(&mut self.create_mview_progress)
                 .into_iter()
@@ -90,9 +90,9 @@ impl ManagedBarrierState {
                 .collect();
 
             match inner {
-                Some(ManagedBarrierStateInner::Issued {
+                ManagedBarrierStateInner::Issued {
                     collect_notifier, ..
-                }) => {
+                } => {
                     // Notify about barrier finishing.
                     let result = CollectResult {
                         create_mview_progress,

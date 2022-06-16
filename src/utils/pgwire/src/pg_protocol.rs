@@ -14,9 +14,8 @@
 
 use std::collections::HashMap;
 use std::io::{Error as IoError, ErrorKind, Result};
-use std::ops::Sub;
-use std::str;
 use std::sync::Arc;
+use std::{str, vec};
 
 use bytes::{Bytes, BytesMut};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
@@ -25,10 +24,11 @@ use crate::error::PsqlError;
 use crate::pg_extended::{PgPortal, PgStatement};
 use crate::pg_field_descriptor::{PgFieldDescriptor, TypeOid};
 use crate::pg_message::{
-    BeCommandCompleteMessage, BeMessage, BeParameterStatusMessage, FeMessage, FeStartupMessage,
+    BeCommandCompleteMessage, BeMessage, BeParameterStatusMessage, FeMessage, FePasswordMessage,
+    FeStartupMessage,
 };
 use crate::pg_response::PgResponse;
-use crate::pg_server::{Session, SessionManager};
+use crate::pg_server::{Session, SessionManager, UserAuthenticator};
 
 /// The state machine for each psql connection.
 /// Read pg messages from tcp stream and write results back.
@@ -140,6 +140,15 @@ where
                 }
                 self.state = PgProtocolState::Regular;
             }
+            FeMessage::Password(msg) => {
+                if let Err(e) = self.process_password_msg(msg) {
+                    tracing::error!("failed to authenticate session: {}", e);
+                    self.write_message_no_flush(&BeMessage::ErrorResponse(Box::new(e)))?;
+                    self.flush().await?;
+                    return Ok(true);
+                }
+                self.state = PgProtocolState::Regular;
+            }
             FeMessage::Query(query_msg) => {
                 self.process_query_msg(query_msg.get_sql(), false).await?;
                 self.write_message_no_flush(&BeMessage::ReadyForQuery)?;
@@ -155,9 +164,6 @@ where
             FeMessage::Parse(m) => {
                 let query = cstr_to_str(&m.query_string).unwrap();
 
-                // TODO: make sure the query is a complete statement.
-                assert!(query.trim_end().ends_with(';'));
-
                 // 1. Create the types description.
                 let type_ids = m.type_ids;
                 let types: Vec<TypeOid> = type_ids
@@ -166,29 +172,49 @@ where
                     .collect();
 
                 // 2. Create the row description.
-                let rows: Vec<PgFieldDescriptor> = query
-                    .split(&[' ', ',', ';'])
-                    .skip(1)
-                    .into_iter()
-                    .map(|x| {
-                        if let Some(str) = x.strip_prefix('$') {
-                            if let Ok(i) = str.parse() {
-                                i
-                            } else {
-                                -1
+
+                let rows: Vec<PgFieldDescriptor> = if query.starts_with("SELECT")
+                    || query.starts_with("select")
+                {
+                    if types.is_empty() {
+                        let session = self.session.clone().unwrap();
+                        let rows_res = session.infer_return_type(query).await;
+                        match rows_res {
+                            Ok(r) => r,
+                            Err(e) => {
+                                self.write_message_no_flush(&BeMessage::ErrorResponse(e))?;
+                                // TODO: Error handle needed modified later.
+                                unimplemented!();
                             }
-                        } else {
-                            -1
                         }
-                    })
-                    .take_while(|x: &i32| x.is_positive())
-                    .map(|x| {
-                        // NOTE Make sure the type_description include all generic parametre
-                        // description we needed.
-                        assert!((x.sub(1) as usize) < types.len());
-                        PgFieldDescriptor::new(String::new(), types[x.sub(1) as usize].to_owned())
-                    })
-                    .collect();
+                    } else {
+                        query
+                            .split(&[' ', ',', ';'])
+                            .skip(1)
+                            .into_iter()
+                            .take_while(|x| !x.is_empty())
+                            .map(|x| {
+                                // NOTE: Assume all output are generic params.
+                                let str = x.strip_prefix('$').unwrap();
+                                // NOTE: Assume all generic are valid.
+                                let v: i32 = str.parse().unwrap();
+                                assert!(v.is_positive());
+                                v
+                            })
+                            .map(|x| {
+                                // NOTE Make sure the type_description include all generic parametre
+                                // description we needed.
+                                assert!(((x - 1) as usize) < types.len());
+                                PgFieldDescriptor::new(
+                                    String::new(),
+                                    types[(x - 1) as usize].to_owned(),
+                                )
+                            })
+                            .collect()
+                    }
+                } else {
+                    vec![]
+                };
 
                 // 3. Create the statement.
                 let statement = PgStatement::new(
@@ -293,14 +319,39 @@ where
     }
 
     fn process_startup_msg(&mut self, msg: FeStartupMessage) -> Result<()> {
-        let db_name = {
-            match msg.config.get("database") {
-                None => "dev".to_string(),
-                Some(v) => v.to_string(),
+        let db_name = msg
+            .config
+            .get("database")
+            .cloned()
+            .unwrap_or_else(|| "dev".to_string());
+        let user_name = msg
+            .config
+            .get("user")
+            .cloned()
+            .unwrap_or_else(|| "root".to_string());
+
+        let session = self
+            .session_mgr
+            .connect(&db_name, &user_name)
+            .map_err(IoError::other)?;
+        match session.user_authenticator() {
+            UserAuthenticator::None => {
+                self.write_message_no_flush(&BeMessage::AuthenticationOk)?;
+                self.write_parameter_status_msg_no_flush()?;
+                self.write_message_no_flush(&BeMessage::ReadyForQuery)?;
             }
-        };
-        self.session = Some(self.session_mgr.connect(&db_name).map_err(IoError::other)?);
-        self.write_message_no_flush(&BeMessage::AuthenticationOk)?;
+            UserAuthenticator::ClearText(_) => {
+                self.write_message_no_flush(&BeMessage::AuthenticationCleartextPassword)?;
+            }
+            UserAuthenticator::MD5WithSalt { salt, .. } => {
+                self.write_message_no_flush(&BeMessage::AuthenticationMD5Password(salt))?;
+            }
+        }
+        self.session = Some(session);
+        Ok(())
+    }
+
+    fn write_parameter_status_msg_no_flush(&mut self) -> Result<()> {
         self.write_message_no_flush(&BeMessage::ParameterStatus(
             BeParameterStatusMessage::ClientEncoding("utf8"),
         ))?;
@@ -310,6 +361,16 @@ where
         self.write_message_no_flush(&BeMessage::ParameterStatus(
             BeParameterStatusMessage::ServerVersion("9.5.0"),
         ))?;
+        Ok(())
+    }
+
+    fn process_password_msg(&mut self, msg: FePasswordMessage) -> Result<()> {
+        let authenticator = self.session.as_ref().unwrap().user_authenticator();
+        if !authenticator.authenticate(&msg.password) {
+            return Err(IoError::new(ErrorKind::InvalidInput, "Invalid password"));
+        }
+        self.write_message_no_flush(&BeMessage::AuthenticationOk)?;
+        self.write_parameter_status_msg_no_flush()?;
         self.write_message_no_flush(&BeMessage::ReadyForQuery)?;
         Ok(())
     }

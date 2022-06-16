@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use tokio::net::{TcpListener, TcpStream};
 
+use crate::pg_field_descriptor::PgFieldDescriptor;
 use crate::pg_protocol::PgProtocol;
 use crate::pg_response::PgResponse;
 
@@ -29,7 +30,7 @@ pub type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 pub trait SessionManager: Send + Sync + 'static {
     type Session: Session;
 
-    fn connect(&self, database: &str) -> Result<Arc<Self::Session>, BoxedError>;
+    fn connect(&self, database: &str, user_name: &str) -> Result<Arc<Self::Session>, BoxedError>;
 }
 
 /// A psql connection. Each connection binds with a database. Switching database will need to
@@ -37,6 +38,36 @@ pub trait SessionManager: Send + Sync + 'static {
 #[async_trait::async_trait]
 pub trait Session: Send + Sync {
     async fn run_statement(self: Arc<Self>, sql: &str) -> Result<PgResponse, BoxedError>;
+    async fn infer_return_type(
+        self: Arc<Self>,
+        sql: &str,
+    ) -> Result<Vec<PgFieldDescriptor>, BoxedError>;
+    fn user_authenticator(&self) -> &UserAuthenticator;
+}
+
+#[derive(Debug, Clone)]
+pub enum UserAuthenticator {
+    // No need to authenticate.
+    None,
+    // raw password in clear-text form.
+    ClearText(Vec<u8>),
+    // password encrypted with random salt.
+    MD5WithSalt {
+        encrypted_password: Vec<u8>,
+        salt: [u8; 4],
+    },
+}
+
+impl UserAuthenticator {
+    pub fn authenticate(&self, password: &[u8]) -> bool {
+        match self {
+            UserAuthenticator::None => true,
+            UserAuthenticator::ClearText(text) => password == text,
+            UserAuthenticator::MD5WithSalt {
+                encrypted_password, ..
+            } => encrypted_password == password,
+        }
+    }
 }
 
 /// Binds a Tcp listener at `addr`. Spawn a coroutine to serve every new connection.
@@ -107,8 +138,9 @@ mod tests {
     use tokio_postgres::types::*;
     use tokio_postgres::NoTls;
 
+    use crate::pg_field_descriptor::{PgFieldDescriptor, TypeOid};
     use crate::pg_response::{PgResponse, StatementType};
-    use crate::pg_server::{pg_serve, Session, SessionManager};
+    use crate::pg_server::{pg_serve, Session, SessionManager, UserAuthenticator};
     use crate::types::Row;
 
     struct MockSessionManager {}
@@ -119,6 +151,7 @@ mod tests {
         fn connect(
             &self,
             _database: &str,
+            _user_name: &str,
         ) -> Result<Arc<Self::Session>, Box<dyn Error + Send + Sync>> {
             Ok(Arc::new(MockSession {}))
         }
@@ -132,10 +165,19 @@ mod tests {
             self: Arc<Self>,
             sql: &str,
         ) -> Result<PgResponse, Box<dyn Error + Send + Sync>> {
+            // split a statement and trim \' around the intput param to construct result.
+            // Ex:
+            //    SELECT 'a','b' -> result: a , b
             let res: Vec<Option<String>> = sql
                 .split(&[' ', ',', ';'])
                 .skip(1)
-                .map(|x| Some(x.to_string()))
+                .map(|x| {
+                    Some(
+                        x.trim_start_matches('\'')
+                            .trim_end_matches('\'')
+                            .to_string(),
+                    )
+                })
                 .collect();
 
             Ok(PgResponse::new(
@@ -145,6 +187,21 @@ mod tests {
                 // NOTE: Extended mode don't need.
                 vec![],
             ))
+        }
+
+        fn user_authenticator(&self) -> &UserAuthenticator {
+            &UserAuthenticator::None
+        }
+
+        async fn infer_return_type(
+            self: Arc<Self>,
+            sql: &str,
+        ) -> Result<Vec<PgFieldDescriptor>, super::BoxedError> {
+            let count = sql.split(&[' ', ',', ';']).skip(1).count();
+            Ok(vec![
+                PgFieldDescriptor::new("".to_string(), TypeOid::Varchar,);
+                count
+            ])
         }
     }
 
@@ -279,6 +336,14 @@ mod tests {
             assert_eq!(value, "BB");
             let value: &str = rows[0].get(1);
             assert_eq!(value, "AA");
+        }
+        // no params
+        {
+            let rows = client.query("SELECT 'AA','BB';", &[]).await.unwrap();
+            let value: &str = rows[0].get(0);
+            assert_eq!(value, "AA");
+            let value: &str = rows[0].get(1);
+            assert_eq!(value, "BB");
         }
     }
 }
