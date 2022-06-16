@@ -463,7 +463,7 @@ where
                         curr: command_context.curr_epoch.0,
                         prev: command_context.prev_epoch.0,
                     }),
-                    mutation: Some(mutation),
+                    mutation,
                     // TODO(chi): add distributed tracing
                     span: vec![],
                 };
@@ -623,7 +623,6 @@ where
                             );
                         }
                     };
-
                     node.timer.unwrap().observe_duration();
                     node.notifiers
                         .into_iter()

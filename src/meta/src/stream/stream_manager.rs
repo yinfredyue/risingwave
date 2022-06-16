@@ -1131,7 +1131,7 @@ mod tests {
     async fn test_failpoints_drop_mv_recovery() {
         let inject_barrier_err = "inject_barrier_err";
         let inject_barrier_err_success = "inject_barrier_err_success";
-        let services = MockServices::start("127.0.0.1", 12334).await.unwrap();
+        let services = MockServices::start("127.0.0.1", 12335).await.unwrap();
 
         let table_ref_id = TableRefId {
             schema_ref_id: None,
@@ -1211,7 +1211,7 @@ mod tests {
                     .unwrap(),
                 HostAddress {
                     host: "127.0.0.1".to_string(),
-                    port: 12334,
+                    port: 12335,
                 }
             );
         }
