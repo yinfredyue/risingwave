@@ -472,7 +472,7 @@ def section_streaming_actors(outer_panels):
                     "rate(stream_join_lookup_miss_count[1m])", "cache miss {{actor_id}} {{side}}"
                 ),
                 panels.target(
-                    "rate(stream_join_lookup_total_count[1m])", "total lookups {{actor_id}} {{side}}"
+                    "rate(stream_join_total_lookup_count[1m])", "total lookups {{actor_id}} {{side}}"
                 ),
             ]),
             panels.timeseries_actor_latency("Join Executor Barrier Align", [
