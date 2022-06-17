@@ -58,7 +58,7 @@ impl StreamingMetrics {
             exponential_buckets(10.0, 2.0, 25).unwrap() // max 2^25 * 10 rows
         );
 
-        let source_output =
+        let source_output_rows =
             register_histogram_vec_with_registry!(opts, &["source_id"], registry).unwrap();
 
         let actor_processing_time = register_gauge_vec_with_registry!(
@@ -214,7 +214,7 @@ impl StreamingMetrics {
             actor_poll_cnt,
             actor_idle_duration,
             actor_idle_cnt,
-            source_output,
+            source_output_rows,
             exchange_recv_size,
             join_lookup_miss_count,
             join_total_lookup_count,
