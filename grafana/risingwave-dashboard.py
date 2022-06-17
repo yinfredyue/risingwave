@@ -349,7 +349,7 @@ def section_streaming(panels):
             ]),
         panels.timeseries_rowsps("Source Throughput", [
             panels.target(
-                "rate(stream_source_output_rows_sum[15s])", "source_id = {{source_id}}"
+                "sum(rate(stream_source_output_rows_sum[15s])) by (source_id)", "{{source_id}}"
             ),
         ]),
         panels.timeseries_count("Source Batch Size Per Epoch", [
@@ -466,10 +466,10 @@ def section_streaming_actors(outer_panels):
             ]),
             panels.timeseries_actor_ops("Join Executor Cache", [
                 panels.target(
-                    "rate(stream_join_lookup_miss_count[15s])", "cache miss {{actor_id}} {{side}}"
+                    "rate(stream_join_lookup_miss_count[15s])", "{{actor_id}} {{side}} - miss"
                 ),
                 panels.target(
-                    "rate(stream_join_lookup_total_count[15s])", "total lookups {{actor_id}} {{side}}"
+                    "rate(stream_join_lookup_total_count[15s])", "{{actor_id}} {{side}} - total"
                 ),
             ]),
             panels.timeseries_actor_latency("Join Executor Barrier Align", [
