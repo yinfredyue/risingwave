@@ -668,12 +668,24 @@ def section_hummock(panels):
                 "sum(rate(state_store_write_batch_tuple_counts[1m])) by (job,instance)", "write_batch_kv_pair_count - {{instance}} "
             ),
         ]),
-        panels.timeseries_bytes_per_sec("write throughput", [
+        panels.timeseries_bytes("Write Batch Size - Shared Buffer", [
+            *quantile(lambda quantile, legend:
+                      panels.target(
+                          f"histogram_quantile({quantile}, sum(rate(state_store_write_batch_size_bucket[1m])) by (le, job, instance))", f"p{legend} - {{{{job}}}} @ {{{{instance}}}}"
+                      ),
+                      [90, 99, 999]),
             panels.target(
-                "sum(rate(state_store_write_batch_size_sum[1m]))by(job,instance) / sum(rate(state_store_write_batch_size_count[1m]))by(job,instance)", "shared_buffer - {{job}} @ {{instance}}"
+                "sum(rate(state_store_write_batch_size_sum[1m]))by(job,instance) / sum(rate(state_store_write_batch_size_count[1m]))by(job,instance)", "avg - {{job}} @ {{instance}}"
             ),
+        ]),
+        panels.timeseries_bytes("Write Batch Size - Sync to S3", [
+            *quantile(lambda quantile, legend:
+                      panels.target(
+                          f"histogram_quantile({quantile}, sum(rate(state_store_shared_buffer_to_sstable_size_bucket[1m])) by (le, job, instance))", f"p{legend} - {{{{job}}}} @ {{{{instance}}}}"
+                      ),
+                      [90, 99, 999]),
             panels.target(
-                "sum(rate(state_store_shared_buffer_to_sstable_size_sum[1m]))by(job,instance) / sum(rate(state_store_shared_buffer_to_sstable_size_count[1m]))by(job,instance)", "sync - {{job}} @ {{instance}}"
+                "sum(rate(state_store_shared_buffer_to_sstable_size_sum[1m]))by(job,instance) / sum(rate(state_store_shared_buffer_to_sstable_size_count[1m]))by(job,instance)", "avg - {{job}} @ {{instance}}"
             ),
         ]),
         panels.timeseries_latency("build sstable duration", [

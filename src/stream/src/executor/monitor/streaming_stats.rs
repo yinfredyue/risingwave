@@ -35,7 +35,7 @@ pub struct StreamingMetrics {
     pub actor_poll_cnt: GenericGaugeVec<AtomicI64>,
     pub actor_idle_duration: GenericGaugeVec<AtomicF64>,
     pub actor_idle_cnt: GenericGaugeVec<AtomicI64>,
-    pub source_output_row_count: GenericCounterVec<AtomicU64>,
+    pub source_output_rows: HistogramVec,
     pub exchange_recv_size: GenericCounterVec<AtomicU64>,
     pub join_lookup_miss_count: GenericCounterVec<AtomicU64>,
     pub join_total_lookup_count: GenericCounterVec<AtomicU64>,
@@ -52,13 +52,14 @@ impl StreamingMetrics {
         )
         .unwrap();
 
-        let source_output_row_count = register_int_counter_vec_with_registry!(
-            "stream_source_output_rows_counts",
-            "Total number of rows that have been output from source",
-            &["source_id"],
-            registry
-        )
-        .unwrap();
+        let opts = histogram_opts!(
+            "stream_source_output_rows",
+            "Number of rows that have been output from source in each epoch",
+            exponential_buckets(10.0, 2.0, 25).unwrap() // max 2^25 * 10 rows
+        );
+
+        let source_output =
+            register_histogram_vec_with_registry!(opts, &["source_id"], registry).unwrap();
 
         let actor_processing_time = register_gauge_vec_with_registry!(
             "stream_actor_processing_time",
@@ -213,7 +214,7 @@ impl StreamingMetrics {
             actor_poll_cnt,
             actor_idle_duration,
             actor_idle_cnt,
-            source_output_row_count,
+            source_output,
             exchange_recv_size,
             join_lookup_miss_count,
             join_total_lookup_count,

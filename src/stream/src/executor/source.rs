@@ -340,6 +340,9 @@ impl<S: StateStore> SourceExecutor<S> {
 
         let (inject_source_tx, inject_source_rx) =
             channel::<(Box<SourceStreamReaderImpl>, oneshot::Sender<()>)>(1);
+
+        let mut row_counts = 0;
+
         #[for_await]
         for msg in reader.into_stream(inject_source_rx) {
             match msg {
@@ -390,6 +393,13 @@ impl<S: StateStore> SourceExecutor<S> {
                                 }
                             }
                             self.state_cache.clear();
+
+                            self.metrics
+                                .source_output_rows
+                                .with_label_values(&[self.source_identify.as_str()])
+                                .observe(row_counts as f64);
+                            row_counts = 0;
+
                             yield Message::Barrier(barrier)
                         }
                         _ => unreachable!(),
@@ -428,10 +438,8 @@ impl<S: StateStore> SourceExecutor<S> {
                         chunk = self.refill_row_id_column(chunk);
                     }
 
-                    self.metrics
-                        .source_output_row_count
-                        .with_label_values(&[self.source_identify.as_str()])
-                        .inc_by(chunk.cardinality() as u64);
+                    row_counts += chunk.cardinality() as u64;
+
                     yield Message::Chunk(chunk);
                 }
             }
