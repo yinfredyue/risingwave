@@ -39,7 +39,7 @@ pub type WorkerId = u32;
 pub type WorkerLocations = HashMap<WorkerId, WorkerNode>;
 pub type ClusterManagerRef<S> = Arc<ClusterManager<S>>;
 
-pub const DEFAULT_WORK_NODE_PARALLEL_DEGREE: usize = 8;
+pub const DEFAULT_WORK_NODE_PARALLEL_DEGREE: usize = 16;
 
 #[derive(Debug)]
 pub struct WorkerKey(pub HostAddress);
