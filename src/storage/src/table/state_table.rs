@@ -152,6 +152,11 @@ impl<S: StateStore> StateTable<S> {
             .await?;
         Ok(())
     }
+
+    pub async fn clear_mem_table(&mut self) -> StorageResult<()> {
+        std::mem::take(&mut self.mem_table);
+        Ok(())
+    }
 }
 
 /// Iterator functions.
