@@ -150,12 +150,12 @@ impl SourceReader {
         expected_barrier_latency_ms: u64,
         mut inject_source_rx: Receiver<(Box<SourceStreamReaderImpl>, oneshot::Sender<()>)>,
     ) {
-        let (msg_tx, mut msg_rx) = channel::<Result<StreamChunkWithState>>(16);
+        let (msg_tx, mut msg_rx) = channel::<Result<StreamChunkWithState>>(5);
         let handler = tokio::task::spawn(async move {
             loop {
                 let mut chunk_received = 0;
-                // We allow at most 10 chunks within one epoch
-                while chunk_received < 10 {
+                // We allow at most 5 chunks within one epoch
+                while chunk_received < 5 {
                     tokio::select! {
                         biased;
                         reader = inject_source_rx.recv() => {
