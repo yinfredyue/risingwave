@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use itertools::Itertools;
-use parking_lot::RwLock;
+use parking_lot::Mutex;
 use risingwave_common::config::StorageConfig;
 use risingwave_hummock_sdk::key::FullKey;
 use risingwave_pb::hummock::{HummockVersion, SstableInfo};
@@ -80,7 +80,7 @@ impl BufferTracker {
 /// during the lifetime of `ScopedLocalVersion`. Internally `LocalVersionManager` will pin/unpin the
 /// versions in storage service.
 pub struct LocalVersionManager {
-    local_version: RwLock<LocalVersion>,
+    local_version: Mutex<LocalVersion>,
     worker_context: WorkerContext,
     buffer_tracker: BufferTracker,
     write_conflict_detector: Option<Arc<ConflictDetector>>,
@@ -115,7 +115,7 @@ impl LocalVersionManager {
         let global_replicate_batches_size = Arc::new(AtomicUsize::new(0));
 
         let local_version_manager = Arc::new(LocalVersionManager {
-            local_version: RwLock::new(LocalVersion::new(pinned_version, version_unpin_worker_tx)),
+            local_version: Mutex::new(LocalVersion::new(pinned_version, version_unpin_worker_tx)),
             worker_context: WorkerContext {
                 version_update_notifier_tx,
                 shared_buffer_uploader_tx,
@@ -163,7 +163,7 @@ impl LocalVersionManager {
             error!("invalid table key range: {:?}", newly_pinned_version.levels);
             return false;
         }
-        let mut guard = self.local_version.write();
+        let mut guard = self.local_version.lock();
 
         if guard.pinned_version().id() >= new_version_id {
             return false;
@@ -189,7 +189,7 @@ impl LocalVersionManager {
         let mut receiver = self.worker_context.version_update_notifier_tx.subscribe();
         loop {
             {
-                let current_version = self.local_version.read();
+                let current_version = self.local_version.lock();
                 if current_version.pinned_version().max_committed_epoch() >= epoch {
                     return Ok(());
                 }
@@ -250,12 +250,12 @@ impl LocalVersionManager {
         );
 
         // Try get shared buffer with version read lock
-        let shared_buffer = self.local_version.read().get_shared_buffer(epoch).cloned();
+        let shared_buffer = self.local_version.lock().get_shared_buffer(epoch).cloned();
 
         // New a shared buffer with version write lock if shared buffer of the corresponding epoch
         // does not exist before
         let shared_buffer =
-            shared_buffer.unwrap_or_else(|| self.local_version.write().new_shared_buffer(epoch));
+            shared_buffer.unwrap_or_else(|| self.local_version.lock().new_shared_buffer(epoch));
 
         // Write into shared buffer
         if is_remote_batch {
@@ -275,7 +275,7 @@ impl LocalVersionManager {
         //
         // TODO: apply high-low threshold here and avoid always await here.
         let mut task = None;
-        for (epoch, shared_buffer) in self.local_version.read().iter_shared_buffer() {
+        for (epoch, shared_buffer) in self.local_version.lock().iter_shared_buffer() {
             if let Some((order_index, task_data)) =
                 shared_buffer.write().new_upload_task(FlushWriteBatch)
             {
@@ -302,7 +302,7 @@ impl LocalVersionManager {
             .pop_first()
             .expect("the result should not be empty");
 
-        let local_version_guard = self.local_version.read();
+        let local_version_guard = self.local_version.lock();
         let mut shared_buffer_guard = local_version_guard
             .get_shared_buffer(epoch)
             .expect("shared buffer should exist since some uncommitted data is not committed yet")
@@ -325,7 +325,7 @@ impl LocalVersionManager {
             Some(epoch) => vec![epoch],
             None => self
                 .local_version
-                .read()
+                .lock()
                 .iter_shared_buffer()
                 .map(|(epoch, _)| *epoch)
                 .collect(),
@@ -338,7 +338,7 @@ impl LocalVersionManager {
 
     pub async fn sync_shared_buffer_epoch(&self, epoch: HummockEpoch) -> HummockResult<()> {
         let task = {
-            match self.local_version.read().new_upload_task(epoch, SyncEpoch) {
+            match self.local_version.lock().new_upload_task(epoch, SyncEpoch) {
                 Some((order_index, task_data)) => {
                     UploadTask::new(order_index, epoch, task_data, false)
                 }
@@ -357,7 +357,7 @@ impl LocalVersionManager {
             .pop_first()
             .expect("the result should not be empty");
 
-        let local_version_guard = self.local_version.read();
+        let local_version_guard = self.local_version.lock();
         let mut shared_buffer_guard = local_version_guard
             .get_shared_buffer(epoch)
             .expect("shared buffer should exist since some uncommitted data is not committed yet")
@@ -379,16 +379,16 @@ impl LocalVersionManager {
     }
 
     pub fn read_version(self: &Arc<LocalVersionManager>, read_epoch: HummockEpoch) -> ReadVersion {
-        self.local_version.read().read_version(read_epoch)
+        self.local_version.lock().read_version(read_epoch)
     }
 
     pub fn get_pinned_version(&self) -> Arc<PinnedVersion> {
-        self.local_version.read().pinned_version().clone()
+        self.local_version.lock().pinned_version().clone()
     }
 
     pub fn get_uncommitted_ssts(&self, epoch: HummockEpoch) -> Vec<SstableInfo> {
         self.local_version
-            .read()
+            .lock()
             .get_shared_buffer(epoch)
             .map(|shared_buffer| shared_buffer.read().get_ssts_to_commit())
             .unwrap_or_default()
@@ -459,7 +459,7 @@ impl LocalVersionManager {
 
             let last_pinned = local_version_manager
                 .local_version
-                .read()
+                .lock()
                 .pinned_version()
                 .id();
 
@@ -557,7 +557,7 @@ impl LocalVersionManager {
 
     #[cfg(test)]
     pub fn get_local_version(&self) -> LocalVersion {
-        self.local_version.read().clone()
+        self.local_version.lock().clone()
     }
 
     #[cfg(test)]
@@ -727,7 +727,7 @@ mod tests {
         // Update uncommitted sst for epochs[0]
         let sst1 = gen_dummy_sst_info(1, vec![batches[0].clone()]);
         {
-            let local_version_guard = local_version_manager.local_version.read();
+            let local_version_guard = local_version_manager.local_version.lock();
             let mut shared_buffer_guard = local_version_guard
                 .get_shared_buffer(epochs[0])
                 .unwrap()
@@ -775,7 +775,7 @@ mod tests {
         // Update uncommitted sst for epochs[1]
         let sst2 = gen_dummy_sst_info(2, vec![batches[1].clone()]);
         {
-            let local_version_guard = local_version_manager.local_version.read();
+            let local_version_guard = local_version_manager.local_version.lock();
             let mut shared_buffer_guard = local_version_guard
                 .get_shared_buffer(epochs[1])
                 .unwrap()
