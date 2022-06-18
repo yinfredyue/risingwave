@@ -150,24 +150,24 @@ impl SourceReader {
         expected_barrier_latency_ms: u64,
         mut inject_source_rx: Receiver<(Box<SourceStreamReaderImpl>, oneshot::Sender<()>)>,
     ) {
-        let (msg_tx, mut msg_rx) = channel::<Result<StreamChunkWithState>>(1);
+        let (msg_tx, mut msg_rx) = channel::<Result<StreamChunkWithState>>(16);
         let handler = tokio::task::spawn(async move {
             loop {
-                let now = Instant::now();
+                // let now = Instant::now();
 
                 // We allow data to flow for `expected_barrier_latency_ms` milliseconds.
-                while now.elapsed().as_millis() < expected_barrier_latency_ms as u128 {
-                    tokio::select! {
-                        biased;
-                        reader = inject_source_rx.recv() => {
-                            if let Some((new_reader, tx)) = reader {
-                                stream_reader = new_reader;
-                                tx.send(()).unwrap();
-                            }
+                // while now.elapsed().as_millis() < expected_barrier_latency_ms as u128 {
+                tokio::select! {
+                    biased;
+                    reader = inject_source_rx.recv() => {
+                        if let Some((new_reader, tx)) = reader {
+                            stream_reader = new_reader;
+                            tx.send(()).unwrap();
                         }
-                        chunk = stream_reader.next() => { msg_tx.send(chunk).await.unwrap(); }
                     }
+                    chunk = stream_reader.next() => { msg_tx.send(chunk).await.unwrap(); }
                 }
+                // }
 
                 // Here we consider two cases:
                 //
@@ -175,7 +175,7 @@ impl SourceReader {
                 // complete instantly, and we will continue to produce new data.
                 // 2. Barrier arrived after waiting for notified. Then source will be stalled.
 
-                notifier.notified().await;
+                // notifier.notified().await;
             }
         });
         'outer: loop {
