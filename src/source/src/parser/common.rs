@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use itertools::Itertools;
 use num_traits::FromPrimitive;
+use risingwave_common::array::StructValue;
 use risingwave_common::error::ErrorCode::{self, InternalError};
 use risingwave_common::error::{Result, RwError};
 use risingwave_common::types::{DataType, Decimal, ScalarImpl, ScalarRef};
@@ -88,6 +90,20 @@ pub(crate) fn json_parse_value(
             None => Err(RwError::from(InternalError("parse error".to_string()))),
             Some(date_str) => Ok(ScalarImpl::NaiveDateTime(str_to_timestamp(date_str)?)),
         },
+        DataType::Struct { fields: _ } => {
+            if let Some(Value::Object(map)) = value {
+                let datums: Vec<ScalarImpl> = column
+                    .field_desc
+                    .iter()
+                    .map(|f| json_parse_value(f, map.get(&f.name)))
+                    .try_collect()?;
+                Ok(ScalarImpl::Struct(StructValue::new(
+                    datums.into_iter().map( Some).collect_vec(),
+                )))
+            } else {
+                Err(RwError::from(InternalError("parse error".to_string())))
+            }
+        }
         _ => Err(ErrorCode::NotImplemented(
             "unsupported type for json_parse_value".to_string(),
             None.into(),

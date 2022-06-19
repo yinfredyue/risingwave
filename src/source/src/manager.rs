@@ -17,6 +17,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use itertools::Itertools;
 use parking_lot::{Mutex, MutexGuard};
 use risingwave_common::catalog::{ColumnDesc, ColumnId, TableId};
 use risingwave_common::ensure;
@@ -54,7 +55,25 @@ pub struct SourceColumnDesc {
     pub name: String,
     pub data_type: DataType,
     pub column_id: ColumnId,
+    pub field_desc: Vec<SourceColumnDesc>,
     pub skip_parse: bool,
+}
+
+impl SourceColumnDesc {
+    pub fn new_atomic(
+        name: String,
+        data_type: DataType,
+        column_id: ColumnId,
+        skip_parse: bool,
+    ) -> Self {
+        SourceColumnDesc {
+            name,
+            data_type,
+            column_id,
+            field_desc: vec![],
+            skip_parse,
+        }
+    }
 }
 
 impl From<&ColumnDesc> for SourceColumnDesc {
@@ -63,6 +82,7 @@ impl From<&ColumnDesc> for SourceColumnDesc {
             name: c.name.clone(),
             data_type: c.data_type.clone(),
             column_id: c.column_id,
+            field_desc: c.field_descs.iter().map(|d| d.into()).collect_vec(),
             skip_parse: false,
         }
     }
@@ -139,6 +159,14 @@ impl SourceManager for MemSourceManager {
                     name: c.name.clone(),
                     data_type: DataType::from(&c.column_type.unwrap()),
                     column_id: ColumnId::from(c.column_id),
+                    field_desc: c
+                        .field_descs
+                        .iter()
+                        .map(|d| {
+                            let d: ColumnDesc = d.into();
+                            (&d).into()
+                        })
+                        .collect_vec(),
                     skip_parse: idx as i32 == info.row_id_index,
                 }
             })

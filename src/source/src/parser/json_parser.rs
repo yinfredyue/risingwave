@@ -38,7 +38,10 @@ impl SourceParser for JSONParser {
                     if column.skip_parse {
                         None
                     } else {
-                        json_parse_value(column, value.get(&column.name)).ok()
+                        let v = json_parse_value(column, value.get(&column.name)).ok();
+                        tracing::error!("{:?}",v);
+                        tracing::error!("{:?}",column);
+                        v
                     }
                 })
                 .collect::<Vec<Datum>>()],
@@ -59,60 +62,60 @@ mod tests {
         let parser = JSONParser {};
         let payload = r#"{"i32":1,"bool":true,"i16":1,"i64":12345678,"f32":1.23,"f64":1.2345,"varchar":"varchar","date":"2021-01-01","timestamp":"2021-01-01 16:06:12.269"}"#.as_bytes();
         let descs = vec![
-            SourceColumnDesc {
-                name: "i32".to_string(),
-                data_type: DataType::Int32,
-                column_id: ColumnId::from(0),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "bool".to_string(),
-                data_type: DataType::Boolean,
-                column_id: ColumnId::from(2),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "i16".to_string(),
-                data_type: DataType::Int16,
-                column_id: ColumnId::from(3),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "i64".to_string(),
-                data_type: DataType::Int64,
-                column_id: ColumnId::from(4),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "f32".to_string(),
-                data_type: DataType::Float32,
-                column_id: ColumnId::from(5),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "f64".to_string(),
-                data_type: DataType::Float64,
-                column_id: ColumnId::from(6),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "varchar".to_string(),
-                data_type: DataType::Varchar,
-                column_id: ColumnId::from(7),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "date".to_string(),
-                data_type: DataType::Date,
-                column_id: ColumnId::from(8),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "timestamp".to_string(),
-                data_type: DataType::Timestamp,
-                column_id: ColumnId::from(9),
-                skip_parse: false,
-            },
+            SourceColumnDesc::new_atomic(
+                "i32".to_string(),
+                DataType::Int32,
+                ColumnId::from(0),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "bool".to_string(),
+                DataType::Boolean,
+                ColumnId::from(2),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "i16".to_string(),
+                DataType::Int16,
+                ColumnId::from(3),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "i64".to_string(),
+                DataType::Int64,
+                ColumnId::from(4),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "f32".to_string(),
+                DataType::Float32,
+                ColumnId::from(5),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "f64".to_string(),
+                DataType::Float64,
+                ColumnId::from(6),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "varchar".to_string(),
+                DataType::Varchar,
+                ColumnId::from(7),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "date".to_string(),
+                DataType::Date,
+                ColumnId::from(8),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "timestamp".to_string(),
+                DataType::Timestamp,
+                ColumnId::from(9),
+                false,
+            ),
         ];
 
         let result = parser.parse(payload, &descs);

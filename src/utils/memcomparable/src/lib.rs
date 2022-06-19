@@ -18,6 +18,8 @@
 #![deny(missing_docs)]
 #![feature(lint_reasons)]
 
+extern crate core;
+
 mod de;
 mod error;
 mod ser;

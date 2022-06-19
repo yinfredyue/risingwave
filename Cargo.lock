@@ -2607,6 +2607,7 @@ name = "memcomparable"
 version = "0.1.9"
 dependencies = [
  "bytes",
+ "log",
  "rand 0.8.5",
  "rust_decimal",
  "serde",

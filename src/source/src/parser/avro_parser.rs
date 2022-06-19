@@ -474,54 +474,54 @@ mod test {
 
     fn build_rw_columns() -> Vec<SourceColumnDesc> {
         vec![
-            SourceColumnDesc {
-                name: "id".to_string(),
-                data_type: DataType::Int32,
-                column_id: ColumnId::from(0),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "sequence_id".to_string(),
-                data_type: DataType::Int64,
-                column_id: ColumnId::from(1),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "name".to_string(),
-                data_type: DataType::Varchar,
-                column_id: ColumnId::from(2),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "score".to_string(),
-                data_type: DataType::Float32,
-                column_id: ColumnId::from(3),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "avg_score".to_string(),
-                data_type: DataType::Float64,
-                column_id: ColumnId::from(4),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "is_lasted".to_string(),
-                data_type: DataType::Boolean,
-                column_id: ColumnId::from(5),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "entrance_date".to_string(),
-                data_type: DataType::Date,
-                column_id: ColumnId::from(6),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "birthday".to_string(),
-                data_type: DataType::Timestamp,
-                column_id: ColumnId::from(7),
-                skip_parse: false,
-            },
+            SourceColumnDesc::new_atomic(
+                "id".to_string(),
+                DataType::Int32,
+                ColumnId::from(0),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "sequence_id".to_string(),
+                DataType::Int64,
+                ColumnId::from(1),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "name".to_string(),
+                DataType::Varchar,
+                ColumnId::from(2),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "score".to_string(),
+                DataType::Float32,
+                ColumnId::from(3),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "avg_score".to_string(),
+                DataType::Float64,
+                ColumnId::from(4),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "is_lasted".to_string(),
+                DataType::Boolean,
+                ColumnId::from(5),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "entrance_date".to_string(),
+                DataType::Date,
+                ColumnId::from(6),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "birthday".to_string(),
+                DataType::Timestamp,
+                ColumnId::from(7),
+                false,
+            ),
         ]
     }
 

@@ -426,42 +426,42 @@ mod tests {
     fn test_parser_parse() {
         let parser = create_parser(PROTO_FILE_DATA).unwrap();
         let descs = vec![
-            SourceColumnDesc {
-                name: "id".to_string(),
-                data_type: DataType::Int32,
-                column_id: ColumnId::from(0),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "address".to_string(),
-                data_type: DataType::Varchar,
-                column_id: ColumnId::from(1),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "city".to_string(),
-                data_type: DataType::Varchar,
-                column_id: ColumnId::from(2),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "zipcode".to_string(),
-                data_type: DataType::Int64,
-                column_id: ColumnId::from(3),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "rate".to_string(),
-                data_type: DataType::Float32,
-                column_id: ColumnId::from(4),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "date".to_string(),
-                data_type: DataType::Date,
-                column_id: ColumnId::from(5),
-                skip_parse: false,
-            },
+            SourceColumnDesc::new_atomic(
+                "id".to_string(),
+                DataType::Int32,
+                ColumnId::from(0),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "address".to_string(),
+                DataType::Varchar,
+                ColumnId::from(1),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "city".to_string(),
+                DataType::Varchar,
+                ColumnId::from(2),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "zipcode".to_string(),
+                DataType::Int64,
+                ColumnId::from(3),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "rate".to_string(),
+                DataType::Float32,
+                ColumnId::from(4),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "date".to_string(),
+                DataType::Date,
+                ColumnId::from(5),
+                false,
+            ),
         ];
 
         let result = parser.parse(PRE_GEN_PROTO_DATA, &descs);

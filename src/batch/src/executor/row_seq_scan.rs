@@ -222,7 +222,7 @@ impl<S: StateStore> RowSeqScanExecutor<S> {
                     pin_mut!(iter);
                     loop {
                         let timer = self.stats.row_seq_scan_next_duration.start_timer();
-
+                        tracing::error!("{:?}",self.schema);
                         let chunk = iter
                             .collect_data_chunk(&self.schema, Some(self.chunk_size))
                             .await

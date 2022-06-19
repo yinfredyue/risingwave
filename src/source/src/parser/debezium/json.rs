@@ -160,30 +160,30 @@ mod test {
 
     fn get_test_columns() -> Vec<SourceColumnDesc> {
         let descs = vec![
-            SourceColumnDesc {
-                name: "id".to_string(),
-                data_type: DataType::Int32,
-                column_id: ColumnId::from(0),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "name".to_string(),
-                data_type: DataType::Varchar,
-                column_id: ColumnId::from(1),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "description".to_string(),
-                data_type: DataType::Varchar,
-                column_id: ColumnId::from(2),
-                skip_parse: false,
-            },
-            SourceColumnDesc {
-                name: "weight".to_string(),
-                data_type: DataType::Float64,
-                column_id: ColumnId::from(3),
-                skip_parse: false,
-            },
+            SourceColumnDesc::new_atomic(
+                "id".to_string(),
+                DataType::Int32,
+                ColumnId::from(0),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "name".to_string(),
+                DataType::Varchar,
+                ColumnId::from(1),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "description".to_string(),
+                DataType::Varchar,
+                ColumnId::from(2),
+                false,
+            ),
+            SourceColumnDesc::new_atomic(
+                "weight".to_string(),
+                DataType::Float64,
+                ColumnId::from(3),
+                false,
+            ),
         ];
 
         descs

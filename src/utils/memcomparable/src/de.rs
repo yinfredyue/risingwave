@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 use bytes::Buf;
 use serde::de::{
     self, DeserializeSeed, EnumAccess, IntoDeserializer, SeqAccess, VariantAccess, Visitor,
@@ -106,7 +107,10 @@ impl<B: Buf> Deserializer<B> {
         match self.input.get_u8() {
             0 => return Ok(vec![]), // empty slice
             1 => {}                 // non-empty slice
-            v => return Err(Error::InvalidBytesEncoding(v)),
+            v => {
+                log::error!("1114");
+                return Err(Error::InvalidBytesEncoding(v))
+            },
         }
         let mut bytes = vec![];
         let mut chunk = [0u8; 9];
@@ -118,7 +122,9 @@ impl<B: Buf> Deserializer<B> {
                     return Ok(bytes);
                 }
                 9 => bytes.extend_from_slice(&chunk[..8]),
-                v => return Err(Error::InvalidBytesEncoding(v)),
+                v => {
+                    return Err(Error::InvalidBytesEncoding(v))
+                },
             }
         }
     }
