@@ -410,9 +410,7 @@ pub async fn rpc_serve_with_store<S: MetaStore>(
             ClusterManager::start_heartbeat_checker(cluster_manager, Duration::from_secs(1)).await,
         );
 
-        let (handle1, handle2) = GlobalBarrierManager::start(barrier_manager).await;
-        sub_tasks.push(handle1);
-        sub_tasks.push(handle2);
+        sub_tasks.push(GlobalBarrierManager::start(barrier_manager).await);
     }
 
     let (shutdown_send, mut shutdown_recv) = tokio::sync::oneshot::channel();

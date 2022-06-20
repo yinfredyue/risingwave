@@ -874,15 +874,14 @@ mod tests {
             )
             .await?;
 
-            let ((join_handle_2, shutdown_tx_2), (join_handle_3, shutdown_tx_3)) =
-                GlobalBarrierManager::start(barrier_manager).await;
+            let (join_handle_2, shutdown_tx_2) = GlobalBarrierManager::start(barrier_manager).await;
 
             Ok(Self {
                 global_stream_manager: stream_manager,
                 fragment_manager,
                 state,
-                join_handles: vec![join_handle_3, join_handle_2, join_handle],
-                shutdown_txs: vec![shutdown_tx_3, shutdown_tx_2, shutdown_tx],
+                join_handles: vec![join_handle_2, join_handle],
+                shutdown_txs: vec![shutdown_tx_2, shutdown_tx],
             })
         }
 

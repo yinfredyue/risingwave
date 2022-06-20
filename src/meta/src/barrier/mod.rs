@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::iter::once;
-use std::sync::atomic::AtomicBool;
-use std::sync::{atomic, Arc};
+use std::sync::Arc;
 use std::time::Duration;
 
 use fail::fail_point;
@@ -24,7 +23,7 @@ use itertools::Itertools;
 use prometheus::HistogramTimer;
 use risingwave_common::catalog::TableId;
 use risingwave_common::error::{ErrorCode, Result, RwError};
-use risingwave_common::util::epoch::{Epoch, INVALID_EPOCH};
+use risingwave_common::util::epoch::INVALID_EPOCH;
 use risingwave_hummock_sdk::HummockEpoch;
 use risingwave_pb::common::worker_node::State::Running;
 use risingwave_pb::common::WorkerType;
@@ -33,9 +32,9 @@ use risingwave_pb::stream_service::{
     BarrierCompleteRequest, BarrierCompleteResponse, InjectBarrierRequest,
 };
 use smallvec::SmallVec;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot::{Receiver, Sender};
-use tokio::sync::{oneshot, watch, RwLock, RwLockWriteGuard};
+use tokio::sync::{oneshot, watch, RwLock};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
@@ -43,12 +42,12 @@ pub use self::command::Command;
 use self::command::CommandContext;
 use self::info::BarrierActorInfo;
 use self::notifier::Notifier;
-use self::progress::CreateMviewProgressTracker;
+use crate::barrier::progress::CreateMviewProgressTracker;
 use crate::barrier::BarrierEpochState::{Complete, Fail, InFlight};
 use crate::cluster::{ClusterManagerRef, META_NODE_ID};
 use crate::hummock::HummockManagerRef;
 use crate::manager::{CatalogManagerRef, MetaSrvEnv};
-use crate::model::{ActorId, BarrierManagerState};
+use crate::model::BarrierManagerState;
 use crate::rpc::metrics::MetaMetrics;
 use crate::storage::MetaStore;
 use crate::stream::FragmentManagerRef;
@@ -60,21 +59,6 @@ mod progress;
 mod recovery;
 
 type Scheduled = (Command, SmallVec<[Notifier; 1]>);
-
-/// Commit results of this epoch.
-#[derive(Debug)]
-enum BarrierCommitResult {
-    Ok {
-        new_epoch: Epoch,
-        actors_to_finish: HashSet<ActorId>,
-        notifiers: SmallVec<[Notifier; 1]>,
-        responses: Vec<BarrierCompleteResponse>,
-    },
-    Err {
-        new_epoch: Epoch,
-        err_msg: RwError,
-    },
-}
 
 /// A buffer or queue for scheduling barriers.
 struct ScheduledBarriers {
@@ -183,17 +167,41 @@ pub struct GlobalBarrierManager<S: MetaStore> {
 
     env: MetaSrvEnv<S>,
 
-    /// Signal whether to start recovery
-    is_recovery: Arc<AtomicBool>,
-
-    /// Signal whether the barrier with building actor is sent
-    is_build_actor: Arc<AtomicBool>,
-
-    /// Save the states and messages of barrier in order
-    command_ctx_queue: Arc<RwLock<VecDeque<EpochNode<S>>>>,
-
     /// The max barrier nums in flight
     in_flight_barrier_nums: usize,
+}
+
+struct ConcurrentControl<S: MetaStore> {
+    /// Signal whether to start recovery
+    is_recovery: bool,
+    /// Signal whether the barrier with building actor is sent
+    is_build_actor: bool,
+    /// Save the states and messages of barrier in order
+    command_ctx_queue: VecDeque<EpochNode<S>>,
+}
+impl<S> ConcurrentControl<S>
+where
+    S: MetaStore,
+{
+    fn new() -> Self {
+        Self {
+            is_recovery: false,
+            is_build_actor: false,
+            command_ctx_queue: VecDeque::default(),
+        }
+    }
+
+    /// Pause inject barrier until True
+    fn can_inject_barrier(&self, in_flight_barrier_nums: usize) -> bool {
+        !(self.is_recovery
+            || self.is_build_actor
+            || self
+                .command_ctx_queue
+                .iter()
+                .filter(|x| matches!(x.states, InFlight))
+                .count()
+                >= in_flight_barrier_nums)
+    }
 }
 
 /// The states and messages of this barrier
@@ -245,45 +253,21 @@ where
             hummock_manager,
             metrics,
             env,
-            is_recovery: Arc::new(AtomicBool::new(false)),
-            is_build_actor: Arc::new(AtomicBool::new(false)),
-            command_ctx_queue: Arc::new(RwLock::new(VecDeque::new())),
             in_flight_barrier_nums,
         }
     }
 
-    /// start two loop (inject and collect)
-    pub async fn start(
-        barrier_manager: BarrierManagerRef<S>,
-    ) -> ((JoinHandle<()>, Sender<()>), (JoinHandle<()>, Sender<()>)) {
-        let (inject_shutdown_tx, inject_shutdown_rx) = tokio::sync::oneshot::channel();
-        let (collect_shutdown_tx, collect_shutdown_rx) = tokio::sync::oneshot::channel();
-        let (barrier_result_tx, barrier_result_rx) = tokio::sync::mpsc::unbounded_channel();
-        let (barrier_complete_tx, barrier_complete_rx) = tokio::sync::mpsc::unbounded_channel();
-        let barrier_manager_clone = barrier_manager.clone();
-        let join_handle_inject = tokio::spawn(async move {
-            barrier_manager_clone
-                .run_inject(inject_shutdown_rx, barrier_result_rx, barrier_complete_tx)
-                .await;
+    pub async fn start(barrier_manager: BarrierManagerRef<S>) -> (JoinHandle<()>, Sender<()>) {
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+        let join_handle = tokio::spawn(async move {
+            barrier_manager.run(shutdown_rx).await;
         });
-        let join_handle_collect = tokio::spawn(async move {
-            barrier_manager
-                .run_collect(collect_shutdown_rx, barrier_result_tx, barrier_complete_rx)
-                .await;
-        });
-        (
-            (join_handle_inject, inject_shutdown_tx),
-            (join_handle_collect, collect_shutdown_tx),
-        )
+
+        (join_handle, shutdown_tx)
     }
 
     /// Start an infinite loop to take scheduled barriers and send them.
-    async fn run_inject(
-        &self,
-        mut shutdown_rx: Receiver<()>,
-        mut barrier_result_rx: UnboundedReceiver<BarrierCommitResult>,
-        barrier_complete_tx: UnboundedSender<(u64, Result<Vec<BarrierCompleteResponse>>)>,
-    ) {
+    async fn run(&self, mut shutdown_rx: Receiver<()>) {
         let mut tracker = CreateMviewProgressTracker::default();
         let mut state = BarrierManagerState::create(self.env.meta_store()).await;
         if self.enable_recovery {
@@ -308,6 +292,8 @@ where
         let mut min_interval = tokio::time::interval(self.interval);
         min_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut barrier_timer: Option<HistogramTimer> = None;
+        let (barrier_complete_tx, mut barrier_complete_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut concurrent_control = ConcurrentControl::new();
         loop {
             tokio::select! {
                 biased;
@@ -316,41 +302,26 @@ where
                     tracing::info!("Barrier manager inject is shutting down");
                     return;
                 }
-                result = barrier_result_rx.recv() =>{
-                    match result{
-                        Some(BarrierCommitResult::Ok{new_epoch,actors_to_finish,notifiers,responses}) => {
-                            tracker.add(new_epoch, actors_to_finish, notifiers);
-                            for progress in responses.into_iter().flat_map(|r| r.create_mview_progress) {
-                                tracker.update(progress);
-                            }
-                        }
-                        Some(BarrierCommitResult::Err{new_epoch,err_msg}) => {
-                            if self.enable_recovery {
-                                // If failed, enter recovery mode.
-                                let (new_epoch, actors_to_track, create_mview_progress) =
-                                self.recovery(new_epoch).await;
-                                tracker = CreateMviewProgressTracker::default();
-                                tracker.add(new_epoch, actors_to_track, vec![]);
-                                for progress in create_mview_progress {
-                                    tracker.update(progress);
-                                }
-                                state.in_flight_prev_epoch = new_epoch;
-                                state.update_inflight_prev_epoch(self.env.meta_store()).await.unwrap();
-                                self.is_recovery.store(false,atomic::Ordering::SeqCst);
-                            } else {
-                                panic!("failed to execute barrier: {:?}", err_msg);
-                            }
-                        }
-                        _=>{}
+                result = barrier_complete_rx.recv() =>{
+                    let command_ctx_queue = &concurrent_control.command_ctx_queue;
+                        let in_flight_nums = command_ctx_queue
+                        .iter()
+                        .filter(|x| matches!(x.states, InFlight))
+                        .count();
+                        self.metrics.in_flight_barrier_nums.set(in_flight_nums as i64);
+                        self.metrics.all_barrier_nums.set(command_ctx_queue.len() as i64);
+
+                    if let Some((prev_epoch,result)) = result{
+                        self.barrier_complete_and_commit(prev_epoch,result,&mut state,&mut tracker,&mut concurrent_control).await;
                     }
                     continue;
                 }
                 // there's barrier scheduled.
-                _ = self.scheduled_barriers.wait_one() ,if self.can_inject_barrier().await => {
+                _ = self.scheduled_barriers.wait_one() ,if concurrent_control.can_inject_barrier(self.in_flight_barrier_nums) => {
 
                 }
                 // Wait for the minimal interval,
-                _ = min_interval.tick() ,if self.can_inject_barrier().await => {
+                _ = min_interval.tick() ,if concurrent_control.can_inject_barrier(self.in_flight_barrier_nums) => {
 
                 }
             }
@@ -359,10 +330,10 @@ where
                 barrier_timer.observe_duration();
             }
             barrier_timer = Some(self.metrics.barrier_send_latency.start_timer());
-            let (command, notifiers) = self.scheduled_barriers.pop_or_default().await;
 
+            let (command, notifiers) = self.scheduled_barriers.pop_or_default().await;
             if !matches!(command, Command::Plain(_)) {
-                self.is_build_actor.store(true, atomic::Ordering::SeqCst);
+                concurrent_control.is_build_actor = true;
             }
             let info = self.resolve_actor_info(command.creating_table_id()).await;
             // When there's no actors exist in the cluster, we don't need to send the barrier. This
@@ -399,7 +370,7 @@ where
             let mut notifiers = notifiers;
             notifiers.iter_mut().for_each(Notifier::notify_to_send);
             let timer = self.metrics.barrier_latency.start_timer();
-            self.command_ctx_queue.write().await.push_back(EpochNode {
+            concurrent_control.command_ctx_queue.push_back(EpochNode {
                 timer: Some(timer),
                 result: None,
                 states: InFlight,
@@ -423,15 +394,16 @@ where
             .inject_barrier(command_context_clone, barrier_complete_tx.clone())
             .await;
         if let Err(e) = result {
-            self.is_recovery.store(true, atomic::Ordering::SeqCst);
-            barrier_complete_tx
-                .send((command_context.prev_epoch.0, Err(e)))
-                .unwrap();
+            tokio::spawn(async move {
+                barrier_complete_tx
+                    .send((command_context.prev_epoch.0, Err(e)))
+                    .unwrap();
+            });
         }
     }
 
     /// Send inject-barrier-rpc to stream service and wait for its response before returns.
-    /// Then spawn a new tokio task to send barrier-complete-rpc and send the its response
+    /// Then spawn a new tokio task to send barrier-complete-rpc and wait for its response
     async fn inject_barrier(
         &self,
         command_context: Arc<CommandContext<S>>,
@@ -527,50 +499,19 @@ where
         Ok(())
     }
 
-    /// Start an infinite loop to receive the response of barrier-complete
-    async fn run_collect(
-        &self,
-        mut shutdown_rx: Receiver<()>,
-        barrier_result_tx: UnboundedSender<BarrierCommitResult>,
-        mut barrier_complete_rx: UnboundedReceiver<(u64, Result<Vec<BarrierCompleteResponse>>)>,
-    ) {
-        loop {
-            tokio::select! {
-                biased;
-                // Shutdown
-                _ = &mut shutdown_rx => {
-                    tracing::info!("Barrier manager collect is shutting down");
-                    return;
-                }
-                result = barrier_complete_rx.recv() =>{
-                    if let Some((prev_epoch,result)) = result{
-                        self.barrier_complete_and_commit(prev_epoch,barrier_result_tx.clone(),result).await;
-
-                        let command_ctx_queue = self.command_ctx_queue.read().await;
-                        let in_flight_nums = command_ctx_queue
-                        .iter()
-                        .filter(|x| matches!(x.states, InFlight))
-                        .count();
-                        self.metrics.in_flight_barrier_nums.set(in_flight_nums as i64);
-                        self.metrics.all_barrier_nums.set(command_ctx_queue.len() as i64);
-                    }
-                }
-            }
-        }
-    }
-
     /// Changes the states is `Complete`, and try commit all epoch that states is `Complete` in
-    /// order. If commit is err, changes the states is `Fail`. Then send Err msg when there is no
-    /// InFlight-barrier.
+    /// order. If commit is err, changes the states is `Fail`. Then recovery or panic
     async fn barrier_complete_and_commit(
         &self,
         prev_epoch: u64,
-        barrier_result_tx: UnboundedSender<BarrierCommitResult>,
         result: Result<Vec<BarrierCompleteResponse>>,
+        state: &mut BarrierManagerState,
+        tracker: &mut CreateMviewProgressTracker,
+        concurrent_control: &mut ConcurrentControl<S>,
     ) {
-        let mut command_ctx_queue_guard = self.command_ctx_queue.write().await;
         // change the states is Complete
-        if let Some(node) = command_ctx_queue_guard
+        if let Some(node) = concurrent_control
+            .command_ctx_queue
             .iter_mut()
             .find(|x| x.command_ctx.prev_epoch.0 == prev_epoch)
         {
@@ -578,66 +519,90 @@ where
             node.states = Complete;
             node.result = Some(result);
         };
-        if matches!(command_ctx_queue_guard.front().unwrap().states, Complete) {
+        if matches!(
+            concurrent_control.command_ctx_queue.front().unwrap().states,
+            Complete
+        ) {
             // If the state of the first node is Complete, try commit all epoch
-            let result = self
-                .try_commit_epoch(&mut command_ctx_queue_guard, barrier_result_tx.clone())
-                .await;
+            let result = self.try_commit_epoch(concurrent_control, tracker).await;
             if result.is_err() {
-                self.is_recovery.store(true, atomic::Ordering::SeqCst);
-                command_ctx_queue_guard.front_mut().unwrap().states = Fail(result.unwrap_err());
+                concurrent_control.is_recovery = true;
+                concurrent_control
+                    .command_ctx_queue
+                    .front_mut()
+                    .unwrap()
+                    .states = Fail(result.unwrap_err());
             }
         }
-        if command_ctx_queue_guard.len() > 0
-            && matches!(command_ctx_queue_guard.front().unwrap().states, Fail(_))
-        {
-            // If the state of the first node is Fail, wait all barrier complete before recovery
-            fail_point!("inject_barrier_err_success");
-            if command_ctx_queue_guard
+        if !concurrent_control.command_ctx_queue.is_empty()
+            && matches!(
+                concurrent_control.command_ctx_queue.front().unwrap().states,
+                Fail(_)
+            )
+            && concurrent_control
+                .command_ctx_queue
                 .iter()
                 .filter(|x| matches!(x.states, InFlight))
                 .count()
                 == 0
-            {
-                let new_epoch = command_ctx_queue_guard
-                    .back()
-                    .unwrap()
-                    .command_ctx
-                    .curr_epoch;
+        {
+            // If the state of the first node is Fail, wait all barrier complete before recovery
+            fail_point!("inject_barrier_err_success");
+            let new_epoch = concurrent_control
+                .command_ctx_queue
+                .back()
+                .unwrap()
+                .command_ctx
+                .curr_epoch;
 
-                let err_msg = command_ctx_queue_guard
-                    .front()
-                    .unwrap()
-                    .result
-                    .clone()
-                    .unwrap()
-                    .err()
-                    .unwrap();
-                while let Some(node) = command_ctx_queue_guard.pop_front() {
-                    let err = match node.states {
-                        Fail(err) => err,
-                        Complete => RwError::from(ErrorCode::InternalError(
-                            "err from before epoch".to_string(),
-                        )),
-                        _ => {
-                            panic!(
-                                "fail recovery with pending : epoch{:?}",
-                                node.command_ctx.prev_epoch
-                            );
-                        }
-                    };
-                    node.timer.unwrap().observe_duration();
-                    node.notifiers
-                        .into_iter()
-                        .for_each(|notifier| notifier.notify_collection_failed(err.clone()));
-                    if !matches!(node.command_ctx.command, Command::Plain(_)) {
-                        self.is_build_actor.store(false, atomic::Ordering::SeqCst);
+            let err_msg = concurrent_control
+                .command_ctx_queue
+                .front()
+                .unwrap()
+                .result
+                .clone()
+                .unwrap()
+                .err()
+                .unwrap();
+            while let Some(node) = concurrent_control.command_ctx_queue.pop_front() {
+                let err = match node.states {
+                    Fail(err) => err,
+                    Complete => RwError::from(ErrorCode::InternalError(
+                        "err from before epoch".to_string(),
+                    )),
+                    _ => {
+                        panic!(
+                            "fail recovery with pending : epoch{:?}",
+                            node.command_ctx.prev_epoch
+                        );
                     }
+                };
+                node.timer.unwrap().observe_duration();
+                node.notifiers
+                    .into_iter()
+                    .for_each(|notifier| notifier.notify_collection_failed(err.clone()));
+                if !matches!(node.command_ctx.command, Command::Plain(_)) {
+                    concurrent_control.is_build_actor = false;
                 }
-                // send the curr_epoch of the last node and err_msg of the first node.
-                barrier_result_tx
-                    .send(BarrierCommitResult::Err { new_epoch, err_msg })
+            }
+
+            if self.enable_recovery {
+                // If failed, enter recovery mode.
+                let (new_epoch, actors_to_track, create_mview_progress) =
+                    self.recovery(new_epoch).await;
+                *tracker = CreateMviewProgressTracker::default();
+                tracker.add(new_epoch, actors_to_track, vec![]);
+                for progress in create_mview_progress {
+                    tracker.update(progress);
+                }
+                state.in_flight_prev_epoch = new_epoch;
+                state
+                    .update_inflight_prev_epoch(self.env.meta_store())
+                    .await
                     .unwrap();
+                concurrent_control.is_recovery = false;
+            } else {
+                panic!("failed to execute barrier: {:?}", err_msg);
             }
         }
     }
@@ -646,10 +611,10 @@ where
     /// be stop and return.
     async fn try_commit_epoch(
         &self,
-        command_ctx_queue_guard: &mut RwLockWriteGuard<'_, VecDeque<EpochNode<S>>>,
-        barrier_result_tx: UnboundedSender<BarrierCommitResult>,
+        concurrent_control: &mut ConcurrentControl<S>,
+        tracker: &mut CreateMviewProgressTracker,
     ) -> Result<()> {
-        while let Some(node) = command_ctx_queue_guard.front_mut() {
+        while let Some(node) = concurrent_control.command_ctx_queue.front_mut() {
             if !matches!(node.states, Complete) {
                 break;
             }
@@ -686,7 +651,7 @@ where
             node.command_ctx.post_collect().await?;
 
             // this barrier is commit (not err) , So this node need to pop;
-            let node = command_ctx_queue_guard.pop_front().unwrap();
+            let node = concurrent_control.command_ctx_queue.pop_front().unwrap();
             let EpochNode {
                 result,
                 command_ctx,
@@ -694,39 +659,19 @@ where
                 ..
             } = node;
             let responses = result.unwrap().unwrap();
-            let new_epoch = command_ctx.curr_epoch;
             // Notify about collected first.
             notifiers.iter_mut().for_each(Notifier::notify_collected);
             // Then try to finish the barrier for Create MVs.
             let actors_to_finish = command_ctx.actors_to_track();
-
-            if !matches!(command_ctx.command, Command::Plain(_)) {
-                self.is_build_actor.store(false, atomic::Ordering::SeqCst);
+            tracker.add(command_ctx.curr_epoch, actors_to_finish, notifiers);
+            for progress in responses.into_iter().flat_map(|r| r.create_mview_progress) {
+                tracker.update(progress);
             }
-            barrier_result_tx
-                .send(BarrierCommitResult::Ok {
-                    new_epoch,
-                    actors_to_finish,
-                    notifiers,
-                    responses,
-                })
-                .unwrap();
+            if !matches!(command_ctx.command, Command::Plain(_)) {
+                concurrent_control.is_build_actor = false;
+            }
         }
         Ok(())
-    }
-
-    /// Pause inject barrier until True
-    async fn can_inject_barrier(&self) -> bool {
-        !(self.is_recovery.load(atomic::Ordering::SeqCst)
-            || self.is_build_actor.load(atomic::Ordering::SeqCst)
-            || self
-                .command_ctx_queue
-                .read()
-                .await
-                .iter()
-                .filter(|x| matches!(x.states, InFlight))
-                .count()
-                >= self.in_flight_barrier_nums)
     }
 
     /// Resolve actor information from cluster and fragment manager.
