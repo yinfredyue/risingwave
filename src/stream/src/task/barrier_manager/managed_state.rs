@@ -151,38 +151,32 @@ impl ManagedBarrierState {
         actor_ids_to_collect: impl IntoIterator<Item = ActorId>,
         collect_notifier: oneshot::Sender<CollectResult>,
     ) {
-        match self.map.get(&barrier.epoch.curr) {
+        let inner = match self.map.get(&barrier.epoch.curr) {
             Some(ManagedBarrierStateInner::Stashed { collected_actors }) => {
                 let remaining_actors = actor_ids_to_collect
                     .into_iter()
                     .filter(|a| !collected_actors.contains(a))
                     .collect();
-                self.map.insert(
-                    barrier.epoch.curr,
-                    ManagedBarrierStateInner::Issued {
-                        remaining_actors,
-                        collect_notifier,
-                    },
-                );
-                self.may_notify(barrier.epoch.curr);
+                ManagedBarrierStateInner::Issued {
+                    remaining_actors,
+                    collect_notifier,
+                }
             }
             Some(ManagedBarrierStateInner::Issued { .. }) => {
                 panic!(
                     "barrier epochs{:?} state has already been `Issued`",
                     barrier.epoch
-                )
+                );
             }
             None => {
                 let remaining_actors = actor_ids_to_collect.into_iter().collect();
-                self.map.insert(
-                    barrier.epoch.curr,
-                    ManagedBarrierStateInner::Issued {
-                        remaining_actors,
-                        collect_notifier,
-                    },
-                );
-                self.may_notify(barrier.epoch.curr);
+                ManagedBarrierStateInner::Issued {
+                    remaining_actors,
+                    collect_notifier,
+                }
             }
-        }
+        };
+        self.map.insert(barrier.epoch.curr, inner);
+        self.may_notify(barrier.epoch.curr);
     }
 }
