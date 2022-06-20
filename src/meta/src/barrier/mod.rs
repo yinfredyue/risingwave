@@ -202,6 +202,13 @@ where
                 .count()
                 >= in_flight_barrier_nums)
     }
+
+    // Push a new item with InFlight state into the command_ctx_queue.
+    fn inject_barrier(&mut self, command_ctx: CommandContext<S>, notifier: SmallVec<[Notifier; 1]>, timer: EpochNode) {
+
+    }
+
+    fn succeed_barrier(&mut self, )
 }
 
 /// The states and messages of this barrier
