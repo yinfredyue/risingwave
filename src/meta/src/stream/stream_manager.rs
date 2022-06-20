@@ -20,7 +20,7 @@ use itertools::Itertools;
 use log::{debug, info};
 use risingwave_common::catalog::TableId;
 use risingwave_common::error::{internal_error, Result};
-use risingwave_common::hash::VIRTUAL_NODE_COUNT;
+use risingwave_common::types::{ParallelUnitId, VIRTUAL_NODE_COUNT};
 use risingwave_pb::catalog::Source;
 use risingwave_pb::common::{ActorInfo, ParallelUnitMapping, WorkerType};
 use risingwave_pb::meta::table_fragments::{ActorState, ActorStatus};
@@ -34,7 +34,7 @@ use uuid::Uuid;
 
 use super::ScheduledLocations;
 use crate::barrier::{BarrierManagerRef, Command};
-use crate::cluster::{ClusterManagerRef, ParallelUnitId, WorkerId};
+use crate::cluster::{ClusterManagerRef, WorkerId};
 use crate::manager::{HashMappingManagerRef, MetaSrvEnv};
 use crate::model::{ActorId, DispatcherId, TableFragments};
 use crate::storage::MetaStore;
@@ -660,7 +660,7 @@ mod tests {
     use crate::barrier::GlobalBarrierManager;
     use crate::cluster::ClusterManager;
     use crate::hummock::compaction_group::manager::CompactionGroupManager;
-    use crate::hummock::HummockManager;
+    use crate::hummock::{CompactorManager, HummockManager};
     use crate::manager::{CatalogManager, MetaSrvEnv};
     use crate::model::ActorId;
     use crate::rpc::metrics::MetaMetrics;
@@ -740,6 +740,13 @@ mod tests {
             Ok(Response::new(InjectBarrierResponse::default()))
         }
 
+        async fn barrier_complete(
+            &self,
+            _request: Request<BarrierCompleteRequest>,
+        ) -> std::result::Result<Response<BarrierCompleteResponse>, Status> {
+            Ok(Response::new(BarrierCompleteResponse::default()))
+        }
+
         async fn create_source(
             &self,
             _request: Request<CreateSourceRequest>,
@@ -785,6 +792,7 @@ mod tests {
                 actor_ids: Mutex::new(HashSet::new()),
                 actor_infos: Mutex::new(HashMap::new()),
             });
+
             let fake_service = FakeStreamService {
                 inner: state.clone(),
             };
@@ -798,6 +806,7 @@ mod tests {
                     .await
                     .unwrap();
             });
+
             sleep(Duration::from_secs(1));
 
             let env = MetaSrvEnv::for_test().await;
@@ -820,15 +829,19 @@ mod tests {
             let meta_metrics = Arc::new(MetaMetrics::new());
             let compaction_group_manager =
                 Arc::new(CompactionGroupManager::new(env.clone()).await.unwrap());
+            let compactor_manager = Arc::new(CompactorManager::new());
+
             let hummock_manager = Arc::new(
                 HummockManager::new(
                     env.clone(),
                     cluster_manager.clone(),
                     meta_metrics.clone(),
                     compaction_group_manager.clone(),
+                    compactor_manager.clone(),
                 )
                 .await?,
             );
+
             let barrier_manager = Arc::new(GlobalBarrierManager::new(
                 env.clone(),
                 cluster_manager.clone(),
@@ -838,6 +851,9 @@ mod tests {
                 meta_metrics.clone(),
             ));
 
+            let compaction_group_manager =
+                Arc::new(CompactionGroupManager::new(env.clone()).await?);
+
             let source_manager = Arc::new(
                 SourceManager::new(
                     env.clone(),
@@ -845,6 +861,7 @@ mod tests {
                     barrier_manager.clone(),
                     catalog_manager.clone(),
                     fragment_manager.clone(),
+                    compaction_group_manager.clone(),
                 )
                 .await?,
             );
@@ -939,8 +956,7 @@ mod tests {
                 .cloned()
                 .unwrap()
                 .clone();
-            assert!(!scheduled_actor.vnode_bitmap.is_empty());
-            scheduled_actor.vnode_bitmap.clear();
+            scheduled_actor.vnode_bitmap.take().unwrap();
             assert_eq!(scheduled_actor, actor);
             assert!(services
                 .state
@@ -1040,8 +1056,7 @@ mod tests {
                 .get(&actor.get_actor_id())
                 .cloned()
                 .unwrap();
-            assert!(!scheduled_actor.vnode_bitmap.is_empty());
-            scheduled_actor.vnode_bitmap.clear();
+            scheduled_actor.vnode_bitmap.take().unwrap();
             assert_eq!(scheduled_actor, actor);
             assert!(services
                 .state
