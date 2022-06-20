@@ -4537,6 +4537,7 @@ dependencies = [
  "criterion",
  "crossbeam",
  "dashmap",
+ "dyn-clone",
  "either",
  "enum-as-inner",
  "fail",
