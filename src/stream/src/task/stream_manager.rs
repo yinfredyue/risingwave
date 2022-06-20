@@ -14,13 +14,13 @@
 
 use core::time::Duration;
 use std::fmt::Debug;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use futures::channel::mpsc::{channel, Receiver};
 use itertools::Itertools;
 use madsim::collections::{HashMap, HashSet};
 use parking_lot::Mutex;
+use risingwave_common::buffer::Bitmap;
 use risingwave_common::config::StreamingConfig;
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_common::try_match_expand;
@@ -119,7 +119,7 @@ pub struct ExecutorParams {
     pub actor_context: ActorContextRef,
 
     // Vnodes owned by this executor. Represented in bitmap.
-    pub vnode_bitmap: Rc<Vec<u8>>,
+    pub vnode_bitmap: Option<Bitmap>,
 }
 
 impl Debug for ExecutorParams {
@@ -472,7 +472,7 @@ impl LocalStreamManagerCore {
         env: StreamEnvironment,
         store: impl StateStore,
         actor_context: &ActorContextRef,
-        vnode_bitmap: Rc<Vec<u8>>,
+        vnode_bitmap: Option<Bitmap>,
     ) -> Result<BoxedExecutor> {
         let op_info = node.get_identity().clone();
         // Create the input executor before creating itself
@@ -490,7 +490,7 @@ impl LocalStreamManagerCore {
                     env.clone(),
                     store.clone(),
                     actor_context,
-                    Rc::clone(&vnode_bitmap),
+                    vnode_bitmap.clone(),
                 )
             })
             .try_collect()?;
@@ -538,7 +538,7 @@ impl LocalStreamManagerCore {
         node: &stream_plan::StreamNode,
         env: StreamEnvironment,
         actor_context: &ActorContextRef,
-        vnode_bitmap: Rc<Vec<u8>>,
+        vnode_bitmap: Option<Bitmap>,
     ) -> Result<BoxedExecutor> {
         dispatch_state_store!(self.state_store.clone(), store, {
             self.create_nodes_inner(
@@ -636,6 +636,11 @@ impl LocalStreamManagerCore {
             let actor_id = *actor_id;
             let actor = self.actors.remove(&actor_id).unwrap();
             let actor_context = Arc::new(Mutex::new(ActorContext::default()));
+            let vnode_bitmap = actor
+                .get_vnode_bitmap()
+                .ok()
+                .map(|b| b.try_into())
+                .transpose()?;
 
             let executor = self.create_nodes(
                 actor.fragment_id,
@@ -643,7 +648,7 @@ impl LocalStreamManagerCore {
                 actor.get_nodes()?,
                 env.clone(),
                 &actor_context,
-                Rc::new(actor.get_vnode_bitmap().to_owned()),
+                vnode_bitmap,
             )?;
 
             let dispatcher = self.create_dispatcher(executor, &actor.dispatcher, actor_id)?;
@@ -673,6 +678,46 @@ impl LocalStreamManagerCore {
                         .actor_execution_time
                         .with_label_values(&[&actor_id_str])
                         .set(monitor.cumulative().total_poll_duration.as_secs_f64());
+                    metrics
+                        .actor_fast_poll_duration
+                        .with_label_values(&[&actor_id_str])
+                        .set(monitor.cumulative().total_fast_poll_duration.as_secs_f64());
+                    metrics
+                        .actor_fast_poll_cnt
+                        .with_label_values(&[&actor_id_str])
+                        .set(monitor.cumulative().total_fast_poll_count as i64);
+                    metrics
+                        .actor_slow_poll_duration
+                        .with_label_values(&[&actor_id_str])
+                        .set(monitor.cumulative().total_slow_poll_duration.as_secs_f64());
+                    metrics
+                        .actor_slow_poll_cnt
+                        .with_label_values(&[&actor_id_str])
+                        .set(monitor.cumulative().total_slow_poll_count as i64);
+                    metrics
+                        .actor_poll_duration
+                        .with_label_values(&[&actor_id_str])
+                        .set(monitor.cumulative().total_poll_duration.as_secs_f64());
+                    metrics
+                        .actor_poll_cnt
+                        .with_label_values(&[&actor_id_str])
+                        .set(monitor.cumulative().total_poll_count as i64);
+                    metrics
+                        .actor_idle_duration
+                        .with_label_values(&[&actor_id_str])
+                        .set(monitor.cumulative().total_idle_duration.as_secs_f64());
+                    metrics
+                        .actor_idle_cnt
+                        .with_label_values(&[&actor_id_str])
+                        .set(monitor.cumulative().total_idled_count as i64);
+                    metrics
+                        .actor_scheduled_duration
+                        .with_label_values(&[&actor_id_str])
+                        .set(monitor.cumulative().total_scheduled_duration.as_secs_f64());
+                    metrics
+                        .actor_scheduled_cnt
+                        .with_label_values(&[&actor_id_str])
+                        .set(monitor.cumulative().total_scheduled_count as i64);
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 }
             });
