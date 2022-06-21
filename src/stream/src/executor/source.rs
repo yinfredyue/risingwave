@@ -134,7 +134,7 @@ impl<S: StateStore> SourceExecutor<S> {
 
 struct SourceReader {
     /// The reader for stream source.
-    stream_reader: Arc<Mutex<(Box<SourceStreamReaderImpl>, bool)>>,
+    stream_reader: Arc<Mutex<Box<SourceStreamReaderImpl>>>,
     /// The reader for barrier.
     barrier_receiver: UnboundedReceiver<Barrier>,
     /// Expected barrier latency in ms. If there are no barrier within the expected barrier
@@ -145,7 +145,7 @@ struct SourceReader {
 impl SourceReader {
     #[try_stream(ok = StreamChunkWithState, error = RwError)]
     async fn stream_reader(
-        stream_reader: Arc<Mutex<(Box<SourceStreamReaderImpl>, bool)>>,
+        stream_reader: Arc<Mutex<Box<SourceStreamReaderImpl>>>,
         notifier: Arc<Notify>,
         expected_barrier_latency_ms: u64,
     ) {
@@ -155,10 +155,7 @@ impl SourceReader {
             // We allow data to flow for `expected_barrier_latency_ms` milliseconds.
             while now.elapsed().as_millis() < expected_barrier_latency_ms as u128 {
                 let mut reader_guard = stream_reader.lock().await;
-                if reader_guard.1 {
-                    break;
-                }
-                let chunk_result = reader_guard.0.next().await;
+                let chunk_result = reader_guard.next().await;
                 drop(reader_guard);
                 match chunk_result {
                     Ok(chunk) => yield chunk,
@@ -312,12 +309,11 @@ impl<S: StateStore> SourceExecutor<S> {
         };
 
         // todo: use epoch from msg to restore state from state store
-        let stream_reader = Arc::new(Mutex::new((
+        let stream_reader = Arc::new(Mutex::new(
             self.build_stream_source_reader(recover_state)
                 .await
                 .map_err(StreamExecutorError::source_error)?,
-            false,
-        )));
+        ));
 
         let reader = SourceReader {
             stream_reader: stream_reader.clone(),
@@ -362,17 +358,22 @@ impl<S: StateStore> SourceExecutor<S> {
                                                         )?;
                                                     let mut reader_guard =
                                                         stream_reader.lock().await;
-                                                    reader_guard.0 = reader;
+                                                    *reader_guard = reader;
                                                     self.stream_source_splits = target_state;
                                                 }
                                             }
                                         }
                                     }
                                     Mutation::Pause(_) => {
-                                        stream_reader.lock().await.1 = true;
+                                        let non_source = self
+                                            .build_stream_source_reader(None)
+                                            .await
+                                            .map_err(StreamExecutorError::source_error)?;
+                                        let mut reader_guard = stream_reader.lock().await;
+                                        *reader_guard = non_source;
                                     }
                                     Mutation::Resume(_) => {
-                                        stream_reader.lock().await.1 = false;
+                                        // stream_reader.lock().await.1 = false;
                                     }
                                     _ => {}
                                 }
@@ -888,6 +889,19 @@ mod tests {
             + 0 344",
         );
         assert_eq!(drop_row_id(chunk_3.unwrap()), drop_row_id(chunk_3_truth));
+
+        let _handler = tokio::spawn(async move {
+            loop {
+                let msg = materialize.next().await;
+                println!("{:?}", msg)
+            }
+        });
+
+        let pause_barrier =
+            Barrier::new_test_barrier(curr_epoch + 2).with_mutation(Mutation::Pause(()));
+        barrier_tx.send(pause_barrier).unwrap();
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
         Ok(())
     }
