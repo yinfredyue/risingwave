@@ -244,7 +244,7 @@ where
             node.result = Some(result);
         };
         let index = match self.command_ctx_queue.iter().find_position(|x| {
-            if !matches!(x.command_ctx.command, Command::Plain(_)) {
+            if !matches!(x.command_ctx.command, Command::Plain(_)) && !matches!(x.state, InFlight) {
                 self.is_build_actor = false;
             };
             matches!(x.state, InFlight)
