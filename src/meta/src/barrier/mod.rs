@@ -14,6 +14,7 @@
 
 use std::collections::VecDeque;
 use std::iter::once;
+use std::mem::take;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -23,7 +24,7 @@ use itertools::Itertools;
 use prometheus::HistogramTimer;
 use risingwave_common::catalog::TableId;
 use risingwave_common::error::{ErrorCode, Result, RwError};
-use risingwave_common::util::epoch::INVALID_EPOCH;
+use risingwave_common::util::epoch::{Epoch, INVALID_EPOCH};
 use risingwave_hummock_sdk::{HummockEpoch, LocalSstableInfo};
 use risingwave_pb::common::worker_node::State::Running;
 use risingwave_pb::common::WorkerType;
@@ -43,7 +44,7 @@ use self::command::CommandContext;
 use self::info::BarrierActorInfo;
 use self::notifier::Notifier;
 use crate::barrier::progress::CreateMviewProgressTracker;
-use crate::barrier::BarrierEpochState::{Complete, Fail, InFlight};
+use crate::barrier::BarrierEpochState::{Complete, InFlight};
 use crate::cluster::{ClusterManagerRef, META_NODE_ID};
 use crate::hummock::HummockManagerRef;
 use crate::manager::{CatalogManagerRef, MetaSrvEnv};
@@ -171,7 +172,7 @@ pub struct GlobalBarrierManager<S: MetaStore> {
     in_flight_barrier_nums: usize,
 }
 
-struct ConcurrentControl<S: MetaStore> {
+struct CheckpointControl<S: MetaStore> {
     /// Signal whether to start recovery
     is_recovery: bool,
     /// Signal whether the barrier with building actor is sent
@@ -179,7 +180,8 @@ struct ConcurrentControl<S: MetaStore> {
     /// Save the states and messages of barrier in order
     command_ctx_queue: VecDeque<EpochNode<S>>,
 }
-impl<S> ConcurrentControl<S>
+
+impl<S> CheckpointControl<S>
 where
     S: MetaStore,
 {
@@ -191,6 +193,79 @@ where
         }
     }
 
+    /// Return the nums in queue (the nums of in-flight-barrier , the nums of all-barrier)
+    fn get_barrier_len(&self) -> (usize, usize) {
+        (
+            self.command_ctx_queue
+                .iter()
+                .filter(|x| matches!(x.state, InFlight))
+                .count(),
+            self.command_ctx_queue.len(),
+        )
+    }
+
+    fn finish_recovery(&mut self) {
+        self.is_recovery = false;
+    }
+
+    /// Inject a `command_ctx` in `command_ctx_queue`, and it's state is `InFlight`.
+    fn inject(
+        &mut self,
+        command_ctx: Arc<CommandContext<S>>,
+        notifiers: SmallVec<[Notifier; 1]>,
+        timer: HistogramTimer,
+    ) {
+        self.command_ctx_queue.push_back(EpochNode {
+            timer: Some(timer),
+            result: None,
+            state: InFlight,
+            command_ctx: command_ctx.clone(),
+            notifiers,
+        });
+        if !matches!(command_ctx.command, Command::Plain(_)) {
+            self.is_build_actor = true;
+        }
+    }
+
+    /// Change the state of this `prev_epoch` to `Complete`. Return nodes from the first node to the
+    /// first node with `InFlight` [`Complete`..`InFlight`) and remove them.
+    fn complete(
+        &mut self,
+        prev_epoch: u64,
+        result: Result<Vec<BarrierCompleteResponse>>,
+    ) -> VecDeque<EpochNode<S>> {
+        if let Some(node) = self
+            .command_ctx_queue
+            .iter_mut()
+            .find(|x| x.command_ctx.prev_epoch.0 == prev_epoch)
+        {
+            assert!(matches!(node.state, InFlight));
+            node.state = Complete;
+            node.result = Some(result);
+        };
+        let index = match self.command_ctx_queue.iter().find_position(|x| {
+            if !matches!(x.command_ctx.command, Command::Plain(_)) {
+                self.is_build_actor = false;
+            };
+            matches!(x.state, InFlight)
+        }) {
+            Some((index, _)) => index,
+            None => self.command_ctx_queue.len(),
+        };
+        self.command_ctx_queue.drain(..index).collect()
+    }
+
+    /// Remove all node from queue and return.
+    fn fail(&mut self) -> impl Iterator<Item = EpochNode<S>> + '_ {
+        self.is_recovery = true;
+        self.command_ctx_queue.iter().for_each(|node| {
+            if !matches!(node.command_ctx.command, Command::Plain(_)) {
+                self.is_build_actor = false;
+            }
+        });
+        self.command_ctx_queue.drain(..)
+    }
+
     /// Pause inject barrier until True
     fn can_inject_barrier(&self, in_flight_barrier_nums: usize) -> bool {
         !(self.is_recovery
@@ -198,7 +273,7 @@ where
             || self
                 .command_ctx_queue
                 .iter()
-                .filter(|x| matches!(x.states, InFlight))
+                .filter(|x| matches!(x.state, InFlight))
                 .count()
                 >= in_flight_barrier_nums)
     }
@@ -208,7 +283,7 @@ where
 struct EpochNode<S: MetaStore> {
     timer: Option<HistogramTimer>,
     result: Option<Result<Vec<BarrierCompleteResponse>>>,
-    states: BarrierEpochState,
+    state: BarrierEpochState,
     command_ctx: Arc<CommandContext<S>>,
     notifiers: SmallVec<[Notifier; 1]>,
 }
@@ -217,7 +292,6 @@ struct EpochNode<S: MetaStore> {
 enum BarrierEpochState {
     InFlight,
     Complete,
-    Fail(RwError),
 }
 
 impl<S> GlobalBarrierManager<S>
@@ -293,7 +367,7 @@ where
         min_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut barrier_timer: Option<HistogramTimer> = None;
         let (barrier_complete_tx, mut barrier_complete_rx) = tokio::sync::mpsc::unbounded_channel();
-        let mut concurrent_control = ConcurrentControl::new();
+        let mut checkpoint_control = CheckpointControl::new();
         loop {
             tokio::select! {
                 biased;
@@ -303,25 +377,21 @@ where
                     return;
                 }
                 result = barrier_complete_rx.recv() =>{
-                    let command_ctx_queue = &concurrent_control.command_ctx_queue;
-                        let in_flight_nums = command_ctx_queue
-                        .iter()
-                        .filter(|x| matches!(x.states, InFlight))
-                        .count();
-                        self.metrics.in_flight_barrier_nums.set(in_flight_nums as i64);
-                        self.metrics.all_barrier_nums.set(command_ctx_queue.len() as i64);
+                    let(in_flight_nums,all_nums) = checkpoint_control.get_barrier_len();
+                    self.metrics.in_flight_barrier_nums.set(in_flight_nums as i64);
+                    self.metrics.all_barrier_nums.set(all_nums as i64);
 
                     if let Some((prev_epoch,result)) = result{
-                        self.barrier_complete_and_commit(prev_epoch,result,&mut state,&mut tracker,&mut concurrent_control).await;
+                        self.barrier_complete_and_commit(prev_epoch,result,&mut state,&mut tracker,&mut checkpoint_control).await;
                     }
                     continue;
                 }
                 // there's barrier scheduled.
-                _ = self.scheduled_barriers.wait_one() ,if concurrent_control.can_inject_barrier(self.in_flight_barrier_nums) => {
+                _ = self.scheduled_barriers.wait_one() ,if checkpoint_control.can_inject_barrier(self.in_flight_barrier_nums) => {
 
                 }
                 // Wait for the minimal interval,
-                _ = min_interval.tick() ,if concurrent_control.can_inject_barrier(self.in_flight_barrier_nums) => {
+                _ = min_interval.tick() ,if checkpoint_control.can_inject_barrier(self.in_flight_barrier_nums) => {
 
                 }
             }
@@ -332,9 +402,6 @@ where
             barrier_timer = Some(self.metrics.barrier_send_latency.start_timer());
 
             let (command, notifiers) = self.scheduled_barriers.pop_or_default().await;
-            if !matches!(command, Command::Plain(_)) {
-                concurrent_control.is_build_actor = true;
-            }
             let info = self.resolve_actor_info(command.creating_table_id()).await;
             // When there's no actors exist in the cluster, we don't need to send the barrier. This
             // is an advance optimization. Besides if another barrier comes immediately,
@@ -370,14 +437,8 @@ where
             let mut notifiers = notifiers;
             notifiers.iter_mut().for_each(Notifier::notify_to_send);
             let timer = self.metrics.barrier_latency.start_timer();
-            concurrent_control.command_ctx_queue.push_back(EpochNode {
-                timer: Some(timer),
-                result: None,
-                states: InFlight,
-                command_ctx: command_ctx.clone(),
-                notifiers,
-            });
-            let command_ctx = command_ctx.clone();
+            checkpoint_control.inject(command_ctx.clone(), notifiers, timer);
+
             self.inject_and_send_err(command_ctx, barrier_complete_tx.clone())
                 .await;
         }
@@ -394,11 +455,9 @@ where
             .inject_barrier(command_context_clone, barrier_complete_tx.clone())
             .await;
         if let Err(e) = result {
-            tokio::spawn(async move {
-                barrier_complete_tx
-                    .send((command_context.prev_epoch.0, Err(e)))
-                    .unwrap();
-            });
+            barrier_complete_tx
+                .send((command_context.prev_epoch.0, Err(e)))
+                .unwrap();
         }
     }
 
@@ -500,92 +559,43 @@ where
     }
 
     /// Changes the states is `Complete`, and try commit all epoch that states is `Complete` in
-    /// order. If commit is err, changes the states is `Fail`. Then recovery or panic
+    /// order. If commit is err, all node will be handled.
     async fn barrier_complete_and_commit(
         &self,
         prev_epoch: u64,
         result: Result<Vec<BarrierCompleteResponse>>,
         state: &mut BarrierManagerState,
         tracker: &mut CreateMviewProgressTracker,
-        concurrent_control: &mut ConcurrentControl<S>,
+        checkpoint_control: &mut CheckpointControl<S>,
     ) {
         // change the states is Complete
-        if let Some(node) = concurrent_control
-            .command_ctx_queue
-            .iter_mut()
-            .find(|x| x.command_ctx.prev_epoch.0 == prev_epoch)
-        {
-            assert!(matches!(node.states, InFlight));
-            node.states = Complete;
-            node.result = Some(result);
-        };
-        if matches!(
-            concurrent_control.command_ctx_queue.front().unwrap().states,
-            Complete
-        ) {
-            // If the state of the first node is Complete, try commit all epoch
-            let result = self.try_commit_epoch(concurrent_control, tracker).await;
-            if result.is_err() {
-                concurrent_control.is_recovery = true;
-                concurrent_control
-                    .command_ctx_queue
-                    .front_mut()
-                    .unwrap()
-                    .states = Fail(result.unwrap_err());
+        let mut complete_nodes = checkpoint_control.complete(prev_epoch, result);
+        // try commit complete nodes
+        let (mut index, mut err_msg) = (0, None);
+        for (i, node) in complete_nodes.iter_mut().enumerate() {
+            assert!(matches!(node.state, Complete));
+            if let Err(err) = self.complete_barriers(node, tracker).await {
+                index = i;
+                err_msg = Some(err);
+                break;
             }
         }
-        if !concurrent_control.command_ctx_queue.is_empty()
-            && matches!(
-                concurrent_control.command_ctx_queue.front().unwrap().states,
-                Fail(_)
-            )
-            && concurrent_control
-                .command_ctx_queue
-                .iter()
-                .filter(|x| matches!(x.states, InFlight))
-                .count()
-                == 0
-        {
-            // If the state of the first node is Fail, wait all barrier complete before recovery
+        // Handle the error node and the nodes after it
+        if let Some(err) = err_msg {
             fail_point!("inject_barrier_err_success");
-            let new_epoch = concurrent_control
-                .command_ctx_queue
-                .back()
-                .unwrap()
-                .command_ctx
-                .curr_epoch;
-
-            let err_msg = concurrent_control
-                .command_ctx_queue
-                .front()
-                .unwrap()
-                .result
-                .clone()
-                .unwrap()
-                .err()
-                .unwrap();
-            while let Some(node) = concurrent_control.command_ctx_queue.pop_front() {
-                let err = match node.states {
-                    Fail(err) => err,
-                    Complete => RwError::from(ErrorCode::InternalError(
-                        "err from before epoch".to_string(),
-                    )),
-                    _ => {
-                        panic!(
-                            "fail recovery with pending : epoch{:?}",
-                            node.command_ctx.prev_epoch
-                        );
-                    }
-                };
-                node.timer.unwrap().observe_duration();
+            let fail_nodes = complete_nodes
+                .drain(index..)
+                .chain(checkpoint_control.fail());
+            let mut new_epoch = Epoch::from(INVALID_EPOCH);
+            for node in fail_nodes {
+                if let Some(timer) = node.timer {
+                    timer.observe_duration();
+                }
                 node.notifiers
                     .into_iter()
                     .for_each(|notifier| notifier.notify_collection_failed(err.clone()));
-                if !matches!(node.command_ctx.command, Command::Plain(_)) {
-                    concurrent_control.is_build_actor = false;
-                }
+                new_epoch = node.command_ctx.prev_epoch;
             }
-
             if self.enable_recovery {
                 // If failed, enter recovery mode.
                 let (new_epoch, actors_to_track, create_mview_progress) =
@@ -600,82 +610,65 @@ where
                     .update_inflight_prev_epoch(self.env.meta_store())
                     .await
                     .unwrap();
-                concurrent_control.is_recovery = false;
+                checkpoint_control.finish_recovery();
             } else {
-                panic!("failed to execute barrier: {:?}", err_msg);
+                panic!("failed to execute barrier: {:?}", err);
             }
         }
     }
 
-    /// Try to commit all `Complete` from head to `InFlight` and pop them. If err, this commit will
-    /// be stop and return.
-    async fn try_commit_epoch(
+    /// Try to commit this node's epoch. It err, returns
+    async fn complete_barriers(
         &self,
-        concurrent_control: &mut ConcurrentControl<S>,
+        node: &mut EpochNode<S>,
         tracker: &mut CreateMviewProgressTracker,
     ) -> Result<()> {
-        while let Some(node) = concurrent_control.command_ctx_queue.front_mut() {
-            if !matches!(node.states, Complete) {
-                break;
-            }
-            if node.command_ctx.prev_epoch.0 != INVALID_EPOCH {
-                match &node
-                    .result
-                    .as_mut()
-                    .unwrap_or_else(|| panic!("node result is none"))
-                {
-                    Ok(resps) => {
-                        // We must ensure all epochs are committed in ascending order,
-                        // because the storage engine will
-                        // query from new to old in the order in which the L0 layer files are generated. see https://github.com/singularity-data/risingwave/issues/1251
-                        let synced_ssts: Vec<LocalSstableInfo> = resps
-                            .iter()
-                            .flat_map(|resp| resp.sycned_sstables.clone())
-                            .map(|grouped| {
-                                (
-                                    grouped.compaction_group_id,
-                                    grouped.sst.expect("field not None"),
-                                )
-                            })
-                            .collect_vec();
-                        self.hummock_manager
-                            .commit_epoch(node.command_ctx.prev_epoch.0, synced_ssts)
-                            .await?;
-                    }
-                    Err(err) => {
-                        tracing::warn!(
-                            "Failed to commit epoch {}: {:#?}",
-                            node.command_ctx.prev_epoch.0,
-                            err
-                        );
-                        return Err(err.clone());
-                    }
-                };
-            }
+        if node.command_ctx.prev_epoch.0 != INVALID_EPOCH {
+            match &node
+                .result
+                .as_mut()
+                .unwrap_or_else(|| panic!("node result is none"))
+            {
+                Ok(resps) => {
+                    // We must ensure all epochs are committed in ascending order,
+                    // because the storage engine will
+                    // query from new to old in the order in which the L0 layer files are generated. see https://github.com/singularity-data/risingwave/issues/1251
+                    let synced_ssts: Vec<LocalSstableInfo> = resps
+                        .iter()
+                        .flat_map(|resp| resp.sycned_sstables.clone())
+                        .map(|grouped| {
+                            (
+                                grouped.compaction_group_id,
+                                grouped.sst.expect("field not None"),
+                            )
+                        })
+                        .collect_vec();
+                    self.hummock_manager
+                        .commit_epoch(node.command_ctx.prev_epoch.0, synced_ssts)
+                        .await?;
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        "Failed to commit epoch {}: {:#?}",
+                        node.command_ctx.prev_epoch.0,
+                        err
+                    );
+                }
+            };
+        }
 
-            node.timer.take().unwrap().observe_duration();
-            node.command_ctx.post_collect().await?;
+        node.timer.take().unwrap().observe_duration();
+        let responses = node.result.take().unwrap()?;
+        node.command_ctx.post_collect().await?;
 
-            // this barrier is commit (not err) , So this node need to pop;
-            let node = concurrent_control.command_ctx_queue.pop_front().unwrap();
-            let EpochNode {
-                result,
-                command_ctx,
-                mut notifiers,
-                ..
-            } = node;
-            let responses = result.unwrap().unwrap();
-            // Notify about collected first.
-            notifiers.iter_mut().for_each(Notifier::notify_collected);
-            // Then try to finish the barrier for Create MVs.
-            let actors_to_finish = command_ctx.actors_to_track();
-            tracker.add(command_ctx.curr_epoch, actors_to_finish, notifiers);
-            for progress in responses.into_iter().flat_map(|r| r.create_mview_progress) {
-                tracker.update(progress);
-            }
-            if !matches!(command_ctx.command, Command::Plain(_)) {
-                concurrent_control.is_build_actor = false;
-            }
+        // Notify about collected first.
+        let mut notifiers = take(&mut node.notifiers);
+        notifiers.iter_mut().for_each(Notifier::notify_collected);
+        // Then try to finish the barrier for Create MVs.
+        let actors_to_finish = node.command_ctx.actors_to_track();
+        tracker.add(node.command_ctx.curr_epoch, actors_to_finish, notifiers);
+        for progress in responses.into_iter().flat_map(|r| r.create_mview_progress) {
+            tracker.update(progress);
         }
         Ok(())
     }
