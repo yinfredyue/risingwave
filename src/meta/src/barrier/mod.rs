@@ -173,8 +173,6 @@ pub struct GlobalBarrierManager<S: MetaStore> {
 }
 
 struct CheckpointControl<S: MetaStore> {
-    /// Signal whether to start recovery
-    is_recovery: bool,
     /// Signal whether the barrier with building actor is sent
     is_build_actor: bool,
     /// Save the state and message of barrier in order
@@ -187,7 +185,6 @@ where
 {
     fn new() -> Self {
         Self {
-            is_recovery: false,
             is_build_actor: false,
             command_ctx_queue: VecDeque::default(),
         }
@@ -202,10 +199,6 @@ where
                 .count(),
             self.command_ctx_queue.len(),
         )
-    }
-
-    fn finish_recovery(&mut self) {
-        self.is_recovery = false;
     }
 
     /// Inject a `command_ctx` in `command_ctx_queue`, and it's state is `InFlight`.
@@ -227,13 +220,14 @@ where
         }
     }
 
-    /// Change the state of this `prev_epoch` to `Complete`. Return nodes from the first node to the
-    /// first node with `InFlight` [`Complete`..`InFlight`) and remove them.
+    /// Change the state of this `prev_epoch` to `Complete`. Return continuous nodes
+    /// with `Complete` starting from first node [`Complete`..`InFlight`) and remove them.
     fn complete(
         &mut self,
         prev_epoch: u64,
         result: Result<Vec<BarrierCompleteResponse>>,
     ) -> VecDeque<EpochNode<S>> {
+        // change state to complete, and wait for nodes with the smaller epoch to commit
         if let Some(node) = self
             .command_ctx_queue
             .iter_mut()
@@ -243,11 +237,12 @@ where
             node.state = Complete;
             node.result = Some(result);
         };
+        // Find all continuous nodes with 'Complete' starting from first node
         let index = match self.command_ctx_queue.iter().find_position(|x| {
-            if !matches!(x.command_ctx.command, Command::Plain(_)) && !matches!(x.state, InFlight) {
+            if !matches!(x.command_ctx.command, Command::Plain(_)) && matches!(x.state, Complete) {
                 self.is_build_actor = false;
             };
-            matches!(x.state, InFlight)
+            !matches!(x.state, Complete)
         }) {
             Some((index, _)) => index,
             None => self.command_ctx_queue.len(),
@@ -257,7 +252,6 @@ where
 
     /// Remove all nodes from queue and return them.
     fn fail(&mut self) -> impl Iterator<Item = EpochNode<S>> + '_ {
-        self.is_recovery = true;
         self.command_ctx_queue.iter().for_each(|node| {
             if !matches!(node.command_ctx.command, Command::Plain(_)) {
                 self.is_build_actor = false;
@@ -268,8 +262,7 @@ where
 
     /// Pause inject barrier until True
     fn can_inject_barrier(&self, in_flight_barrier_nums: usize) -> bool {
-        !(self.is_recovery
-            || self.is_build_actor
+        !(self.is_build_actor
             || self
                 .command_ctx_queue
                 .iter()
@@ -376,7 +369,7 @@ where
                     tracing::info!("Barrier manager inject is shutting down");
                     return;
                 }
-                result = barrier_complete_rx.recv() =>{
+                result = barrier_complete_rx.recv() => {
                     let(in_flight_nums,all_nums) = checkpoint_control.get_barrier_len();
                     self.metrics.in_flight_barrier_nums.set(in_flight_nums as i64);
                     self.metrics.all_barrier_nums.set(all_nums as i64);
@@ -387,13 +380,9 @@ where
                     continue;
                 }
                 // there's barrier scheduled.
-                _ = self.scheduled_barriers.wait_one() ,if checkpoint_control.can_inject_barrier(self.in_flight_barrier_nums) => {
-
-                }
+                _ = self.scheduled_barriers.wait_one(), if checkpoint_control.can_inject_barrier(self.in_flight_barrier_nums) => {}
                 // Wait for the minimal interval,
-                _ = min_interval.tick() ,if checkpoint_control.can_inject_barrier(self.in_flight_barrier_nums) => {
-
-                }
+                _ = min_interval.tick(), if checkpoint_control.can_inject_barrier(self.in_flight_barrier_nums) => {}
             }
 
             if let Some(barrier_timer) = barrier_timer {
@@ -610,7 +599,6 @@ where
                     .update_inflight_prev_epoch(self.env.meta_store())
                     .await
                     .unwrap();
-                checkpoint_control.finish_recovery();
             } else {
                 panic!("failed to execute barrier: {:?}", err);
             }
