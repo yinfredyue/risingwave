@@ -335,7 +335,7 @@ impl<K: HashKey, S: StateStore> JoinHashMap<K, S> {
     }
 
     /// Insert a key
-    pub async fn insert_empty_cached(
+    pub fn insert_empty_cached(
         &mut self,
         join_key: &K,
         pk: Row,
