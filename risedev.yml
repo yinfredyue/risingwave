@@ -212,7 +212,7 @@ risedev:
     - use: compactor
       id: compactor-0
       listen-address: "0.0.0.0"
-      address: ${dns-host:rw-source-0}
+      address: ${dns-host:rw-compactor-0}
 
     - use: redpanda
       address: ${dns-host:rw-source-0}
