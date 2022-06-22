@@ -15,6 +15,7 @@ use std::fmt::Debug;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use itertools::Itertools;
 use paste::paste;
 use risingwave_common::catalog::{CatalogVersion, TableId};
 use risingwave_common::util::addr::HostAddr;
@@ -25,6 +26,7 @@ use risingwave_pb::catalog::{
 use risingwave_pb::common::WorkerType;
 use risingwave_pb::ddl_service::ddl_service_client::DdlServiceClient;
 use risingwave_pb::ddl_service::*;
+use risingwave_pb::hummock::commit_epoch_request::GroupedSstableInfo;
 use risingwave_pb::hummock::hummock_manager_service_client::HummockManagerServiceClient;
 use risingwave_pb::hummock::*;
 use risingwave_pb::meta::cluster_service_client::ClusterServiceClient;
@@ -390,10 +392,21 @@ impl HummockMetaClient for MetaClient {
 
     async fn commit_epoch(
         &self,
-        _epoch: HummockEpoch,
-        _sstables: Vec<LocalSstableInfo>,
+        epoch: HummockEpoch,
+        sstables: Vec<LocalSstableInfo>,
     ) -> Result<()> {
-        panic!("Only meta service can commit_epoch in production.")
+        let req = CommitEpochRequest {
+            epoch,
+            sycned_sstables: sstables
+                .into_iter()
+                .map(|(compaction_group_id, sst)| GroupedSstableInfo {
+                    compaction_group_id,
+                    sst: Some(sst),
+                })
+                .collect_vec(),
+        };
+        self.inner.commit_epoch(req).await?;
+        Ok(())
     }
 
     async fn subscribe_compact_tasks(&self) -> Result<Streaming<SubscribeCompactTasksResponse>> {
@@ -552,6 +565,7 @@ macro_rules! for_all_meta_rpc {
             ,{ hummock_client, get_compaction_groups, GetCompactionGroupsRequest, GetCompactionGroupsResponse }
             ,{ hummock_client, trigger_manual_compaction, TriggerManualCompactionRequest, TriggerManualCompactionResponse }
             ,{ hummock_client, list_sstable_id_infos, ListSstableIdInfosRequest, ListSstableIdInfosResponse }
+            ,{ hummock_client, commit_epoch, CommitEpochRequest, CommitEpochResponse }
             ,{ user_client, create_user, CreateUserRequest, CreateUserResponse }
             ,{ user_client, drop_user, DropUserRequest, DropUserResponse }
             ,{ user_client, grant_privilege, GrantPrivilegeRequest, GrantPrivilegeResponse }

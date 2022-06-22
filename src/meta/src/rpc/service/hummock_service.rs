@@ -15,6 +15,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use itertools::Itertools;
 use risingwave_common::catalog::TableId;
 use risingwave_common::error::{tonic_err, ErrorCode};
 use risingwave_pb::hummock::hummock_manager_service_server::HummockManagerService;
@@ -307,6 +308,24 @@ where
                 status: None,
                 sstable_id_infos,
             })),
+            Err(e) => Err(tonic_err(e)),
+        }
+    }
+
+    async fn commit_epoch(
+        &self,
+        request: Request<CommitEpochRequest>,
+    ) -> Result<Response<CommitEpochResponse>, Status> {
+        let request = request.into_inner();
+        let epoch = request.epoch;
+        let ssts = request
+            .sycned_sstables
+            .into_iter()
+            .map(|sst| (sst.compaction_group_id, sst.sst.unwrap()))
+            .collect_vec();
+        let result = self.hummock_manager.commit_epoch(epoch, ssts).await;
+        match result {
+            Ok(_) => Ok(Response::new(CommitEpochResponse { status: None })),
             Err(e) => Err(tonic_err(e)),
         }
     }

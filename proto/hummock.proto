@@ -249,6 +249,21 @@ message ListSstableIdInfosResponse {
   repeated SstableIdInfo sstable_id_infos = 2;
 }
 
+// for test only
+message CommitEpochRequest {
+  message GroupedSstableInfo {
+    uint64 compaction_group_id = 1;
+    hummock.SstableInfo sst = 2;
+  }
+  uint64 epoch = 1;
+  repeated GroupedSstableInfo sycned_sstables = 2;
+}
+
+// for test only
+message CommitEpochResponse {
+  common.Status status = 1;
+}
+
 service HummockManagerService {
   rpc PinVersion(PinVersionRequest) returns (PinVersionResponse);
   rpc UnpinVersion(UnpinVersionRequest) returns (UnpinVersionResponse);
@@ -262,6 +277,7 @@ service HummockManagerService {
   rpc GetCompactionGroups(GetCompactionGroupsRequest) returns (GetCompactionGroupsResponse);
   rpc TriggerManualCompaction(TriggerManualCompactionRequest) returns (TriggerManualCompactionResponse);
   rpc ListSstableIdInfos(ListSstableIdInfosRequest) returns (ListSstableIdInfosResponse);
+  rpc CommitEpoch(CommitEpochRequest) returns (CommitEpochResponse);
 }
 
 service CompactorService {}

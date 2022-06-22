@@ -95,10 +95,10 @@ impl HummockMetaClient for MonitoredHummockMetaClient {
 
     async fn commit_epoch(
         &self,
-        _epoch: HummockEpoch,
-        _sstables: Vec<LocalSstableInfo>,
+        epoch: HummockEpoch,
+        sstables: Vec<LocalSstableInfo>,
     ) -> Result<()> {
-        panic!("Only meta service can commit_epoch in production.")
+        self.meta_client.commit_epoch(epoch, sstables).await
     }
 
     async fn subscribe_compact_tasks(&self) -> Result<Streaming<SubscribeCompactTasksResponse>> {

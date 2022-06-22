@@ -4409,6 +4409,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "futures",
+ "itertools",
  "log",
  "madsim",
  "madsim-tokio",
