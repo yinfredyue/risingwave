@@ -34,7 +34,7 @@ use super::{BoxedExecutor, BoxedMessageStream, Executor, Message, PkIndices, PkI
 use crate::common::StreamChunkBuilder;
 use crate::executor::PROCESSING_WINDOW_SIZE;
 
-pub const JOIN_CACHE_SIZE: usize = 1 << 16;
+pub const JOIN_CACHE_SIZE: usize = 1 << 24;
 
 /// The `JoinType` and `SideType` are to mimic a enum, because currently
 /// enum is not supported in const generic.
@@ -708,14 +708,16 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                             let pk = row.row_by_indices(&side_match.pk_indices);
                             side_match.ht.delete(key, pk, row)?;
                         } else {
-                            side_update
-                                .ht
-                                .insert(key, pk, JoinRow::new(value, degree))?;
+                            side_update.ht.insert_empty_cached(
+                                key,
+                                pk,
+                                JoinRow::new(value, degree),
+                            )?;
                         }
                     } else {
                         side_update
                             .ht
-                            .insert(key, pk, JoinRow::new(value, degree))?;
+                            .insert_empty_cached(key, pk, JoinRow::new(value, degree))?;
                     }
                 }
                 Op::Delete | Op::UpdateDelete => {

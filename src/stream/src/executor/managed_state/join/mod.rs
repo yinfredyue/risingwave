@@ -334,6 +334,23 @@ impl<K: HashKey, S: StateStore> JoinHashMap<K, S> {
         Ok(())
     }
 
+    /// Insert a key
+    pub async fn insert_empty_cached(
+        &mut self,
+        join_key: &K,
+        pk: Row,
+        value: JoinRow,
+    ) -> RwResult<()> {
+        let mut cached = BTreeMap::new();
+        cached.insert(pk, value);
+        let state = JoinEntryState::with_cached(cached);
+        let state = self.inner.put(join_key.clone(), state);
+
+        // If no cache maintained, only update the flush buffer.
+        // self.state_table.insert(value.into_row())?;
+        Ok(())
+    }
+
     /// Delete a key
     pub fn delete(&mut self, join_key: &K, pk: Row, value: JoinRow) -> RwResult<()> {
         if let Some(entry) = self.inner.get_mut(join_key) {
@@ -341,7 +358,7 @@ impl<K: HashKey, S: StateStore> JoinHashMap<K, S> {
         }
 
         // If no cache maintained, only update the flush buffer.
-        self.state_table.delete(value.into_row())?;
+        // self.state_table.delete(value.into_row())?;
         Ok(())
     }
 
