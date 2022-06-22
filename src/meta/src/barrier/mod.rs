@@ -177,7 +177,7 @@ struct CheckpointControl<S: MetaStore> {
     is_recovery: bool,
     /// Signal whether the barrier with building actor is sent
     is_build_actor: bool,
-    /// Save the states and messages of barrier in order
+    /// Save the state and message of barrier in order
     command_ctx_queue: VecDeque<EpochNode<S>>,
 }
 
@@ -193,7 +193,7 @@ where
         }
     }
 
-    /// Return the nums in queue (the nums of in-flight-barrier , the nums of all-barrier)
+    /// Return the nums of barrier (the nums of in-flight-barrier , the nums of all-barrier)
     fn get_barrier_len(&self) -> (usize, usize) {
         (
             self.command_ctx_queue
@@ -255,7 +255,7 @@ where
         self.command_ctx_queue.drain(..index).collect()
     }
 
-    /// Remove all node from queue and return.
+    /// Remove all nodes from queue and return them.
     fn fail(&mut self) -> impl Iterator<Item = EpochNode<S>> + '_ {
         self.is_recovery = true;
         self.command_ctx_queue.iter().for_each(|node| {
@@ -279,7 +279,7 @@ where
     }
 }
 
-/// The states and messages of this barrier
+/// The state and message of this barrier
 struct EpochNode<S: MetaStore> {
     timer: Option<HistogramTimer>,
     result: Option<Result<Vec<BarrierCompleteResponse>>>,
@@ -287,7 +287,7 @@ struct EpochNode<S: MetaStore> {
     command_ctx: Arc<CommandContext<S>>,
     notifiers: SmallVec<[Notifier; 1]>,
 }
-/// The states of barrier
+/// The state of barrier
 #[derive(PartialEq)]
 enum BarrierEpochState {
     InFlight,
@@ -558,8 +558,8 @@ where
         Ok(())
     }
 
-    /// Changes the states is `Complete`, and try commit all epoch that states is `Complete` in
-    /// order. If commit is err, all node will be handled.
+    /// Changes the state is `Complete`, and try commit all epoch that state is `Complete` in
+    /// order. If commit is err, all nodes will be handled.
     async fn barrier_complete_and_commit(
         &self,
         prev_epoch: u64,
@@ -568,7 +568,7 @@ where
         tracker: &mut CreateMviewProgressTracker,
         checkpoint_control: &mut CheckpointControl<S>,
     ) {
-        // change the states is Complete
+        // change the state is Complete
         let mut complete_nodes = checkpoint_control.complete(prev_epoch, result);
         // try commit complete nodes
         let (mut index, mut err_msg) = (0, None);
@@ -617,7 +617,7 @@ where
         }
     }
 
-    /// Try to commit this node's epoch. It err, returns
+    /// Try to commit this node. It err, returns
     async fn complete_barriers(
         &self,
         node: &mut EpochNode<S>,
