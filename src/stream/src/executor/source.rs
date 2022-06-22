@@ -150,29 +150,29 @@ impl SourceReader {
         expected_barrier_latency_ms: u64,
     ) {
         'outer: loop {
-            let now = Instant::now();
+            // let now = Instant::now();
 
-            // We allow data to flow for `expected_barrier_latency_ms` milliseconds.
-            while now.elapsed().as_millis() < expected_barrier_latency_ms as u128 {
-                let mut reader_guard = stream_reader.lock().await;
-                let chunk_result = reader_guard.next().await;
-                drop(reader_guard);
-                match chunk_result {
-                    Ok(chunk) => yield chunk,
-                    Err(e) => {
-                        error!("hang up stream reader due to polling error: {}", e);
-                        break 'outer;
-                    }
-                };
-            }
+            // // We allow data to flow for `expected_barrier_latency_ms` milliseconds.
+            // while now.elapsed().as_millis() < expected_barrier_latency_ms as u128 {
+            let mut reader_guard = stream_reader.lock().await;
+            let chunk_result = reader_guard.next().await;
+            drop(reader_guard);
+            match chunk_result {
+                Ok(chunk) => yield chunk,
+                Err(e) => {
+                    error!("hang up stream reader due to polling error: {}", e);
+                    break 'outer;
+                }
+            };
+            // }
 
-            // Here we consider two cases:
-            //
-            // 1. Barrier arrived before waiting for notified. In this case, this await will
-            // complete instantly, and we will continue to produce new data.
-            // 2. Barrier arrived after waiting for notified. Then source will be stalled.
+            // // Here we consider two cases:
+            // //
+            // // 1. Barrier arrived before waiting for notified. In this case, this await will
+            // // complete instantly, and we will continue to produce new data.
+            // // 2. Barrier arrived after waiting for notified. Then source will be stalled.
 
-            notifier.notified().await;
+            // notifier.notified().await;
         }
 
         futures::future::pending().await
