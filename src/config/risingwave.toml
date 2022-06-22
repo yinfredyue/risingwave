@@ -5,7 +5,7 @@ heartbeat_interval_ms = 1000
 
 [streaming]
 checkpoint_interval_ms = 250
-in_flight_barrier_nums = 10
+in_flight_barrier_nums = 128
 
 [storage]
 shared_buffer_capacity_mb = 4096
