@@ -4156,6 +4156,7 @@ dependencies = [
  "clap 3.1.18",
  "futures",
  "madsim-tokio",
+ "rand 0.8.5",
  "risingwave_common",
  "risingwave_frontend",
  "risingwave_hummock_sdk",

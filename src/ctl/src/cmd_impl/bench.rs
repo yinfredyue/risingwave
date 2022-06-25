@@ -20,6 +20,7 @@ use anyhow::Result;
 use clap::Subcommand;
 use futures::future::try_join_all;
 use futures::{pin_mut, Future, StreamExt};
+use risingwave_common::array::Row;
 use size::Size;
 use tokio::task::JoinHandle;
 
@@ -35,6 +36,9 @@ pub enum BenchCommands {
         /// number of futures doing scan
         #[clap(long, default_value_t = 1)]
         threads: usize,
+        /// range that can be accessed for the first column
+        #[clap(long, default_value_t = 600000)]
+        id_range: usize,
     },
 }
 
@@ -76,7 +80,11 @@ pub async fn do_bench(cmd: BenchCommands) -> Result<()> {
     let next_cnt = Arc::new(AtomicU64::new(0));
     let iter_cnt = Arc::new(AtomicU64::new(0));
     match cmd {
-        BenchCommands::Scan { mv_name, threads } => {
+        BenchCommands::Scan {
+            mv_name,
+            threads,
+            id_range,
+        } => {
             let table = get_table_catalog(meta.clone(), mv_name).await?;
             let mut handlers = vec![];
             for i in 0..threads {
@@ -88,7 +96,12 @@ pub async fn do_bench(cmd: BenchCommands) -> Result<()> {
                     tracing::info!(thread = i, "starting scan");
                     let state_table = make_state_table(hummock, &table);
                     loop {
-                        let stream = state_table.iter(u64::MAX).await?;
+                        use rand::Rng;
+                        let id = risingwave_common::types::ScalarImpl::Int64(
+                            rand::thread_rng().gen_range(0..id_range) as i64,
+                        );
+                        let prefix = Row(vec![Some(id)]);
+                        let stream = state_table.iter_with_pk_prefix(&prefix, u64::MAX).await?;
                         pin_mut!(stream);
                         iter_cnt.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         while let Some(item) = stream.next().await {
