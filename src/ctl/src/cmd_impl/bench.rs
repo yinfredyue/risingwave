@@ -127,7 +127,6 @@ pub async fn do_bench(cmd: BenchCommands) -> Result<()> {
                         collected_metrics.report(last_collected_metrics);
                     }
                     last_collected_metrics = Some(collected_metrics);
-                    tracing::info!("starting report metrics");
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
             });

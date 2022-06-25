@@ -160,6 +160,7 @@ impl LocalVersionManager {
     /// You shouldn't unpin even the method returns false, as it is possible `hummock_version` is
     /// being referenced by some readers.
     pub fn try_update_pinned_version(&self, newly_pinned_version: HummockVersion) -> bool {
+        println!("updating pinned version: {}", newly_pinned_version.id);
         let new_version_id = newly_pinned_version.id;
         for levels in newly_pinned_version.levels.values() {
             if validate_table_key_range(&levels.levels).is_err() {
