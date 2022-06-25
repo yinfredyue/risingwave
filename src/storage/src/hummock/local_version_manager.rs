@@ -450,7 +450,7 @@ impl LocalVersionManager {
         local_version_manager_weak: Weak<LocalVersionManager>,
         hummock_meta_client: Arc<dyn HummockMetaClient>,
     ) {
-        let min_execute_interval = Duration::from_millis(100);
+        let min_execute_interval = Duration::from_millis(1000);
         let mut min_execute_interval_tick = tokio::time::interval(min_execute_interval);
         min_execute_interval_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
