@@ -300,14 +300,16 @@ def section_object_storage(panels):
                 "sum(rate(object_store_operation_latency_count[1m])) by (le, type, job, instance)", "{{type}} - {{job}} @ {{instance}}"
             ),
         ]),
-        panels.timeseries_bytes("Op Size", [
-            panels.target(
-                "histogram_quantile(0.9, sum(rate(object_store_operation_bytes_bucket[1m])) by (le, type))", "{{type}}  p90"
-            ),
-            panels.target(
-                "histogram_quantile(0.80, sum(rate(object_store_operation_bytes_bucket[1m])) by (le, type))", "{{type}} p80"
-            ),
-        ]),
+        panels.timeseries_bytes(
+            "Op Size",
+            quantile(lambda quantile, legend: panels.target(
+                f"histogram_quantile({quantile}, sum(rate(object_store_operation_bytes_bucket[15s])) by (le, type, job))", f"{{{{type}}}} p{legend}  - {{{{job}}}}"
+            ), [50, 90, 99, 999]) + [
+                panels.target(
+                    "sum(rate(object_store_operation_bytes_sum[15s])) by (type,job) / sum(rate(object_store_operation_bytes_count[15s])) by (type,job)", "{{ type }} avg  - {{job}}"
+                ),
+            ]
+        ),
         panels.timeseries_dollar("Estimated S3 Cost (Realtime)", [
             panels.target(
                 "sum(object_store_read_bytes) * 0.01 / 1000 / 1000 / 1000", "(Cross Region) Data Transfer Cost",
