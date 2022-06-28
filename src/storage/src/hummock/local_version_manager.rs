@@ -19,7 +19,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use bytes::Bytes;
-use futures::future::join_all;
+use futures::future::{join_all, try_join_all};
 use itertools::Itertools;
 use parking_lot::RwLock;
 use risingwave_common::config::StorageConfig;
@@ -43,7 +43,7 @@ use crate::hummock::conflict_detector::ConflictDetector;
 use crate::hummock::shared_buffer::shared_buffer_batch::SharedBufferItem;
 use crate::hummock::shared_buffer::shared_buffer_uploader::UploadTaskPayload;
 use crate::hummock::shared_buffer::UploadTaskType::{FlushWriteBatch, SyncEpoch};
-use crate::hummock::shared_buffer::{OrderIndex, SharedBufferEvent, WriteRequest};
+use crate::hummock::shared_buffer::{BlockedWriteRequest, OrderIndex, SharedBufferEvent};
 use crate::hummock::utils::validate_table_key_range;
 use crate::hummock::{
     HummockEpoch, HummockError, HummockResult, HummockVersionId, INVALID_VERSION_ID,
@@ -301,7 +301,7 @@ impl LocalVersionManager {
         } else {
             let (tx, rx) = oneshot::channel();
             self.buffer_tracker
-                .send_event(SharedBufferEvent::WriteRequest(WriteRequest {
+                .send_event(SharedBufferEvent::WriteRequest(BlockedWriteRequest {
                     batch,
                     epoch,
                     is_remote_batch,
@@ -337,9 +337,6 @@ impl LocalVersionManager {
             // The batch will be synced to S3 asynchronously if it is a local batch
             shared_buffer.write().write_batch(batch);
         }
-
-        // Notify the buffer tracker after the batch has been added to shared buffer.
-        self.buffer_tracker.send_event(SharedBufferEvent::MayFlush);
     }
 
     /// Issue a concurrent upload task to flush some local shared buffer batch to object store.
@@ -652,74 +649,98 @@ impl LocalVersionManager {
         }
     }
 
+    /// Try issue a task to flush local shared buffer to object store.
+    ///
+    /// A flush task will only be triggered when the unflushed buffer size exceeds the flush
+    /// threshold.
+    ///
+    /// This method should only be called in the buffer tracker worker.
+    fn try_flush_shared_buffer(
+        self: Arc<Self>,
+        syncing_epoch: &HashSet<HummockEpoch>,
+        epoch_join_handle: &mut HashMap<HummockEpoch, Vec<JoinHandle<()>>>,
+    ) {
+        // Keep issuing new flush task until flush is not needed or we can issue
+        // no more task
+        while self.buffer_tracker.need_more_flush() {
+            if let Some((epoch, join_handle)) = self.clone().flush_shared_buffer(syncing_epoch) {
+                epoch_join_handle
+                    .entry(epoch)
+                    .or_insert_with(Vec::new)
+                    .push(join_handle);
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Grant a blocked shared buffer write request.
+    ///
+    /// A blocked write request is generated from the write into shared buffer when shared buffer
+    /// size exceeds the block write threshold. It can be granted when shared buffer size drops
+    /// below the block write threashold.
+    ///
+    /// This method should only be called in the buffer tracker worker.
+    fn grant_write_request(&self, request: BlockedWriteRequest) {
+        let BlockedWriteRequest {
+            batch,
+            epoch,
+            is_remote_batch,
+            grant_sender: sender,
+        } = request;
+        let size = batch.size();
+        self.write_shared_buffer_inner(epoch, batch, is_remote_batch);
+        self.buffer_tracker
+            .global_buffer_size
+            .fetch_add(size, Relaxed);
+        let _ = sender.send(()).inspect_err(|err| {
+            error!("unable to send write request response: {:?}", err);
+        });
+    }
+
     pub async fn start_buffer_tracker_worker(
         local_version_manager: Arc<LocalVersionManager>,
         mut buffer_size_change_receiver: mpsc::UnboundedReceiver<SharedBufferEvent>,
     ) {
         let mut syncing_epoch = HashSet::new();
         let mut epoch_join_handle = HashMap::new();
-        let try_flush_shared_buffer =
-            |syncing_epoch: &HashSet<HummockEpoch>,
-             epoch_join_handle: &mut HashMap<HummockEpoch, Vec<JoinHandle<()>>>| {
-                // Keep issuing new flush task until flush is not needed or we can issue
-                // no more task
-                while local_version_manager.buffer_tracker.need_more_flush() {
-                    if let Some((epoch, join_handle)) = local_version_manager
-                        .clone()
-                        .flush_shared_buffer(syncing_epoch)
-                    {
-                        epoch_join_handle
-                            .entry(epoch)
-                            .or_insert_with(Vec::new)
-                            .push(join_handle);
-                    } else {
-                        break;
-                    }
-                }
-            };
-
-        let grant_write_request = |request| {
-            let WriteRequest {
-                batch,
-                epoch,
-                is_remote_batch,
-                grant_sender: sender,
-            } = request;
-            let size = batch.size();
-            local_version_manager.write_shared_buffer_inner(epoch, batch, is_remote_batch);
-            local_version_manager
-                .buffer_tracker
-                .global_buffer_size
-                .fetch_add(size, Relaxed);
-            let _ = sender.send(()).inspect_err(|err| {
-                error!("unable to send write request response: {:?}", err);
-            });
-        };
-
         let mut pending_write_requests: VecDeque<_> = VecDeque::new();
 
         // While the current Arc is not the only strong reference to the local version manager
         while Arc::strong_count(&local_version_manager) > 1 {
             if let Some(event) = buffer_size_change_receiver.recv().await {
                 match event {
-                    SharedBufferEvent::WriteRequest(request) => {
+                    // Handle a blocked_write_request, which is generated from the write into shared
+                    // buffer when shared buffer size exceeds the block_write_threshold:
+                    // - The write can be granted and put into shared buffer when shared buffer size
+                    //   drops below block_write_threshold.
+                    // - Otherwise, the write cannot be granted and will be put into a pending
+                    //   queue.
+                    SharedBufferEvent::WriteRequest(blocked_write_request) => {
                         if local_version_manager.buffer_tracker.can_write() {
-                            grant_write_request(request);
-                            try_flush_shared_buffer(&syncing_epoch, &mut epoch_join_handle);
+                            local_version_manager.grant_write_request(blocked_write_request);
+                            local_version_manager
+                                .try_flush_shared_buffer(&syncing_epoch, &mut epoch_join_handle);
                         } else {
                             info!(
                                 "write request is blocked: epoch {}, size: {}",
-                                request.epoch,
-                                request.batch.size()
+                                blocked_write_request.epoch,
+                                blocked_write_request.batch.size()
                             );
-                            pending_write_requests.push_back(request);
+                            pending_write_requests.push_back(blocked_write_request);
                         }
                     }
+
+                    // Try flushing local shared buffer to object store. This event is generated
+                    // when:
+                    // - A batch has been successfully added to shared buffer.
+                    // - An upload task succeeds/fails.
                     SharedBufferEvent::MayFlush => {
-                        // Only check and flush shared buffer after batch has been added to shared
-                        // buffer.
-                        try_flush_shared_buffer(&syncing_epoch, &mut epoch_join_handle);
+                        local_version_manager
+                            .try_flush_shared_buffer(&syncing_epoch, &mut epoch_join_handle);
                     }
+
+                    // Try grant pending writes when shared buffer releases some memory.
                     SharedBufferEvent::BufferRelease(size) => {
                         local_version_manager
                             .buffer_tracker
@@ -735,13 +756,16 @@ impl LocalVersionManager {
                                 request.epoch,
                                 request.batch.size()
                             );
-                            grant_write_request(request);
+                            local_version_manager.grant_write_request(request);
                             has_granted = true;
                         }
                         if has_granted {
-                            try_flush_shared_buffer(&syncing_epoch, &mut epoch_join_handle);
+                            local_version_manager
+                                .try_flush_shared_buffer(&syncing_epoch, &mut epoch_join_handle);
                         }
                     }
+
+                    // Sync data 
                     SharedBufferEvent::SyncEpoch(epoch, join_handle_sender) => {
                         assert!(
                             syncing_epoch.insert(epoch),
@@ -764,6 +788,22 @@ impl LocalVersionManager {
                             epoch
                         );
                     }
+                    SharedBufferEvent::Clear(notifier) => {
+                        // Cancel and wait for all ongoing flush.
+                        for (_, handle) in epoch_join_handle {
+                            handle.abort();
+                        }
+                        try_join_all(epoch_join_handle).await;
+
+                        // Clear pending write requests.
+                        pending_write_requests.clear();
+
+                        // Clear shared buffer
+                        local_version_manager.local_version.clear_shared_buffer();
+
+                        // Notify completion of the Clear event.
+                        notifier.send(()).unwrap();
+                    }
                 };
             } else {
                 break;
@@ -772,7 +812,9 @@ impl LocalVersionManager {
     }
 
     pub fn clear_shared_buffer(&self) {
-        self.local_version.write().clear_shared_buffer();
+        let (tx, rx) = oneshot::channel();
+        self.buffer_tracker.send_event(SharedBufferEvent::Clear(tx));
+        rx.await;
     }
 }
 
