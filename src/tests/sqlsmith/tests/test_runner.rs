@@ -69,10 +69,11 @@ mod tests {
         let tables = create_tables(session.clone()).await;
         let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
 
-        for _ in 0..512 {
+        for _ in 0..10 {
             let sql = sql_gen(&mut rng, tables.clone());
 
             let sql_copy = sql.clone();
+            log::info!("gen sql: {}", sql);
             panic::set_hook(Box::new(move |e| {
                 println!("Panic on SQL:\n{}\nReason:\n{}", sql_copy.clone(), e);
             }));
@@ -118,35 +119,35 @@ mod tests {
     }
 
     generate_sqlsmith_test! { 0 }
-    generate_sqlsmith_test! { 1 }
-    generate_sqlsmith_test! { 2 }
-    generate_sqlsmith_test! { 3 }
-    generate_sqlsmith_test! { 4 }
-    generate_sqlsmith_test! { 5 }
-    generate_sqlsmith_test! { 6 }
-    generate_sqlsmith_test! { 7 }
-    generate_sqlsmith_test! { 8 }
-    generate_sqlsmith_test! { 9 }
-    generate_sqlsmith_test! { 10 }
-    generate_sqlsmith_test! { 11 }
-    generate_sqlsmith_test! { 12 }
-    generate_sqlsmith_test! { 13 }
-    generate_sqlsmith_test! { 14 }
-    generate_sqlsmith_test! { 15 }
-    generate_sqlsmith_test! { 16 }
-    generate_sqlsmith_test! { 17 }
-    generate_sqlsmith_test! { 18 }
-    generate_sqlsmith_test! { 19 }
-    generate_sqlsmith_test! { 20 }
-    generate_sqlsmith_test! { 21 }
-    generate_sqlsmith_test! { 22 }
-    generate_sqlsmith_test! { 23 }
-    generate_sqlsmith_test! { 24 }
-    generate_sqlsmith_test! { 25 }
-    generate_sqlsmith_test! { 26 }
-    generate_sqlsmith_test! { 27 }
-    generate_sqlsmith_test! { 28 }
-    generate_sqlsmith_test! { 29 }
-    generate_sqlsmith_test! { 30 }
-    generate_sqlsmith_test! { 31 }
+    // generate_sqlsmith_test! { 1 }
+    // generate_sqlsmith_test! { 2 }
+    // generate_sqlsmith_test! { 3 }
+    // generate_sqlsmith_test! { 4 }
+    // generate_sqlsmith_test! { 5 }
+    // generate_sqlsmith_test! { 6 }
+    // generate_sqlsmith_test! { 7 }
+    // generate_sqlsmith_test! { 8 }
+    // generate_sqlsmith_test! { 9 }
+    // generate_sqlsmith_test! { 10 }
+    // generate_sqlsmith_test! { 11 }
+    // generate_sqlsmith_test! { 12 }
+    // generate_sqlsmith_test! { 13 }
+    // generate_sqlsmith_test! { 14 }
+    // generate_sqlsmith_test! { 15 }
+    // generate_sqlsmith_test! { 16 }
+    // generate_sqlsmith_test! { 17 }
+    // generate_sqlsmith_test! { 18 }
+    // generate_sqlsmith_test! { 19 }
+    // generate_sqlsmith_test! { 20 }
+    // generate_sqlsmith_test! { 21 }
+    // generate_sqlsmith_test! { 22 }
+    // generate_sqlsmith_test! { 23 }
+    // generate_sqlsmith_test! { 24 }
+    // generate_sqlsmith_test! { 25 }
+    // generate_sqlsmith_test! { 26 }
+    // generate_sqlsmith_test! { 27 }
+    // generate_sqlsmith_test! { 28 }
+    // generate_sqlsmith_test! { 29 }
+    // generate_sqlsmith_test! { 30 }
+    // generate_sqlsmith_test! { 31 }
 }

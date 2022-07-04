@@ -100,12 +100,14 @@ impl<'a, R: Rng> SqlGenerator<'a, R> {
     }
 
     fn gen_order_by(&mut self) -> Vec<OrderByExpr> {
+        log::info!("relatrions len: {}", self.bound_relations.len());
         if self.bound_relations.is_empty() {
             return vec![];
         }
         let mut order_by = vec![];
         while self.flip_coin() {
             let table = self.bound_relations.choose(&mut self.rng).unwrap();
+            log::info!("relatrions table: {}", table.name);
             let column = table.columns.choose(&mut self.rng).unwrap();
             order_by.push(OrderByExpr {
                 expr: Expr::Identifier(Ident::new(format!("{}.{}", table.name, column.name))),
@@ -150,7 +152,7 @@ impl<'a, R: Rng> SqlGenerator<'a, R> {
     }
 
     fn gen_select_list(&mut self) -> (Vec<SelectItem>, Vec<Column>) {
-        let items_num = self.rng.gen_range(1..=4);
+        let items_num = self.rng.gen_range(1..=1);
         (0..items_num).map(|i| self.gen_select_item(i)).unzip()
     }
 
@@ -174,9 +176,11 @@ impl<'a, R: Rng> SqlGenerator<'a, R> {
         .choose(&mut self.rng)
         .unwrap();
         let alias = format!("col_{}", i);
+        let expr1 = self.gen_expr(ret_type);
+        log::info!("gen expr: {}", expr1);
         (
             SelectItem::ExprWithAlias {
-                expr: self.gen_expr(ret_type),
+                expr: expr1,
                 alias: Ident::new(alias.clone()),
             },
             Column {

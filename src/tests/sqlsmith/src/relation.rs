@@ -46,6 +46,7 @@ impl<'a, R: Rng> SqlGenerator<'a, R> {
         };
         table.name = alias; // Rename the table.
         self.bound_relations.push(table);
+        log::info!("relation len: {}", self.bound_relations.len());
         relation
     }
 

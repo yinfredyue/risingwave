@@ -77,6 +77,8 @@ impl<'a, R: Rng> SqlGenerator<'a, R> {
             Some(funcs) => funcs,
         };
         let func = funcs.choose(&mut self.rng).unwrap();
+        log::info!("choose func: {:?}, data type: {:?}", func, ret);
+
         let exprs: Vec<Expr> = func.inputs_type.iter().map(|t| self.gen_expr(*t)).collect();
         let expr = if exprs.len() == 1 {
             make_unary_op(func.func, &exprs[0])
@@ -85,6 +87,7 @@ impl<'a, R: Rng> SqlGenerator<'a, R> {
         } else {
             None
         };
+        log::info!("expr: {:?}, exprs len: {}", expr, exprs.len());
         expr.or_else(|| make_general_expr(func.func, exprs))
             .unwrap_or_else(|| self.gen_simple_scalar(ret))
     }
