@@ -100,10 +100,6 @@ impl<'a, R: Rng> SqlGenerator<'a, R> {
     }
 
     fn gen_order_by(&mut self) -> Vec<OrderByExpr> {
-        log::info!("relatrions len: {}", self.bound_relations.len());
-        if self.bound_relations.is_empty() {
-            return vec![];
-        }
         let mut order_by = vec![];
         while self.flip_coin() {
             let table = self.bound_relations.choose(&mut self.rng).unwrap();
@@ -132,6 +128,7 @@ impl<'a, R: Rng> SqlGenerator<'a, R> {
     fn gen_select_stmt(&mut self) -> (Select, Vec<Column>) {
         // Generate random tables/relations first so that select items can refer to them.
         let from = self.gen_from();
+        log::info!("relation len after gen from: {}", self.bound_relations.len());
         let rel_num = from.len();
         let (select_list, schema) = self.gen_select_list();
         let select = Select {
@@ -148,6 +145,7 @@ impl<'a, R: Rng> SqlGenerator<'a, R> {
             let rel = self.bound_relations.pop();
             assert!(rel.is_some());
         });
+        log::info!("relation len after pop: {}", self.bound_relations.len());
         (select, schema)
     }
 
