@@ -14,7 +14,7 @@
 
 use risingwave_common::array::{Row, RowDeserializer};
 use risingwave_common::error::Result;
-use risingwave_common::types::{DataType};
+use risingwave_common::types::DataType;
 
 type ValueBytes = Vec<u8>;
 

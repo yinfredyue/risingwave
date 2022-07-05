@@ -28,7 +28,7 @@ use risingwave_common::array::Row;
 use risingwave_common::buffer::Bitmap;
 use risingwave_common::catalog::{ColumnDesc, ColumnId, OrderedColumnDesc, Schema, TableId};
 use risingwave_common::error::RwError;
-use risingwave_common::types::{Datum, VirtualNode};
+use risingwave_common::types::{DataType, Datum, VirtualNode};
 use risingwave_common::util::hash_util::CRC32FastBuilder;
 use risingwave_common::util::ordered::*;
 use risingwave_common::util::sort_util::OrderType;
@@ -39,6 +39,7 @@ use super::{Distribution, TableIter};
 use crate::encoding::cell_based_row_deserializer::{CellBasedRowDeserializer, ColumnDescMapping};
 use crate::encoding::cell_based_row_serializer::CellBasedRowSerializer;
 use crate::encoding::dedup_pk_cell_based_row_serializer::DedupPkCellBasedRowSerializer;
+use crate::encoding::row_based_deserializer::RowBasedDeserializer;
 use crate::encoding::Encoding;
 use crate::error::{StorageError, StorageResult};
 use crate::keyspace::StripPrefixIterator;
@@ -450,11 +451,50 @@ impl<S: StateStore, E: Encoding> StorageTableBase<S, E, READ_WRITE> {
         batch.ingest().await?;
         Ok(())
     }
+
+    /// Write to state store.
+    pub async fn batch_write_rows_with_row_based_encoding(
+        &mut self,
+        buffer: BTreeMap<Vec<u8>, RowOp>,
+        epoch: u64,
+    ) -> StorageResult<()> {
+        let mut batch = self.keyspace.state_store().start_write_batch(WriteOptions {
+            epoch,
+            table_id: self.keyspace.table_id(),
+        });
+        let mut local = batch.prefixify(&self.keyspace);
+
+        for (pk, row_op) in buffer {
+            match row_op {
+                RowOp::Insert(row) => {
+                    let value = self.row_serializer.row_based_serialize(&row).map_err(err)?;
+                    local.put(pk, StorageValue::new_default_put(value));
+                }
+                RowOp::Delete(_) => {
+                    // TODO(wcy-fdu): only serialize key on deletion
+                    local.delete(pk);
+                }
+                RowOp::Update((old_row, new_row)) => {
+                    // The row to update should keep the same primary key, so distribution key as
+                    // well.
+                    let vnode = self.compute_vnode_by_row(&new_row);
+                    debug_assert_eq!(self.compute_vnode_by_row(&old_row), vnode);
+
+                    let insert_value = self
+                        .row_serializer
+                        .row_based_serialize(&new_row)
+                        .map_err(err)?;
+                    local.put(pk, StorageValue::new_default_put(insert_value));
+                }
+            }
+        }
+        batch.ingest().await?;
+        Ok(())
+    }
 }
 
 pub trait PkAndRowStream = Stream<Item = StorageResult<(Vec<u8>, Row)>> + Send;
 
-/// The row iterator of the storage table.
 pub type StorageTableIter<S: StateStore> = impl PkAndRowStream;
 /// The wrapper of [`StorageTableIter`] if pk is not persisted.
 pub type BatchDedupPkIter<S: StateStore> = impl PkAndRowStream;
@@ -674,6 +714,28 @@ impl<S: StateStore, E: Encoding, const T: AccessType> StorageTableBase<S, E, T> 
         self.batch_iter_with_encoded_key_range(key_range, epoch)
             .await
     }
+
+    pub(super) async fn row_based_streaming_iter<R, B>(
+        &self,
+        encoded_key_range: R,
+        epoch: u64,
+    ) -> StorageResult<RowBasedStreamingIter<S>>
+    where
+        R: RangeBounds<B> + Send,
+        B: AsRef<[u8]> + Send,
+    {
+        let data_types = self
+            .table_columns
+            .clone()
+            .into_iter()
+            .map(|t| t.data_type)
+            .collect_vec();
+        Ok(
+            RowBasedIter::new(&self.keyspace, data_types, encoded_key_range, epoch, false)
+                .await?
+                .into_stream(),
+        )
+    }
 }
 
 /// [`StorageTableIterInner`] iterates on the storage table.
@@ -800,6 +862,55 @@ impl<I: PkAndRowStream> DedupPkCellBasedIter<I> {
                 }
             }
             yield (pk_vec, Row(row_inner));
+        }
+    }
+}
+pub type RowBasedStreamingIter<S: StateStore> = impl PkAndRowStream;
+
+struct RowBasedIter<S: StateStore> {
+    /// An iterator that returns raw bytes from storage.
+    iter: StripPrefixIterator<S::Iter>,
+
+    /// Row-based row deserializer
+    row_based_deserializer: RowBasedDeserializer,
+}
+
+impl<S: StateStore> RowBasedIter<S> {
+    /// If `wait_epoch` is true, it will wait for the given epoch to be committed before iteration.
+    async fn new<R, B>(
+        keyspace: &Keyspace<S>,
+        data_types: Vec<DataType>,
+        raw_key_range: R,
+        epoch: u64,
+        wait_epoch: bool,
+    ) -> StorageResult<Self>
+    where
+        R: RangeBounds<B> + Send,
+        B: AsRef<[u8]> + Send,
+    {
+        if wait_epoch {
+            keyspace.state_store().wait_epoch(epoch).await?;
+        }
+
+        let row_based_deserializer = RowBasedDeserializer::new(data_types);
+        let iter = keyspace.iter_with_range(raw_key_range, epoch).await?;
+        let iter = Self {
+            iter,
+            row_based_deserializer,
+        };
+        Ok(iter)
+    }
+
+    /// Yield a row with its primary key.
+    #[try_stream(ok = (Vec<u8>, Row), error = StorageError)]
+    async fn into_stream(mut self) {
+        while let Some((key, value)) = self.iter.next().await? {
+            let pk_and_row = self
+                .row_based_deserializer
+                .deserialize(value.to_vec())
+                .map_err(err)?;
+
+            yield (key.to_vec(), pk_and_row);
         }
     }
 }

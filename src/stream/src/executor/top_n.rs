@@ -164,9 +164,9 @@ impl<S: StateStore> InnerTopNExecutor<S> {
             .iter()
             .map(|field| field.data_type.clone())
             .collect::<Vec<_>>();
-
+        let tmp_cache_size = Some(0);
         let managed_lowest_state = ManagedTopNState::<S, TOP_N_MAX>::new(
-            cache_size,
+            tmp_cache_size,
             total_count.0,
             store.clone(),
             table_id_l,
@@ -175,7 +175,7 @@ impl<S: StateStore> InnerTopNExecutor<S> {
             internal_key_indices.clone(),
         );
         let managed_middle_state = ManagedTopNBottomNState::new(
-            cache_size,
+            tmp_cache_size,
             total_count.1,
             store.clone(),
             table_id_m,
@@ -184,7 +184,7 @@ impl<S: StateStore> InnerTopNExecutor<S> {
             internal_key_indices.clone(),
         );
         let managed_highest_state = ManagedTopNState::<S, TOP_N_MIN>::new(
-            cache_size,
+            tmp_cache_size,
             total_count.2,
             store,
             table_id_h,

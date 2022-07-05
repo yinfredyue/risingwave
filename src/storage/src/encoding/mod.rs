@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use risingwave_common::array::Row;
+use risingwave_common::array::{Row, RowDeserializer};
 use risingwave_common::catalog::{ColumnDesc, ColumnId};
 use risingwave_common::error::Result;
-use risingwave_common::types::VirtualNode;
+use risingwave_common::types::{DataType, VirtualNode};
 
 pub mod cell_based_row_deserializer;
 pub mod cell_based_row_serializer;
@@ -55,4 +55,15 @@ pub trait Encoding {
     /// Get column ids used by cell serializer to serialize.
     /// TODO: This should probably not be exposed to user.
     fn column_ids(&self) -> &[ColumnId];
+
+    fn row_based_serialize(&mut self, row: &Row) -> Result<ValueBytes> {
+        let res = row.serialize()?;
+        Ok(res)
+    }
+
+    fn row_based_deserialize(&mut self, row: ValueBytes, data_types: Vec<DataType>) -> Result<Row> {
+        let de = RowDeserializer::new(data_types);
+        let res = de.deserialize(&row)?;
+        Ok(res)
+    }
 }
