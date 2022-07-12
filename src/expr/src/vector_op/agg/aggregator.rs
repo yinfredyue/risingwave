@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Arc;
+
 use risingwave_common::array::*;
 use risingwave_common::error::{ErrorCode, Result};
 use risingwave_common::types::*;
 use risingwave_pb::expr::AggCall;
 
-use crate::expr::AggKind;
+use crate::expr::{build_from_prost, AggKind, Expression, ExpressionRef, LiteralExpression};
 use crate::vector_op::agg::approx_count_distinct::ApproxCountDistinct;
 use crate::vector_op::agg::count_star::CountStar;
 use crate::vector_op::agg::functions::*;
@@ -64,6 +66,7 @@ pub struct AggStateFactory {
     agg_kind: AggKind,
     return_type: DataType,
     distinct: bool,
+    filter: ExpressionRef,
 }
 
 impl AggStateFactory {
@@ -71,6 +74,12 @@ impl AggStateFactory {
         let return_type = DataType::from(prost.get_return_type()?);
         let agg_kind = AggKind::try_from(prost.get_type()?)?;
         let distinct = prost.distinct;
+        let filter: ExpressionRef = match prost.filter {
+            Some(ref expr) => Arc::from(build_from_prost(expr)?),
+            None => Arc::from(
+                LiteralExpression::new(DataType::Boolean, Some(ScalarImpl::Bool(true))).boxed(),
+            ),
+        };
         match &prost.get_args()[..] {
             [ref arg] => {
                 let input_type = DataType::from(arg.get_type()?);
@@ -81,6 +90,7 @@ impl AggStateFactory {
                     agg_kind,
                     return_type,
                     distinct,
+                    filter,
                 })
             }
             [] => match (&agg_kind, return_type.clone()) {
@@ -90,6 +100,7 @@ impl AggStateFactory {
                     agg_kind,
                     return_type,
                     distinct,
+                    filter,
                 }),
                 _ => Err(ErrorCode::InternalError(format!(
                     "Agg {:?} without args not supported",
@@ -110,6 +121,7 @@ impl AggStateFactory {
             Ok(Box::new(ApproxCountDistinct::new(
                 self.return_type.clone(),
                 self.input_col_idx,
+                self.filter.clone(),
             )))
         } else if let Some(input_type) = self.input_type.clone() {
             create_agg_state_unary(
@@ -118,9 +130,14 @@ impl AggStateFactory {
                 &self.agg_kind,
                 self.return_type.clone(),
                 self.distinct,
+                self.filter.clone(),
             )
         } else {
-            Ok(Box::new(CountStar::new(self.return_type.clone(), 0)))
+            Ok(Box::new(CountStar::new(
+                self.return_type.clone(),
+                0,
+                self.filter.clone(),
+            )))
         }
     }
 
@@ -135,6 +152,7 @@ pub fn create_agg_state_unary(
     agg_type: &AggKind,
     return_type: DataType,
     distinct: bool,
+    filter: ExpressionRef,
 ) -> Result<Box<dyn Aggregator>> {
     use crate::expr::data_types::*;
 
@@ -153,6 +171,7 @@ pub fn create_agg_state_unary(
                             input_col_idx,
                             $fn,
                             $init_result,
+                            filter
                         ))
                     },
                     ($in! { type_match_pattern }, AggKind::$agg, $ret! { type_match_pattern }, true) => {
@@ -160,6 +179,7 @@ pub fn create_agg_state_unary(
                             return_type,
                             input_col_idx,
                             $fn,
+                            filter,
                         ))
                     },
                 )*
@@ -253,7 +273,9 @@ mod tests {
         let decimal_type = DataType::Decimal;
         let bool_type = DataType::Boolean;
         let char_type = DataType::Varchar;
-
+        let filter: ExpressionRef = Arc::from(
+            LiteralExpression::new(DataType::Boolean, Some(ScalarImpl::Bool(true))).boxed(),
+        );
         macro_rules! test_create {
             ($input_type:expr, $agg:ident, $return_type:expr, $expected:ident) => {
                 assert!(create_agg_state_unary(
@@ -262,6 +284,7 @@ mod tests {
                     &AggKind::$agg,
                     $return_type.clone(),
                     false,
+                    filter.clone(),
                 )
                 .$expected());
                 assert!(create_agg_state_unary(
@@ -270,6 +293,7 @@ mod tests {
                     &AggKind::$agg,
                     $return_type.clone(),
                     true,
+                    filter.clone(),
                 )
                 .$expected());
             };
