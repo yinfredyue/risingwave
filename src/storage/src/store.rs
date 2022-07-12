@@ -163,7 +163,7 @@ pub trait StateStore: Send + Sync + 'static + Clone {
     /// Syncs buffered data to S3.
     /// If the epoch is None, all buffered data will be synced.
     /// Otherwise, only data of the provided epoch will be synced.
-    fn sync(&self, epoch: Option<u64>) -> Self::SyncFuture<'_>;
+    fn sync(&self, prev_epoch: Option<u64>, last_epoch: Option<u64>) -> Self::SyncFuture<'_>;
 
     /// Creates a [`MonitoredStateStore`] from this state store, with given `stats`.
     fn monitored(self, stats: Arc<StateStoreMetrics>) -> MonitoredStateStore<Self> {
@@ -171,7 +171,7 @@ pub trait StateStore: Send + Sync + 'static + Clone {
     }
 
     /// Gets `epoch`'s uncommitted `SSTables`.
-    fn get_uncommitted_ssts(&self, _epoch: u64) -> Vec<LocalSstableInfo> {
+    fn get_uncommitted_ssts(&self, _epoch: u64, _last_epoch: u64) -> Vec<LocalSstableInfo> {
         todo!()
     }
 

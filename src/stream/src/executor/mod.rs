@@ -431,6 +431,7 @@ impl Barrier {
             }),
             mutation: mutation.map(|mutation| mutation.to_protobuf()),
             span: vec![],
+            is_sync: false,
         }
     }
 

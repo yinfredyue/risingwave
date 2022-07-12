@@ -400,9 +400,21 @@ impl LocalVersionManager {
         Some((epoch, join_handle))
     }
 
-    pub async fn sync_shared_buffer(&self, epoch: Option<HummockEpoch>) -> HummockResult<()> {
-        let epochs = match epoch {
-            Some(epoch) => vec![epoch],
+    pub async fn sync_shared_buffer(
+        &self,
+        epoch: Option<HummockEpoch>,
+        last_epoch: Option<HummockEpoch>,
+    ) -> HummockResult<()> {
+        let epochs: Vec<u64> = match epoch {
+            Some(epoch) => self
+                .local_version
+                .read()
+                .iter_shared_buffer()
+                .filter(|(epoch_buffer, _)| {
+                    epoch_buffer <= &&epoch && &&last_epoch.unwrap() < epoch_buffer
+                })
+                .map(|(epoch_buff, _)| *epoch_buff)
+                .collect(),
             None => self
                 .local_version
                 .read()
@@ -446,9 +458,9 @@ impl LocalVersionManager {
             epoch,
             task_write_batch_size
         );
-        if let Some(conflict_detector) = self.write_conflict_detector.as_ref() {
-            conflict_detector.archive_epoch(epoch);
-        }
+        // if let Some(conflict_detector) = self.write_conflict_detector.as_ref() {
+        //     conflict_detector.archive_epoch(epoch);
+        // }
         self.buffer_tracker
             .send_event(SharedBufferEvent::EpochSynced(epoch));
         ret
@@ -467,10 +479,11 @@ impl LocalVersionManager {
             .await;
 
         let local_version_guard = self.local_version.read();
-        let mut shared_buffer_guard = local_version_guard
-            .get_shared_buffer(epoch)
-            .expect("shared buffer should exist since some uncommitted data is not committed yet")
-            .write();
+        let shared_buffer_guard = local_version_guard.get_shared_buffer(epoch);
+        if shared_buffer_guard.is_none() {
+            return Ok(());
+        }
+        let mut shared_buffer_guard = shared_buffer_guard.unwrap().write();
 
         let ret = match task_result {
             Ok(ssts) => {
@@ -494,12 +507,17 @@ impl LocalVersionManager {
         self.local_version.read().pinned_version().clone()
     }
 
-    pub fn get_uncommitted_ssts(&self, epoch: HummockEpoch) -> Vec<LocalSstableInfo> {
+    pub fn get_uncommitted_ssts(
+        &self,
+        epoch: HummockEpoch,
+        last_epoch: HummockEpoch,
+    ) -> Vec<LocalSstableInfo> {
         self.local_version
             .read()
-            .get_shared_buffer(epoch)
-            .map(|shared_buffer| shared_buffer.read().get_ssts_to_commit())
-            .unwrap_or_default()
+            .scan_shared_buffer(epoch, last_epoch)
+            .iter()
+            .flat_map(|shared_buffer| shared_buffer.read().get_ssts_to_commit())
+            .collect_vec()
     }
 
     /// Pin a version with retry.

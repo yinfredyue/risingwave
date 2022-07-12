@@ -457,17 +457,18 @@ impl StateStore for HummockStorage {
         async move { Ok(self.local_version_manager.wait_epoch(epoch).await?) }
     }
 
-    fn sync(&self, epoch: Option<u64>) -> Self::SyncFuture<'_> {
+    fn sync(&self, epoch: Option<u64>, last_epoch: Option<u64>) -> Self::SyncFuture<'_> {
         async move {
             self.local_version_manager()
-                .sync_shared_buffer(epoch)
+                .sync_shared_buffer(epoch, last_epoch)
                 .await?;
             Ok(())
         }
     }
 
-    fn get_uncommitted_ssts(&self, epoch: u64) -> Vec<LocalSstableInfo> {
-        self.local_version_manager.get_uncommitted_ssts(epoch)
+    fn get_uncommitted_ssts(&self, epoch: u64, last_epoch: u64) -> Vec<LocalSstableInfo> {
+        self.local_version_manager
+            .get_uncommitted_ssts(epoch, last_epoch)
     }
 
     fn clear_shared_buffer(&self) -> Self::ClearSharedBufferFuture<'_> {

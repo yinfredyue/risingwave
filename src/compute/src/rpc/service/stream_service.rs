@@ -23,17 +23,23 @@ use risingwave_pb::stream_service::stream_service_server::StreamService;
 use risingwave_pb::stream_service::*;
 use risingwave_stream::executor::{Barrier, Epoch};
 use risingwave_stream::task::{LocalStreamManager, StreamEnvironment};
+use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
 
 #[derive(Clone)]
 pub struct StreamServiceImpl {
     mgr: Arc<LocalStreamManager>,
     env: StreamEnvironment,
+    last_epoch: Arc<RwLock<u64>>,
 }
 
 impl StreamServiceImpl {
     pub fn new(mgr: Arc<LocalStreamManager>, env: StreamEnvironment) -> Self {
-        StreamServiceImpl { mgr, env }
+        StreamServiceImpl {
+            mgr,
+            env,
+            last_epoch: Arc::new(RwLock::new(0)),
+        }
     }
 }
 
@@ -155,7 +161,23 @@ impl StreamService for StreamServiceImpl {
         let collect_result = self.mgr.collect_barrier(req.prev_epoch).await;
         // Must finish syncing data written in the epoch before respond back to ensure persistency
         // of the state.
-        let synced_sstables = self.mgr.sync_epoch(req.prev_epoch).await;
+        let is_create_mv = collect_result.create_mview_progress.iter().any(|n| n.done);
+        // tracing::info!("sync{:?}<{:?}",self.last_epoch.read().await,req.prev_epoch);
+        let mut last_epoch_guard = self.last_epoch.write().await;
+        let mut is_sync = true;
+        let synced_sstables =
+            if (req.is_sync || is_create_mv) && last_epoch_guard.lt(&req.prev_epoch) {
+                let last_epoch_1 = last_epoch_guard.clone();
+                *last_epoch_guard = req.prev_epoch;
+                drop(last_epoch_guard);
+                // RwLockWriteGuard::unlock_fair(last_epoch_guard);
+                self.mgr.sync_epoch(req.prev_epoch, last_epoch_1).await
+            } else {
+                tracing::info!("no sync epoch {:?}!!", req.prev_epoch);
+                is_sync = false;
+                vec![]
+            };
+        // let synced_sstables = self.mgr.sync_epoch(req.prev_epoch).await;
 
         Ok(Response::new(BarrierCompleteResponse {
             request_id: req.request_id,
@@ -168,6 +190,7 @@ impl StreamService for StreamServiceImpl {
                     sst: Some(sst),
                 })
                 .collect_vec(),
+            is_sync,
         }))
     }
 

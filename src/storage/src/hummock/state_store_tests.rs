@@ -281,13 +281,16 @@ async fn test_basic() {
         .unwrap();
     let len = count_iter(&mut iter).await;
     assert_eq!(len, 4);
-    hummock_storage.sync(Some(epoch1)).await.unwrap();
+    hummock_storage
+        .sync(Some(epoch1), Some(epoch1 - 1))
+        .await
+        .unwrap();
     meta_client
         .commit_epoch(
             epoch1,
             hummock_storage
                 .local_version_manager
-                .get_uncommitted_ssts(epoch1),
+                .get_uncommitted_ssts(epoch1, epoch1 - 1),
         )
         .await
         .unwrap();
@@ -432,7 +435,10 @@ async fn test_state_store_sync() {
     // );
 
     // trigger a sync
-    hummock_storage.sync(Some(epoch)).await.unwrap();
+    hummock_storage
+        .sync(Some(epoch), Some(epoch - 1))
+        .await
+        .unwrap();
 
     // TODO: Uncomment the following lines after flushed sstable can be accessed.
     // FYI: https://github.com/singularity-data/risingwave/pull/1928#discussion_r852698719
@@ -838,16 +844,26 @@ async fn test_write_anytime() {
     // Assert epoch 2 correctness
     assert_old_value(epoch2);
 
-    hummock_storage.sync(Some(epoch1)).await.unwrap();
+    hummock_storage
+        .sync(Some(epoch1), Some(epoch1 - 1))
+        .await
+        .unwrap();
     assert_new_value(epoch1);
     assert_old_value(epoch2);
 
-    hummock_storage.sync(Some(epoch2)).await.unwrap();
+    hummock_storage
+        .sync(Some(epoch2), Some(epoch2 - 1))
+        .await
+        .unwrap();
     assert_new_value(epoch1);
     assert_old_value(epoch2);
 
-    assert!(!hummock_storage.get_uncommitted_ssts(epoch1).is_empty());
-    assert!(!hummock_storage.get_uncommitted_ssts(epoch2).is_empty());
+    assert!(!hummock_storage
+        .get_uncommitted_ssts(epoch1, epoch1 - 1)
+        .is_empty());
+    assert!(!hummock_storage
+        .get_uncommitted_ssts(epoch2, epoch2 - 1)
+        .is_empty());
 }
 
 #[tokio::test]
@@ -892,8 +908,11 @@ async fn test_delete_get() {
         )
         .await
         .unwrap();
-    hummock_storage.sync(Some(epoch1)).await.unwrap();
-    let ssts = hummock_storage.get_uncommitted_ssts(epoch1);
+    hummock_storage
+        .sync(Some(epoch1), Some(epoch1 - 1))
+        .await
+        .unwrap();
+    let ssts = hummock_storage.get_uncommitted_ssts(epoch1, epoch1 - 1);
     hummock_meta_client
         .commit_epoch(epoch1, ssts)
         .await
@@ -910,8 +929,11 @@ async fn test_delete_get() {
         )
         .await
         .unwrap();
-    hummock_storage.sync(Some(epoch2)).await.unwrap();
-    let ssts = hummock_storage.get_uncommitted_ssts(epoch2);
+    hummock_storage
+        .sync(Some(epoch2), Some(epoch2 - 1))
+        .await
+        .unwrap();
+    let ssts = hummock_storage.get_uncommitted_ssts(epoch2, epoch2 - 1);
     hummock_meta_client
         .commit_epoch(epoch2, ssts)
         .await

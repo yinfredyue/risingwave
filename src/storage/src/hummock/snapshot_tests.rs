@@ -112,14 +112,17 @@ async fn test_snapshot_inner(enable_sync: bool, enable_commit: bool) {
         .await
         .unwrap();
     if enable_sync {
-        hummock_storage.sync(Some(epoch1)).await.unwrap();
+        hummock_storage
+            .sync(Some(epoch1), Some(epoch1 - 1))
+            .await
+            .unwrap();
         if enable_commit {
             mock_hummock_meta_client
                 .commit_epoch(
                     epoch1,
                     hummock_storage
                         .local_version_manager
-                        .get_uncommitted_ssts(epoch1),
+                        .get_uncommitted_ssts(epoch1, epoch1 - 1),
                 )
                 .await
                 .unwrap();
@@ -144,14 +147,17 @@ async fn test_snapshot_inner(enable_sync: bool, enable_commit: bool) {
         .await
         .unwrap();
     if enable_sync {
-        hummock_storage.sync(Some(epoch2)).await.unwrap();
+        hummock_storage
+            .sync(Some(epoch2), Some(epoch2 - 1))
+            .await
+            .unwrap();
         if enable_commit {
             mock_hummock_meta_client
                 .commit_epoch(
                     epoch2,
                     hummock_storage
                         .local_version_manager
-                        .get_uncommitted_ssts(epoch2),
+                        .get_uncommitted_ssts(epoch2, epoch2 - 1),
                 )
                 .await
                 .unwrap();
@@ -177,14 +183,17 @@ async fn test_snapshot_inner(enable_sync: bool, enable_commit: bool) {
         .await
         .unwrap();
     if enable_sync {
-        hummock_storage.sync(Some(epoch3)).await.unwrap();
+        hummock_storage
+            .sync(Some(epoch3), Some(epoch3 - 1))
+            .await
+            .unwrap();
         if enable_commit {
             mock_hummock_meta_client
                 .commit_epoch(
                     epoch3,
                     hummock_storage
                         .local_version_manager
-                        .get_uncommitted_ssts(epoch3),
+                        .get_uncommitted_ssts(epoch3, epoch3 - 1),
                 )
                 .await
                 .unwrap();
@@ -236,14 +245,17 @@ async fn test_snapshot_range_scan_inner(enable_sync: bool, enable_commit: bool) 
         .await
         .unwrap();
     if enable_sync {
-        hummock_storage.sync(Some(epoch)).await.unwrap();
+        hummock_storage
+            .sync(Some(epoch), Some(epoch - 1))
+            .await
+            .unwrap();
         if enable_commit {
             mock_hummock_meta_client
                 .commit_epoch(
                     epoch,
                     hummock_storage
                         .local_version_manager
-                        .get_uncommitted_ssts(epoch),
+                        .get_uncommitted_ssts(epoch, epoch - 1),
                 )
                 .await
                 .unwrap();
@@ -305,14 +317,17 @@ async fn test_snapshot_backward_range_scan_inner(enable_sync: bool, enable_commi
         .await
         .unwrap();
     if enable_sync {
-        hummock_storage.sync(Some(epoch)).await.unwrap();
+        hummock_storage
+            .sync(Some(epoch), Some(epoch - 1))
+            .await
+            .unwrap();
         if enable_commit {
             mock_hummock_meta_client
                 .commit_epoch(
                     epoch,
                     hummock_storage
                         .local_version_manager
-                        .get_uncommitted_ssts(epoch),
+                        .get_uncommitted_ssts(epoch, epoch - 1),
                 )
                 .await
                 .unwrap();
@@ -335,14 +350,17 @@ async fn test_snapshot_backward_range_scan_inner(enable_sync: bool, enable_commi
         .await
         .unwrap();
     if enable_sync {
-        hummock_storage.sync(Some(epoch + 1)).await.unwrap();
+        hummock_storage
+            .sync(Some(epoch + 1), Some(epoch))
+            .await
+            .unwrap();
         if enable_commit {
             mock_hummock_meta_client
                 .commit_epoch(
                     epoch + 1,
                     hummock_storage
                         .local_version_manager
-                        .get_uncommitted_ssts(epoch + 1),
+                        .get_uncommitted_ssts(epoch + 1, epoch),
                 )
                 .await
                 .unwrap();

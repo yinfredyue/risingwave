@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::BTreeMap;
+use std::ops::Bound::{Excluded, Included};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
@@ -49,6 +50,21 @@ impl LocalVersion {
 
     pub fn get_shared_buffer(&self, epoch: HummockEpoch) -> Option<&Arc<RwLock<SharedBuffer>>> {
         self.shared_buffer.get(&epoch)
+    }
+
+    pub fn scan_shared_buffer(
+        &self,
+        epoch: HummockEpoch,
+        last_epoch: HummockEpoch,
+    ) -> Vec<&Arc<RwLock<SharedBuffer>>> {
+        let mut shard_buffer = vec![];
+        for (_, value) in self
+            .shared_buffer
+            .range((Excluded(&last_epoch), Included(&epoch)))
+        {
+            shard_buffer.push(value);
+        }
+        shard_buffer
     }
 
     pub fn iter_shared_buffer(

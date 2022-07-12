@@ -225,7 +225,7 @@ where
         (
             self.command_ctx_queue
                 .iter()
-                .filter(|x| matches!(x.state, InFlight))
+                .filter(|x| matches!(x.state, InFlight) && x.command_ctx.is_sync)
                 .count(),
             self.command_ctx_queue.len(),
         )
@@ -414,6 +414,7 @@ where
         let mut barrier_timer: Option<HistogramTimer> = None;
         let (barrier_complete_tx, mut barrier_complete_rx) = tokio::sync::mpsc::unbounded_channel();
         let mut checkpoint_control = CheckpointControl::new();
+        let mut barrier_nums = 0;
         loop {
             tokio::select! {
                 biased;
@@ -475,7 +476,13 @@ where
                 .update_inflight_prev_epoch(self.env.meta_store())
                 .await
                 .unwrap();
-
+            let is_sync = if barrier_nums % 20 == 0 || !matches!(command, Command::Plain(_)) {
+                barrier_nums = 0;
+                true
+            } else {
+                barrier_nums += 1;
+                false
+            };
             let command_ctx = Arc::new(CommandContext::new(
                 self.fragment_manager.clone(),
                 self.env.stream_client_pool_ref(),
@@ -483,6 +490,7 @@ where
                 prev_epoch,
                 new_epoch,
                 command,
+                is_sync,
             ));
             let mut notifiers = notifiers;
             notifiers.iter_mut().for_each(Notifier::notify_to_send);
@@ -543,6 +551,7 @@ where
                     mutation,
                     // TODO(chi): add distributed tracing
                     span: vec![],
+                    is_sync: command_context.is_sync,
                 };
                 async move {
                     let mut client = self.env.stream_client_pool().get(node).await?;
@@ -572,6 +581,7 @@ where
         let env = self.env.clone();
         tokio::spawn(async move {
             let prev_epoch = command_context.prev_epoch.0;
+            let is_sync = command_context.is_sync;
             let collect_futures = info.node_map.iter().filter_map(|(node_id, node)| {
                 if !*node_need_collect.get(node_id).unwrap() {
                     // No need to send or collect barrier for this node.
@@ -584,6 +594,7 @@ where
                         let request = BarrierCompleteRequest {
                             request_id,
                             prev_epoch,
+                            is_sync,
                         };
                         tracing::trace!(
                             target: "events::meta::barrier::barrier_complete",
@@ -677,19 +688,21 @@ where
                     // We must ensure all epochs are committed in ascending order,
                     // because the storage engine will
                     // query from new to old in the order in which the L0 layer files are generated. see https://github.com/singularity-data/risingwave/issues/1251
-                    let synced_ssts: Vec<LocalSstableInfo> = resps
-                        .iter()
-                        .flat_map(|resp| resp.sycned_sstables.clone())
-                        .map(|grouped| {
-                            (
-                                grouped.compaction_group_id,
-                                grouped.sst.expect("field not None"),
-                            )
-                        })
-                        .collect_vec();
-                    self.hummock_manager
-                        .commit_epoch(node.command_ctx.prev_epoch.0, synced_ssts)
-                        .await?;
+                    if resps.iter().all(|node| node.is_sync) {
+                        let synced_ssts: Vec<LocalSstableInfo> = resps
+                            .iter()
+                            .flat_map(|resp| resp.sycned_sstables.clone())
+                            .map(|grouped| {
+                                (
+                                    grouped.compaction_group_id,
+                                    grouped.sst.expect("field not None"),
+                                )
+                            })
+                            .collect_vec();
+                        self.hummock_manager
+                            .commit_epoch(node.command_ctx.prev_epoch.0, synced_ssts)
+                            .await?;
+                    }
                 }
                 Err(err) => {
                     tracing::warn!(

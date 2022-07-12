@@ -98,11 +98,13 @@ mod tests {
                 )
                 .await
                 .unwrap();
-            storage.sync(Some(epoch)).await.unwrap();
+            storage.sync(Some(epoch), Some(epoch - 1)).await.unwrap();
             hummock_meta_client
                 .commit_epoch(
                     epoch,
-                    storage.local_version_manager.get_uncommitted_ssts(epoch),
+                    storage
+                        .local_version_manager
+                        .get_uncommitted_ssts(epoch, epoch - 1),
                 )
                 .await
                 .unwrap();
@@ -373,8 +375,10 @@ mod tests {
             local.put(ramdom_key, StorageValue::new_default_put(val.clone()));
             write_batch.ingest().await.unwrap();
 
-            storage.sync(Some(epoch)).await.unwrap();
-            let ssts = storage.local_version_manager.get_uncommitted_ssts(epoch);
+            storage.sync(Some(epoch), Some(epoch - 1)).await.unwrap();
+            let ssts = storage
+                .local_version_manager
+                .get_uncommitted_ssts(epoch, epoch - 1);
             hummock_meta_client.commit_epoch(epoch, ssts).await.unwrap();
         }
 
@@ -478,11 +482,13 @@ mod tests {
             local.put(ramdom_key, StorageValue::new_default_put(val.clone()));
             write_batch.ingest().await.unwrap();
 
-            storage.sync(Some(epoch)).await.unwrap();
+            storage.sync(Some(epoch), Some(epoch - 1)).await.unwrap();
             hummock_meta_client
                 .commit_epoch(
                     epoch,
-                    storage.local_version_manager.get_uncommitted_ssts(epoch),
+                    storage
+                        .local_version_manager
+                        .get_uncommitted_ssts(epoch, epoch - 1),
                 )
                 .await
                 .unwrap();
@@ -634,12 +640,14 @@ mod tests {
             write_batch.ingest().await.unwrap();
         }
 
-        storage.sync(None).await.unwrap();
+        storage.sync(None, None).await.unwrap();
         for epoch in &epoch_set {
             hummock_meta_client
                 .commit_epoch(
                     *epoch,
-                    storage.local_version_manager.get_uncommitted_ssts(*epoch),
+                    storage
+                        .local_version_manager
+                        .get_uncommitted_ssts(*epoch, *epoch - 1),
                 )
                 .await
                 .unwrap();

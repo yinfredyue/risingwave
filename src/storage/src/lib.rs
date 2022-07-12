@@ -45,6 +45,7 @@
 #![feature(stmt_expr_attributes)]
 #![feature(type_changing_struct_update)]
 #![test_runner(risingwave_test_runner::test_runner::run_failpont_tests)]
+#![feature(option_result_contains)]
 
 pub mod encoding;
 pub mod hummock;

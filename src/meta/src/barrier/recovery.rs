@@ -96,6 +96,7 @@ where
                 prev_epoch,
                 new_epoch,
                 Command::checkpoint(),
+                true,
             ));
 
             let command_ctx_clone = command_ctx.clone();

@@ -169,6 +169,7 @@ message Barrier {
     SourceChangeSplitMutation splits = 7;
   }
   bytes span = 6;
+  bool is_sync = 8;
 }
 
 message Terminate {}
