@@ -85,26 +85,14 @@ impl Output for LocalOutput {
         // if the buffer is full when sending, the sender is backpressured
         if self.ch.capacity() == 0 {
             let start_time = minstant::Instant::now();
-            let mut timeout_times = 0;
-            // the default pull time of Prometheus is 15s
-            while (tokio::time::timeout(
-                std::time::Duration::from_secs(15),
-                self.ch.send(message.clone()),
-            ))
-            .await
-            .map_err(|_| internal_error("failed to send"))?
-            .is_err()
-            {
-                self.metrics
-                    .actor_output_buffer_blocking_duration_ns
-                    .with_label_values(&[&self.up_id_str])
-                    .inc_by(10_000_000_000);
-                timeout_times += 1;
-            }
+            self.ch
+                .send(message)
+                .await
+                .map_err(|_| internal_error("failed to send"))?;
             self.metrics
                 .actor_output_buffer_blocking_duration_ns
                 .with_label_values(&[&self.up_id_str])
-                .inc_by(start_time.elapsed().as_nanos() as u64 - timeout_times * 10_000_000_000);
+                .inc_by(start_time.elapsed().as_nanos() as u64);
         } else {
             self.ch
                 .send(message)
@@ -161,26 +149,14 @@ impl Output for RemoteOutput {
         // if the buffer is full when sending, the sender is backpressured
         if self.ch.capacity() == 0 {
             let start_time = minstant::Instant::now();
-            let mut timeout_times = 0;
-            // the default pull time of Prometheus is 15s
-            while (tokio::time::timeout(
-                std::time::Duration::from_secs(15),
-                self.ch.send(message.clone()),
-            ))
-            .await
-            .map_err(|_| internal_error("failed to send"))?
-            .is_err()
-            {
-                self.metrics
-                    .actor_output_buffer_blocking_duration_ns
-                    .with_label_values(&[&self.up_id_str])
-                    .inc_by(10_000_000_000);
-                timeout_times += 1;
-            }
+            self.ch
+                .send(message)
+                .await
+                .map_err(|_| internal_error("failed to send"))?;
             self.metrics
                 .actor_output_buffer_blocking_duration_ns
                 .with_label_values(&[&self.up_id_str])
-                .inc_by(start_time.elapsed().as_nanos() as u64 - timeout_times * 10_000_000_000);
+                .inc_by(start_time.elapsed().as_nanos() as u64);
         } else {
             self.ch
                 .send(message)
