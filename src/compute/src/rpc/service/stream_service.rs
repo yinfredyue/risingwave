@@ -165,11 +165,13 @@ impl StreamService for StreamServiceImpl {
         // tracing::info!("sync{:?}<{:?}",self.last_epoch.read().await,req.prev_epoch);
         let mut last_epoch_guard = self.last_epoch.write().await;
         let mut is_sync = true;
+        tracing::info!("aaa{:?}||{:?}&& {:?}",is_create_mv,req.is_sync,last_epoch_guard.lt(&req.prev_epoch));
         let synced_sstables =
             if (req.is_sync || is_create_mv) && last_epoch_guard.lt(&req.prev_epoch) {
                 let last_epoch_1 = last_epoch_guard.clone();
                 *last_epoch_guard = req.prev_epoch;
                 drop(last_epoch_guard);
+                tracing::info!("sync succ {:?}",req.prev_epoch);
                 // RwLockWriteGuard::unlock_fair(last_epoch_guard);
                 self.mgr.sync_epoch(req.prev_epoch, last_epoch_1).await
             } else {

@@ -225,7 +225,7 @@ where
         (
             self.command_ctx_queue
                 .iter()
-                .filter(|x| matches!(x.state, InFlight) && x.command_ctx.is_sync)
+                .filter(|x| matches!(x.state, InFlight))
                 .count(),
             self.command_ctx_queue.len(),
         )
@@ -294,7 +294,7 @@ where
     fn can_inject_barrier(&self, in_flight_barrier_nums: usize) -> bool {
         self.command_ctx_queue
             .iter()
-            .filter(|x| matches!(x.state, InFlight))
+            .filter(|x| matches!(x.state, InFlight ))
             .count()
             < in_flight_barrier_nums
     }
@@ -414,7 +414,7 @@ where
         let mut barrier_timer: Option<HistogramTimer> = None;
         let (barrier_complete_tx, mut barrier_complete_rx) = tokio::sync::mpsc::unbounded_channel();
         let mut checkpoint_control = CheckpointControl::new();
-        let mut barrier_nums = 0;
+        let mut barrier_nums = 1;
         loop {
             tokio::select! {
                 biased;
@@ -476,8 +476,9 @@ where
                 .update_inflight_prev_epoch(self.env.meta_store())
                 .await
                 .unwrap();
+            tracing::info!("bbbb{:?},{:?}",barrier_nums % 20 == 0,!matches!(command, Command::Plain(_)));
             let is_sync = if barrier_nums % 20 == 0 || !matches!(command, Command::Plain(_)) {
-                barrier_nums = 0;
+                barrier_nums = 1;
                 true
             } else {
                 barrier_nums += 1;

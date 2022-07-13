@@ -475,7 +475,7 @@ impl SharedBuffer {
         for data in self.uncommitted_data.values() {
             match data {
                 UncommittedData::Batch(_) => {
-                    panic!("there should not be any batch when committing sst");
+                    //panic!("there should not be any batch when committing sst");
                 }
                 UncommittedData::Sst((compaction_group_id, sst)) => {
                     assert!(

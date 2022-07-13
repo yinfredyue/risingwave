@@ -25,6 +25,7 @@ use risingwave_hummock_sdk::LocalSstableInfo;
 use super::iterator::{
     BackwardUserIterator, ConcatIteratorInner, DirectedUserIterator, UserIterator,
 };
+use super::local_version_manager::LocalVersionManager;
 use super::utils::{can_concat, search_sst_idx, validate_epoch};
 use super::{BackwardSSTableIterator, HummockStorage, SSTableIterator, SSTableIteratorType};
 use crate::error::StorageResult;
@@ -459,9 +460,10 @@ impl StateStore for HummockStorage {
 
     fn sync(&self, epoch: Option<u64>, last_epoch: Option<u64>) -> Self::SyncFuture<'_> {
         async move {
-            self.local_version_manager()
-                .sync_shared_buffer(epoch, last_epoch)
-                .await?;
+            LocalVersionManager::sync_shared_buffer(self.local_version_manager().clone(), epoch, last_epoch).await?;
+            // self.local_version_manager()
+            //     .sync_shared_buffer(epoch, last_epoch)
+            //     .await?;
             Ok(())
         }
     }

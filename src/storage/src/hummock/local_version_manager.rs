@@ -401,35 +401,41 @@ impl LocalVersionManager {
     }
 
     pub async fn sync_shared_buffer(
-        &self,
+        local: Arc<LocalVersionManager>,
         epoch: Option<HummockEpoch>,
         last_epoch: Option<HummockEpoch>,
     ) -> HummockResult<()> {
         let epochs: Vec<u64> = match epoch {
-            Some(epoch) => self
+            Some(epoch) => local
                 .local_version
                 .read()
                 .iter_shared_buffer()
                 .filter(|(epoch_buffer, _)| {
-                    epoch_buffer <= &&epoch && &&last_epoch.unwrap() < epoch_buffer
+                    tracing::info!("{:?}<{:?}<={:?}",last_epoch.unwrap(),**epoch_buffer,epoch);
+                    epoch_buffer <= &&epoch && last_epoch.unwrap() < **epoch_buffer
                 })
                 .map(|(epoch_buff, _)| *epoch_buff)
                 .collect(),
-            None => self
+            None => local
                 .local_version
                 .read()
                 .iter_shared_buffer()
                 .map(|(epoch, _)| *epoch)
                 .collect(),
         };
+        tracing::info!("vec:{:?}",epochs);
+        
         for epoch in epochs {
-            self.sync_shared_buffer_epoch(epoch).await?;
+            let aaaa  = local.clone();
+            tokio::spawn(async move {
+                aaaa.sync_shared_buffer_epoch(epoch).await.unwrap();
+            });
         }
         Ok(())
     }
 
     pub async fn sync_shared_buffer_epoch(&self, epoch: HummockEpoch) -> HummockResult<()> {
-        tracing::trace!("sync epoch {}", epoch);
+        tracing::info!("sync epoch {}", epoch);
         let (tx, rx) = oneshot::channel();
         self.buffer_tracker
             .send_event(SharedBufferEvent::SyncEpoch(epoch, tx));
@@ -445,7 +451,7 @@ impl LocalVersionManager {
         {
             Some(task) => task,
             None => {
-                tracing::trace!("sync epoch {} has no more task to do", epoch);
+                tracing::info!("sync epoch {} has no more task to do", epoch);
                 return Ok(());
             }
         };
@@ -453,7 +459,7 @@ impl LocalVersionManager {
         let ret = self
             .run_upload_task(order_index, epoch, task_payload, false)
             .await;
-        tracing::trace!(
+        tracing::info!(
             "sync epoch {} finished. Task size {}",
             epoch,
             task_write_batch_size
