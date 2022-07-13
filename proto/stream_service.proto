@@ -91,7 +91,11 @@ message BarrierCompleteResponse {
     uint64 compaction_group_id = 1;
     hummock.SstableInfo sst = 2;
   }
-  repeated GroupedSstableInfo sycned_sstables = 4;
+  message GroupedSstableInfoAaa {
+    uint64 epoch = 1;
+    repeated GroupedSstableInfo grouped_sstable_info = 2;
+  }
+  repeated GroupedSstableInfoAaa sycned_sstables = 4;
   bool is_sync = 5;
 }
 

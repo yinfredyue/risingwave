@@ -197,9 +197,9 @@ impl LocalStreamManager {
         rx.await.unwrap()
     }
 
-    pub async fn sync_epoch(&self, prev_epoch: u64, last_epoch: u64) -> Vec<LocalSstableInfo> {
+    pub async fn sync_epoch(&self, prev_epoch: u64, last_epoch: u64) -> Vec<(u64,Vec<LocalSstableInfo>)> {
         dispatch_state_store!(self.state_store(), store, {
-            match store.sync(Some(prev_epoch), Some(last_epoch)).await {
+            match store.sync(Some(prev_epoch), Some(last_epoch),None).await {
                 Ok(_) => store.get_uncommitted_ssts(prev_epoch, last_epoch),
                 // TODO: Handle sync failure by propagating it
                 // back to global barrier manager

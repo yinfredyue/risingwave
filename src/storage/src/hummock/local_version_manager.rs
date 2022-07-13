@@ -260,7 +260,7 @@ impl LocalVersionManager {
             }
             match tokio::time::timeout(Duration::from_secs(10), receiver.changed()).await {
                 Err(_) => {
-                    return Err(HummockError::wait_epoch("timeout"));
+                    return Err(HummockError::wait_epoch(format!("timeout {:?}",epoch)));
                 }
                 Ok(Err(_)) => {
                     return Err(HummockError::wait_epoch("tx dropped"));
@@ -404,6 +404,7 @@ impl LocalVersionManager {
         local: Arc<LocalVersionManager>,
         epoch: Option<HummockEpoch>,
         last_epoch: Option<HummockEpoch>,
+        stats: Option<Arc<StateStoreMetrics>>,
     ) -> HummockResult<()> {
         let epochs: Vec<u64> = match epoch {
             Some(epoch) => local
@@ -411,7 +412,6 @@ impl LocalVersionManager {
                 .read()
                 .iter_shared_buffer()
                 .filter(|(epoch_buffer, _)| {
-                    tracing::info!("{:?}<{:?}<={:?}",last_epoch.unwrap(),**epoch_buffer,epoch);
                     epoch_buffer <= &&epoch && last_epoch.unwrap() < **epoch_buffer
                 })
                 .map(|(epoch_buff, _)| *epoch_buff)
@@ -424,18 +424,26 @@ impl LocalVersionManager {
                 .collect(),
         };
         tracing::info!("vec:{:?}",epochs);
-        
+        let mut feature_vec = vec![];
         for epoch in epochs {
-            let aaaa  = local.clone();
-            tokio::spawn(async move {
-                aaaa.sync_shared_buffer_epoch(epoch).await.unwrap();
-            });
+            let mut timer = None;
+            let local_version_m  = local.clone();
+            if let Some(stats) = stats.clone(){
+                timer = Some(stats.shared_buffer_to_l0_duration.start_timer());
+            }
+            feature_vec.push(async move {
+                let a = local_version_m.sync_shared_buffer_epoch(epoch).await;
+                if let Some(timer) = timer{
+                    timer.observe_duration();
+                };
+                a
+            })
         }
+        try_join_all(feature_vec).await?;
         Ok(())
     }
 
     pub async fn sync_shared_buffer_epoch(&self, epoch: HummockEpoch) -> HummockResult<()> {
-        tracing::info!("sync epoch {}", epoch);
         let (tx, rx) = oneshot::channel();
         self.buffer_tracker
             .send_event(SharedBufferEvent::SyncEpoch(epoch, tx));
@@ -517,12 +525,12 @@ impl LocalVersionManager {
         &self,
         epoch: HummockEpoch,
         last_epoch: HummockEpoch,
-    ) -> Vec<LocalSstableInfo> {
+    ) -> Vec<(HummockEpoch,Vec<LocalSstableInfo>)> {
         self.local_version
             .read()
             .scan_shared_buffer(epoch, last_epoch)
             .iter()
-            .flat_map(|shared_buffer| shared_buffer.read().get_ssts_to_commit())
+            .map(|(epoch,shared_buffer)| (*epoch,shared_buffer.read().get_ssts_to_commit()))
             .collect_vec()
     }
 

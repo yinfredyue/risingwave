@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::Bound::{Excluded, Included};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
@@ -56,13 +56,13 @@ impl LocalVersion {
         &self,
         epoch: HummockEpoch,
         last_epoch: HummockEpoch,
-    ) -> Vec<&Arc<RwLock<SharedBuffer>>> {
+    ) -> Vec<(HummockEpoch,&Arc<RwLock<SharedBuffer>>)> {
         let mut shard_buffer = vec![];
-        for (_, value) in self
+        for (epoch, value) in self
             .shared_buffer
             .range((Excluded(&last_epoch), Included(&epoch)))
         {
-            shard_buffer.push(value);
+            shard_buffer.push((*epoch,value));
         }
         shard_buffer
     }

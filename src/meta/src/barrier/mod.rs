@@ -476,7 +476,6 @@ where
                 .update_inflight_prev_epoch(self.env.meta_store())
                 .await
                 .unwrap();
-            tracing::info!("bbbb{:?},{:?}",barrier_nums % 20 == 0,!matches!(command, Command::Plain(_)));
             let is_sync = if barrier_nums % 20 == 0 || !matches!(command, Command::Plain(_)) {
                 barrier_nums = 1;
                 true
@@ -689,21 +688,39 @@ where
                     // We must ensure all epochs are committed in ascending order,
                     // because the storage engine will
                     // query from new to old in the order in which the L0 layer files are generated. see https://github.com/singularity-data/risingwave/issues/1251
+                    
                     if resps.iter().all(|node| node.is_sync) {
-                        let synced_ssts: Vec<LocalSstableInfo> = resps
+                        //tracing::info!("commit{:?}",node.command_ctx.prev_epoch);
+                        let synced_ssts: Vec<(u64,Vec<LocalSstableInfo>)> = resps
                             .iter()
                             .flat_map(|resp| resp.sycned_sstables.clone())
                             .map(|grouped| {
-                                (
-                                    grouped.compaction_group_id,
-                                    grouped.sst.expect("field not None"),
-                                )
+                                let group_vec = grouped.grouped_sstable_info.into_iter().map(|g|{
+                                    (g.compaction_group_id,
+                                    g.sst.expect("field not None"),)
+                                }).collect_vec();
+                                (grouped.epoch,group_vec)
                             })
                             .collect_vec();
-                        self.hummock_manager
-                            .commit_epoch(node.command_ctx.prev_epoch.0, synced_ssts)
-                            .await?;
-                    }
+                        let mut vec = vec![];
+                        let mut flag = false;
+                        for i in synced_ssts{
+                            let hummock = self.hummock_manager.clone();
+                            if i.0 == node.command_ctx.prev_epoch.0{
+                                flag = true;
+                            }
+                            tracing::info!("commit{:?}",i.0);
+                            vec.push(async move{
+                                hummock
+                                    .commit_epoch(i.0, i.1).await
+                            })
+                        };
+                        try_join_all(vec).await?;
+                        if !flag{
+                            self.hummock_manager.commit_epoch(node.command_ctx.prev_epoch.0, vec![]).await?;
+                        }
+                        tracing::info!("commit over {:?}",node.command_ctx.prev_epoch);
+                   }
                 }
                 Err(err) => {
                     tracing::warn!(

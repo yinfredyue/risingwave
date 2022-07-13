@@ -14,6 +14,7 @@
 
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
+use crate::monitor::StateStoreMetrics;
 use std::future::Future;
 use std::ops::Bound::{Excluded, Included, Unbounded};
 use std::ops::{Bound, RangeBounds};
@@ -232,7 +233,7 @@ impl StateStore for MemoryStateStore {
         }
     }
 
-    fn sync(&self, _epoch: Option<u64>, _last_epoch: Option<u64>) -> Self::SyncFuture<'_> {
+    fn sync(&self, _epoch: Option<u64>, _last_epoch: Option<u64>,_stats: Option<Arc<StateStoreMetrics>>) -> Self::SyncFuture<'_> {
         async move {
             // memory backend doesn't support push to S3, so this is a no-op
             Ok(())
