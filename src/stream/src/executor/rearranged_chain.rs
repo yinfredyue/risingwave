@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicI64};
 
 use futures::channel::{mpsc, oneshot};
 use futures::stream::select_with_strategy;
@@ -20,7 +21,6 @@ use futures::{stream, StreamExt};
 use futures_async_stream::try_stream;
 use risingwave_common::array::StreamChunk;
 use risingwave_common::catalog::Schema;
-use tokio::sync::Mutex;
 
 use super::error::StreamExecutorError;
 use super::{
@@ -28,6 +28,29 @@ use super::{
 };
 use crate::task::{ActorId, CreateMviewProgress};
 
+type Upstream = impl MessageStream + std::marker::Unpin;
+
+#[derive(Copy, Clone)]
+struct UpstreamRef(*mut Upstream);
+
+unsafe impl Sync for UpstreamRef {}
+
+unsafe impl Send for UpstreamRef {}
+
+struct ScopeCall<F: FnMut()> {
+    c: F
+}
+impl<F: FnMut()> Drop for ScopeCall<F> {
+    fn drop(&mut self) {
+        (self.c)();
+    }
+}
+
+macro_rules! defer {
+    ($e:expr) => (
+        let _scope_call = ScopeCall { c: || -> () { $e; } };
+    )
+}
 /// `ChainExecutor` is an executor that enables synchronization between the existing stream and
 /// newly appended executors. Currently, `ChainExecutor` is mainly used to implement MV on MV
 /// feature. It pipes new data of existing MVs to newly created MV only all of the old data in the
@@ -48,6 +71,9 @@ pub struct RearrangedChainExecutor {
 
     info: ExecutorInfo,
 }
+
+static LOCK_ID: AtomicU64 = AtomicU64::new(0);
+static LOCK_CNT: AtomicI64 = AtomicI64::new(0);
 
 fn mapping(upstream_indices: &[usize], msg: Message) -> Message {
     match msg {
@@ -140,6 +166,7 @@ impl RearrangedChainExecutor {
         yield Message::Barrier(first_barrier.clone());
 
         if to_consume_snapshot {
+            unsafe {
             // If we need to consume the snapshot ...
             // We will spawn a background task to poll the upstream actively, in order to get the
             // barrier as soon as possible and then to rearrange(steal) it.
@@ -155,13 +182,14 @@ impl RearrangedChainExecutor {
                 .unwrap();
 
             // 3. Rearrange stream, will yield the barriers polled from upstream to rearrange.
-            let upstream = Arc::new(Mutex::new(upstream));
+            let mut upstream: Upstream = upstream;
+            let upstream = UpstreamRef(&mut upstream as *mut Upstream);
             let rearranged_barrier = Box::pin(Self::rearrange_barrier(
                 upstream.clone(),
                 upstream_tx,
                 stop_rearrange_rx,
             ));
-
+                
             // 4. Init the snapshot with reading epoch.
             let snapshot = self.snapshot.execute_with_epoch(create_epoch.prev);
 
@@ -228,26 +256,55 @@ impl RearrangedChainExecutor {
 
             // Note that there may still be some messages in `rearranged`. However the rearranged
             // barriers must be ignored, we should take the phantoms.
+            let mut msg_cnt_after_finish_barrier =0 ;
+            let mut msg_cnt_before_finish_barrier =0 ;
             #[for_await]
             for msg in rearranged {
                 let msg: RearrangedMessage = msg?;
+                msg_cnt_before_finish_barrier += 1;
+                println!{"rearranged msg_cnt_before_finish_barrier: {}", msg_cnt_before_finish_barrier};
                 let Some(msg) = msg.phantom_into() else { continue };
                 finish_on_barrier(&msg);
                 yield msg;
+                msg_cnt_after_finish_barrier += 1;
+                println!{"rearranged msg_cnt_after_finish_barrier: {}", msg_cnt_after_finish_barrier};
             }
 
             // Now we take back the remaining upstream. There should be no contention since
             // `rearranged` stream is already dropped.
-            let mut remaining_upstream = upstream.try_lock().unwrap();
+            let lock_id = LOCK_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            LOCK_CNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            println!{"lock B {}", lock_id};
+
+            defer!{println!{"unlock B {}", lock_id}};
+            defer!{
+                println!("current_cnt {}", LOCK_CNT.fetch_add(-1, std::sync::atomic::Ordering::Relaxed))
+            };
+            let remaining_upstream = upstream;
+            println!{"locked B {}", lock_id};
 
             // Consume remaining upstream.
             tracing::trace!(actor = self.actor_id, "begin to consume remaining upstream");
 
+            let mut msg_cnt_before_finish_barrier = 0;
+            let mut msg_cnt_after_finish_barrier = 0;
+            let mut msg_cnt_barrier = 0;
             #[for_await]
-            for msg in &mut *remaining_upstream {
+            for msg in &mut remaining_upstream.0.as_mut().unwrap() {
                 let msg: Message = msg?;
+                msg_cnt_before_finish_barrier += 1;
+                println!{"remaining_upstream msg_cnt_before_finish_barrier: {}", msg_cnt_before_finish_barrier};
                 finish_on_barrier(&msg);
+                if let Some(_) = msg.as_barrier() {
+                    msg_cnt_barrier += 1;
+                }
+                println!{"remaining_upstream msg_cnt_barrier: {}", msg_cnt_barrier};
+                
+                msg_cnt_after_finish_barrier +=1;
+                println!{"remaining_upstream msg_cnt_after_finish_barrier: {}", msg_cnt_after_finish_barrier};
                 yield msg;
+            }
+
             }
         } else {
             // If there's no need to consume the snapshot ...
@@ -260,26 +317,37 @@ impl RearrangedChainExecutor {
         }
     }
 
+
+    
+
     /// Rearrangement stream. The `upstream: U` will be taken out from the mutex, then put back
     /// after stopped.
     ///
     /// Check `execute_inner` for more details.
     #[try_stream(ok = RearrangedMessage, error = StreamExecutorError)]
-    async fn rearrange_barrier<U>(
-        upstream: Arc<Mutex<U>>,
+    async unsafe fn rearrange_barrier(
+        upstream: UpstreamRef,
         upstream_tx: mpsc::UnboundedSender<RearrangedMessage>,
         mut stop_rearrange_rx: oneshot::Receiver<()>,
-    ) where
-        U: MessageStream + std::marker::Unpin,
+    )
     {
         // There should be no contention since `upstream` is used only after this stream finishes.
-        let mut upstream = upstream.try_lock().unwrap();
+        let lock_id = LOCK_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        LOCK_CNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        println!{"lock A {}", lock_id};
 
+        defer!{println!{"unlock A {}", lock_id}};
+
+        defer!{
+            println!("current_cnt {}", LOCK_CNT.fetch_add(-1, std::sync::atomic::Ordering::Relaxed))
+        };
+        // let mut upstream = upstream.try_lock().unwrap();
+        println!("locked A");
         loop {
             use futures::future::{select, Either};
 
             // Stop when `stop_rearrange_rx` is received.
-            match select(&mut stop_rearrange_rx, upstream.next()).await {
+            match select(&mut stop_rearrange_rx, (upstream.0.as_mut()).unwrap().next()).await {
                 Either::Left((Ok(_), _)) => break,
                 Either::Left((Err(_e), _)) => {
                     return Err(StreamExecutorError::channel_closed("stop rearrange"))
@@ -303,6 +371,7 @@ impl RearrangedChainExecutor {
                 }
             }
         }
+
     }
 }
 

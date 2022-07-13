@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use futures::future::{select, Either};
 use futures::StreamExt;
@@ -79,7 +80,7 @@ pub async fn barrier_align(
                 Message::Barrier(_) => loop {
                     let start_time = Instant::now();
                     // received left barrier, waiting for right barrier
-                    match right.next().await.unwrap()? {
+                    match tokio::time::timeout(Duration::from_secs(10),right.next()).await.unwrap().unwrap()? {
                         Message::Chunk(chunk) => yield AlignedMessage::Right(chunk),
                         Message::Barrier(barrier) => {
                             yield AlignedMessage::Barrier(barrier);
@@ -97,7 +98,7 @@ pub async fn barrier_align(
                 Message::Barrier(_) => loop {
                     let start_time = Instant::now();
                     // received right barrier, waiting for left barrier
-                    match left.next().await.unwrap()? {
+                    match tokio::time::timeout(Duration::from_secs(10), left.next()).await.unwrap().unwrap()? {
                         Message::Chunk(chunk) => yield AlignedMessage::Left(chunk),
                         Message::Barrier(barrier) => {
                             yield AlignedMessage::Barrier(barrier);

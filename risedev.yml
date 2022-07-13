@@ -259,8 +259,8 @@ risedev:
 
   ci-3cn-1fe:
     - use: minio
-    - use: etcd
-      unsafe-no-fsync: true
+    # - use: etcd
+      # unsafe-no-fsync: true
     - use: meta-node
       unsafe-disable-recovery: true
     - use: compute-node
@@ -274,6 +274,8 @@ risedev:
       exporter-port: 1224
     - use: frontend
     - use: compactor
+    - use: prometheus
+    - use: grafana
 
   ci-kafka:
     - use: minio

@@ -96,6 +96,7 @@ impl ManagedBarrierState {
                     let result = CollectResult {
                         create_mview_progress,
                     };
+                    println!{"notifier send: epoch {} result{:?}", curr_epoch, result};
                     if collect_notifier.send(result).is_err() {
                         warn!(
                             "failed to notify barrier collection with epoch {}",

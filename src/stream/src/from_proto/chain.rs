@@ -50,5 +50,7 @@ impl ExecutorBuilder for ChainExecutorBuilder {
                 RearrangedChainExecutor::new(snapshot, mview, column_idxs, progress, schema);
             Ok(executor.boxed())
         }
+        // let executor = ChainExecutor::new(snapshot, mview, column_idxs, progress, schema);
+        //     Ok(executor.boxed())
     }
 }

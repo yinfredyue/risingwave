@@ -25,7 +25,6 @@ use crate::executor::{ExecutorInfo, Message, MessageStream};
 pub async fn epoch_check(info: Arc<ExecutorInfo>, input: impl MessageStream) {
     // Epoch number recorded from last barrier message.
     let mut last_epoch = None;
-
     #[for_await]
     for message in input {
         let message = message?;
