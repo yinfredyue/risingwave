@@ -13,11 +13,12 @@
 // limitations under the License.
 
 use std::sync::atomic::{self, AtomicI64};
+use std::time::Duration;
 
-use anyhow;
 use async_trait::async_trait;
 use etcd_client::{
-    Client, Compare, CompareOp, Error as EtcdError, GetOptions, KvClient, Txn, TxnOp,
+    Client as EtcdClient, Client, Compare, CompareOp, ConnectOptions, Error as EtcdError,
+    GetOptions, KvClient, Txn, TxnOp,
 };
 use futures::Future;
 use tokio::sync::Mutex;
@@ -166,8 +167,17 @@ impl Snapshot for EtcdSnapshot {
 }
 
 impl EtcdMetaStore {
-    pub fn new(client: Client) -> Self {
-        Self { client }
+    pub async fn new(endpoints: Vec<String>) -> Result<Self> {
+        let client = EtcdClient::connect(
+            endpoints.clone(),
+            Some(
+                ConnectOptions::default()
+                    .with_keep_alive(Duration::from_secs(3), Duration::from_secs(5)),
+            ),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to connect etcd ({:?}) {}", endpoints, e))?;
+        Ok(Self { client })
     }
 }
 

@@ -16,10 +16,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use etcd_client::{Client as EtcdClient, ConnectOptions};
 use itertools::Itertools;
 use prost::Message;
-use risingwave_common::error::ErrorCode::InternalError;
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_common::monitor::process_linux::monitor_process;
 use risingwave_pb::ddl_service::ddl_service_server::DdlServiceServer;
@@ -89,16 +87,7 @@ pub async fn rpc_serve(
 ) -> Result<(JoinHandle<()>, Sender<()>)> {
     match meta_store_backend {
         MetaStoreBackend::Etcd { endpoints } => {
-            let client = EtcdClient::connect(
-                endpoints,
-                Some(
-                    ConnectOptions::default()
-                        .with_keep_alive(Duration::from_secs(3), Duration::from_secs(5)),
-                ),
-            )
-            .await
-            .map_err(|e| RwError::from(InternalError(format!("failed to connect etcd {}", e))))?;
-            let meta_store = Arc::new(EtcdMetaStore::new(client));
+            let meta_store = Arc::new(EtcdMetaStore::new(endpoints).await?);
             rpc_serve_with_store(
                 meta_store,
                 address_info,

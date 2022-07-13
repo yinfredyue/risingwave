@@ -75,6 +75,13 @@ impl From<Error> for RwError {
     }
 }
 
+/// Internal error.
+impl From<anyhow::Error> for Error {
+    fn from(a: anyhow::Error) -> Self {
+        Error::Internal(a)
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
