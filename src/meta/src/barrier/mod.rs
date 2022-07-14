@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque, BTreeMap};
 use std::iter::once;
 use std::mem::take;
 use std::sync::Arc;
@@ -31,6 +31,7 @@ use risingwave_pb::common::worker_node::State::Running;
 use risingwave_pb::common::WorkerType;
 use risingwave_pb::data::Barrier;
 use risingwave_pb::meta::table_fragments::ActorState;
+use risingwave_pb::stream_service::barrier_complete_response::GroupedSstableInfo;
 use risingwave_pb::stream_service::{
     BarrierCompleteRequest, BarrierCompleteResponse, InjectBarrierRequest,
 };
@@ -691,34 +692,28 @@ where
                     
                     if resps.iter().all(|node| node.is_sync) {
                         //tracing::info!("commit{:?}",node.command_ctx.prev_epoch);
-                        let synced_ssts: Vec<(u64,Vec<LocalSstableInfo>)> = resps
+                        let mut btree_map = BTreeMap::<u64,HashSet<GroupedSstableInfo>>::default();
+                        resps
                             .iter()
                             .flat_map(|resp| resp.sycned_sstables.clone())
-                            .map(|grouped| {
-                                let group_vec = grouped.grouped_sstable_info.into_iter().map(|g|{
-                                    (g.compaction_group_id,
-                                    g.sst.expect("field not None"),)
-                                }).collect_vec();
-                                (grouped.epoch,group_vec)
-                            })
-                            .collect_vec();
+                            .for_each(|node|{
+                                let entry = btree_map.entry(node.epoch).or_insert(HashSet::<GroupedSstableInfo>::default());
+                                node.grouped_sstable_info.into_iter().for_each(|node1| {entry.insert(node1);});
+                            });
                         let mut vec = vec![];
-                        let mut flag = false;
-                        for i in synced_ssts{
+                        if !btree_map.contains_key(&node.command_ctx.prev_epoch.0){
+                            btree_map.insert(node.command_ctx.prev_epoch.0, HashSet::default());
+                        }
+                        while let Some((key,value)) = btree_map.pop_first(){
                             let hummock = self.hummock_manager.clone();
-                            if i.0 == node.command_ctx.prev_epoch.0{
-                                flag = true;
-                            }
-                            tracing::info!("commit{:?}",i.0);
+                            tracing::info!("commit{:?}",key);
+                            let sst_info = value.into_iter().map(|x| (x.compaction_group_id,x.sst.expect("field not None"))).collect_vec();
                             vec.push(async move{
                                 hummock
-                                    .commit_epoch(i.0, i.1).await
+                                    .commit_epoch(key, sst_info).await
                             })
-                        };
-                        try_join_all(vec).await?;
-                        if !flag{
-                            self.hummock_manager.commit_epoch(node.command_ctx.prev_epoch.0, vec![]).await?;
                         }
+                        try_join_all(vec).await?;
                         tracing::info!("commit over {:?}",node.command_ctx.prev_epoch);
                    }
                 }
