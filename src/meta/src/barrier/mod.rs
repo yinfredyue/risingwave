@@ -26,14 +26,13 @@ use prometheus::HistogramTimer;
 use risingwave_common::catalog::TableId;
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_common::util::epoch::{Epoch, INVALID_EPOCH};
-use risingwave_hummock_sdk::LocalSstableInfo;
 use risingwave_pb::common::worker_node::State::Running;
 use risingwave_pb::common::WorkerType;
 use risingwave_pb::data::Barrier;
 use risingwave_pb::meta::table_fragments::ActorState;
-use risingwave_pb::stream_service::barrier_complete_response::GroupedSstableInfo;
+use risingwave_pb::hummock::{SstableInfo as ProseSstableInf,KeyRange as ProseKeyRange};
 use risingwave_pb::stream_service::{
-    BarrierCompleteRequest, BarrierCompleteResponse, InjectBarrierRequest,
+    BarrierCompleteRequest, BarrierCompleteResponse as ProseBarrierCompleteResponse, InjectBarrierRequest,
 };
 use smallvec::SmallVec;
 use tokio::sync::mpsc::UnboundedSender;
@@ -65,6 +64,91 @@ mod recovery;
 
 type Scheduled = (Command, SmallVec<[Notifier; 1]>);
 
+#[derive(Clone, PartialEq,Hash,Eq)]
+pub struct GroupedSstableInfoAaa {
+    pub epoch: u64,
+    pub grouped_sstable_info: Vec<GroupedSstableInfo>,
+}
+#[derive(Clone, PartialEq,Hash,Eq)]
+pub struct GroupedSstableInfo {
+    pub compaction_group_id: u64,
+    pub sst:Option<SstableInfo>,
+}
+#[derive(Clone, PartialEq, Eq,Hash)]
+pub struct SstableInfo {
+    pub id: u64,
+    pub key_range: Option<KeyRange>,
+    pub file_size: u64,
+    pub table_ids: Vec<u32>,
+    pub unit_id: u64,
+}
+#[derive(Clone, PartialEq, Eq,Hash)]
+pub struct KeyRange {
+    pub left: Vec<u8>,
+    pub right: Vec<u8>,
+    pub inf: bool,
+}
+impl SstableInfo{
+    pub fn to_prost(self) -> ProseSstableInf{
+        let key_range = match self.key_range{
+            Some(k_range) =>{Some(ProseKeyRange{
+                left:k_range.left,
+                right:k_range.right,
+                inf:k_range.inf,
+            })},
+            None =>{None},
+        };
+        ProseSstableInf{
+            id:self.id,
+            key_range,
+            file_size:self.file_size,
+            table_ids:self.table_ids,
+            unit_id:self.unit_id,
+        }
+    }
+}
+impl GroupedSstableInfoAaa{
+    pub fn from_prost(barrier_complete_response: &ProseBarrierCompleteResponse) -> Vec<Self>{
+        let grouped_sstable_info_vec = barrier_complete_response.sycned_sstables.clone();
+        let mut return_vec = vec![];
+        for grouped_sstable_info_aaa in grouped_sstable_info_vec{
+            let mut grouped_sstable_info = vec![];
+            for group in grouped_sstable_info_aaa.grouped_sstable_info{
+                let sst = match group.sst{
+                    Some(sst_table_id) =>{
+                        let key_range = match sst_table_id.key_range{
+                            Some(k_r) => {
+                                Some(KeyRange{
+                                    left: k_r.left,
+                                    right: k_r.right,
+                                    inf: k_r.inf,
+                                })
+                            },
+                            None =>{None},
+                        };
+                        Some(SstableInfo{
+                            id:sst_table_id.id,
+                            key_range:key_range,
+                            file_size:sst_table_id.file_size,
+                            table_ids:sst_table_id.table_ids,
+                            unit_id:sst_table_id.unit_id,
+                        })
+                    },
+                    None =>{None},
+                };
+                grouped_sstable_info.push(GroupedSstableInfo{
+                    compaction_group_id:group.compaction_group_id,
+                    sst,
+                });
+            }
+            return_vec.push(GroupedSstableInfoAaa{
+                epoch:grouped_sstable_info_aaa.epoch,
+                grouped_sstable_info,
+            });
+        }
+        return_vec
+    }
+}
 /// A buffer or queue for scheduling barriers.
 struct ScheduledBarriers {
     buffer: RwLock<VecDeque<Scheduled>>,
@@ -256,7 +340,7 @@ where
     fn complete(
         &mut self,
         prev_epoch: u64,
-        result: Result<Vec<BarrierCompleteResponse>>,
+        result: Result<Vec<ProseBarrierCompleteResponse>>,
     ) -> VecDeque<EpochNode<S>> {
         // change state to complete, and wait for nodes with the smaller epoch to commit
         if let Some(node) = self
@@ -316,7 +400,7 @@ where
 /// The state and message of this barrier
 pub struct EpochNode<S: MetaStore> {
     timer: Option<HistogramTimer>,
-    result: Option<Result<Vec<BarrierCompleteResponse>>>,
+    result: Option<Result<Vec<ProseBarrierCompleteResponse>>>,
     state: BarrierEpochState,
     command_ctx: Arc<CommandContext<S>>,
     notifiers: SmallVec<[Notifier; 1]>,
@@ -507,7 +591,7 @@ where
     async fn inject_and_send_err(
         &self,
         command_context: Arc<CommandContext<S>>,
-        barrier_complete_tx: UnboundedSender<(u64, Result<Vec<BarrierCompleteResponse>>)>,
+        barrier_complete_tx: UnboundedSender<(u64, Result<Vec<ProseBarrierCompleteResponse>>)>,
     ) {
         let result = self
             .inject_barrier(command_context.clone(), barrier_complete_tx.clone())
@@ -524,7 +608,7 @@ where
     async fn inject_barrier(
         &self,
         command_context: Arc<CommandContext<S>>,
-        barrier_complete_tx: UnboundedSender<(u64, Result<Vec<BarrierCompleteResponse>>)>,
+        barrier_complete_tx: UnboundedSender<(u64, Result<Vec<ProseBarrierCompleteResponse>>)>,
     ) -> Result<()> {
         fail_point!("inject_barrier_err", |_| Err(RwError::from(
             ErrorCode::InternalError("inject_barrier_err".to_string(),)
@@ -624,7 +708,7 @@ where
     async fn barrier_complete_and_commit(
         &self,
         prev_epoch: u64,
-        result: Result<Vec<BarrierCompleteResponse>>,
+        result: Result<Vec<ProseBarrierCompleteResponse>>,
         state: &mut BarrierManagerState,
         tracker: &mut CreateMviewProgressTracker,
         checkpoint_control: &mut CheckpointControl<S>,
@@ -684,7 +768,7 @@ where
         tracker: &mut CreateMviewProgressTracker,
     ) -> Result<()> {
         if node.command_ctx.prev_epoch.0 != INVALID_EPOCH {
-            match &node.result.as_ref().expect("node result is None") {
+            match node.result.as_ref().expect("node result is None") {
                 Ok(resps) => {
                     // We must ensure all epochs are committed in ascending order,
                     // because the storage engine will
@@ -695,7 +779,7 @@ where
                         let mut btree_map = BTreeMap::<u64,HashSet<GroupedSstableInfo>>::default();
                         resps
                             .iter()
-                            .flat_map(|resp| resp.sycned_sstables.clone())
+                            .flat_map(|resp| GroupedSstableInfoAaa::from_prost(resp))
                             .for_each(|node|{
                                 let entry = btree_map.entry(node.epoch).or_insert(HashSet::<GroupedSstableInfo>::default());
                                 node.grouped_sstable_info.into_iter().for_each(|node1| {entry.insert(node1);});
@@ -707,7 +791,7 @@ where
                         while let Some((key,value)) = btree_map.pop_first(){
                             let hummock = self.hummock_manager.clone();
                             tracing::info!("commit{:?}",key);
-                            let sst_info = value.into_iter().map(|x| (x.compaction_group_id,x.sst.expect("field not None"))).collect_vec();
+                            let sst_info = value.into_iter().map(|x| (x.compaction_group_id,x.sst.expect("field not None").to_prost())).collect_vec();
                             vec.push(async move{
                                 hummock
                                     .commit_epoch(key, sst_info).await
