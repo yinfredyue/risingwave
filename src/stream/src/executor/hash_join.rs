@@ -383,11 +383,15 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         executor_id: u64,
         cond: Option<BoxedExpression>,
         op_info: String,
-        state_table_l: StateTable<S>,
-        state_table_r: StateTable<S>,
+        mut state_table_l: StateTable<S>,
+        mut state_table_r: StateTable<S>,
         is_append_only: bool,
         metrics: Arc<StreamingMetrics>,
     ) -> Self {
+        // TODO: enable sanity check for hash join executor <https://github.com/singularity-data/risingwave/issues/3887>
+        state_table_l.disable_sanity_check();
+        state_table_r.disable_sanity_check();
+
         let side_l_column_n = input_l.schema().len();
 
         let schema_fields = match T {
@@ -794,20 +798,18 @@ mod tests {
             .enumerate()
             .map(|(id, data_type)| ColumnDesc::unnamed(ColumnId::new(id as i32), data_type.clone()))
             .collect_vec();
-        let state_table_l = StateTable::new(
+        let state_table_l = StateTable::new_without_distribution(
             mem_state.clone(),
             TableId::new(0),
             column_descs.clone(),
             order_types.to_vec(),
-            None,
             pk_indices.to_vec(),
         );
-        let state_table_r = StateTable::new(
+        let state_table_r = StateTable::new_without_distribution(
             mem_state,
             TableId::new(1),
             column_descs,
             order_types.to_vec(),
-            None,
             pk_indices.to_vec(),
         );
         (state_table_l, state_table_r)

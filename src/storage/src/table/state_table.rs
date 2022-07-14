@@ -57,20 +57,7 @@ pub struct StateTableBase<S: StateStore, E: Encoding> {
 }
 
 impl<S: StateStore, E: Encoding> StateTableBase<S, E> {
-    /// Note: `dist_key_indices` is ignored, use `new_with[out]_distribution` instead.
-    // TODO: remove this after all state table usages are replaced by `new_with[out]_distribution`.
-    pub fn new(
-        store: S,
-        table_id: TableId,
-        columns: Vec<ColumnDesc>,
-        order_types: Vec<OrderType>,
-        _dist_key_indices: Option<Vec<usize>>,
-        pk_indices: Vec<usize>,
-    ) -> Self {
-        Self::new_without_distribution(store, table_id, columns, order_types, pk_indices)
-    }
-
-    /// Create a state table without distribution, used for singleton executors and tests.
+    /// Create a state table without distribution, used for singleton executors and unit tests.
     pub fn new_without_distribution(
         store: S,
         table_id: TableId,
@@ -109,6 +96,11 @@ impl<S: StateStore, E: Encoding> StateTableBase<S, E> {
                 distribution,
             ),
         }
+    }
+
+    /// Disable sanity check in this state table. Need revisit and fix behavior for all tables.
+    pub fn disable_sanity_check(&mut self) {
+        self.storage_table.disable_sanity_check();
     }
 
     /// Get the underlying [` StorageTableBase`]. Should only be used for tests.
@@ -166,7 +158,7 @@ impl<S: StateStore, E: Encoding> StateTableBase<S, E> {
         Ok(())
     }
 
-    /// Insert a row into state table. Must provide a full row of old value corresponding to the
+    /// Delete a row from state table. Must provide a full row of old value corresponding to the
     /// column desc of the table.
     pub fn delete(&mut self, old_value: Row) -> StorageResult<()> {
         let mut datums = vec![];
