@@ -1,0 +1,3 @@
+include ./tpch/views/q18.slt.part
+include ./tpch/q18.slt.part
+include ./tpch/drop_views.slt.part

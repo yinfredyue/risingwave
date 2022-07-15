@@ -83,6 +83,8 @@ struct HashAggExecutorExtra<S: StateStore> {
     key_indices: Vec<usize>,
 
     state_tables: Vec<StateTable<S>>,
+
+    executor_id: u64,
 }
 
 impl<K: HashKey, S: StateStore> Executor for HashAggExecutor<K, S> {
@@ -126,6 +128,7 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
                 schema,
                 pk_indices,
                 identity: format!("HashAggExecutor-{:X}", executor_id),
+                executor_id,
                 input_pk_indices: input_info.pk_indices,
                 input_schema: input_info.schema,
                 agg_calls,
@@ -415,23 +418,51 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
         let mut epoch = barrier.epoch.curr;
         yield Message::Barrier(barrier);
 
+        let actor_id = extra.executor_id >> 32;
+
         #[for_await]
         for msg in input {
             let msg = msg?;
             match msg {
                 Message::Chunk(chunk) => {
+                    let scope = risingwave_common::enter_scope(
+                        "hash_agg_apply_chunk",
+                        format!("actor_id={}, identity={}", actor_id, extra.identity),
+                    );
                     Self::apply_chunk(&mut extra, &mut state_map, chunk, epoch).await?;
                 }
                 Message::Barrier(barrier) => {
+                    let scope = risingwave_common::enter_scope(
+                        "hash_agg_flush_data",
+                        format!("actor_id={}, identity={}", actor_id, extra.identity),
+                    );
+
                     let next_epoch = barrier.epoch.curr;
                     assert_eq!(epoch, barrier.epoch.prev);
+
+                    drop(scope);
+
+                    let scope = risingwave_common::enter_scope(
+                        "hash_agg_yield_chunk",
+                        format!("actor_id={}, identity={}", actor_id, extra.identity),
+                    );
 
                     #[for_await]
                     for chunk in Self::flush_data(&mut extra, &mut state_map, epoch) {
                         yield Message::Chunk(chunk?);
                     }
 
+                    drop(scope);
+
+                    let scope = risingwave_common::enter_scope(
+                        "hash_agg_yield_barrier",
+                        format!("actor_id={}, identity={}", actor_id, extra.identity),
+                    );
+
                     yield Message::Barrier(barrier);
+
+                    drop(scope);
+
                     epoch = next_epoch;
                 }
             }

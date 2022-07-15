@@ -254,6 +254,7 @@ impl<S: StateStore> DynamicFilterExecutor<S> {
             input_l.execute(),
             input_r.execute(),
             self.actor_id,
+            "".to_string(),
             self.metrics.clone(),
         );
 

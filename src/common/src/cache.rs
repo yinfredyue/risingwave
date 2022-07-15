@@ -757,7 +757,7 @@ impl<K: LruKey, T: LruValue> LruCache<K, T> {
     }
 }
 
-impl<K: LruKey + Clone, T: LruValue> LruCache<K, T> {
+impl<K: LruKey + Clone + std::fmt::Debug, T: LruValue + 'static> LruCache<K, T> {
     pub async fn lookup_with_request_dedup<F, E, VC>(
         self: &Arc<Self>,
         hash: u64,
@@ -766,25 +766,54 @@ impl<K: LruKey + Clone, T: LruValue> LruCache<K, T> {
     ) -> Result<Result<CachableEntry<K, T>, E>, RecvError>
     where
         F: FnOnce() -> VC,
-        E: Error,
-        VC: Future<Output = Result<(T, usize), E>>,
+        E: Error + Send + 'static,
+        VC: Future<Output = Result<(T, usize), E>> + Send,
     {
+        let scope = crate::enter_scope(
+            "cache_lookup_for",
+            format!(
+                "key={:?} hash={} thread={:?}",
+                key,
+                hash,
+                std::thread::current().id()
+            ),
+        );
         match self.lookup_for_request(hash, key.clone()) {
             LookupResult::Cached(entry) => Ok(Ok(entry)),
             LookupResult::WaitPendingRequest(recv) => {
+                let scope = crate::enter_scope(
+                    "cache_lookup_wait_pending",
+                    format!(
+                        "key={:?} hash={} thread={:?}",
+                        key,
+                        hash,
+                        std::thread::current().id()
+                    ),
+                );
                 let entry = recv.await?;
                 Ok(Ok(entry))
             }
-            LookupResult::Miss => match fetch_value().await {
-                Ok((value, charge)) => {
-                    let entry = self.insert(key, hash, charge, value);
-                    Ok(Ok(entry))
+            LookupResult::Miss => {
+                let scope = crate::enter_scope(
+                    "cache_lookup_miss",
+                    format!(
+                        "key={:?} hash={} thread={:?}",
+                        key,
+                        hash,
+                        std::thread::current().id()
+                    ),
+                );
+                match fetch_value().await {
+                    Ok((value, charge)) => {
+                        let entry = self.insert(key, hash, charge, value);
+                        Ok(Ok(entry))
+                    }
+                    Err(e) => {
+                        self.clear_pending_request(&key, hash);
+                        Ok(Err(e))
+                    }
                 }
-                Err(e) => {
-                    self.clear_pending_request(&key, hash);
-                    Ok(Err(e))
-                }
-            },
+            }
         }
     }
 }

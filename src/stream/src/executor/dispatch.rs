@@ -349,8 +349,17 @@ impl StreamConsumer for DispatchExecutor {
             for msg in input {
                 let msg: Message = msg?;
                 let barrier = msg.as_barrier().cloned();
+                let scope = if let Some(_) = &barrier {
+                    Some(risingwave_common::enter_scope(
+                        "dispatch",
+                        format!("actor_id={}", self.inner.actor_id),
+                    ))
+                } else {
+                    None
+                };
                 self.inner.dispatch(msg).await?;
                 if let Some(barrier) = barrier {
+                    drop(scope);
                     yield barrier;
                 }
             }

@@ -63,3 +63,18 @@ pub mod test_prelude {
     pub use super::array::{DataChunkTestExt, StreamChunkTestExt};
     pub use super::catalog::test_utils::ColumnDescTestExt;
 }
+
+pub struct Scope(pub u64);
+
+pub fn enter_scope(id: &'static str, info: impl Into<String>) -> Scope {
+    use rand::Rng;
+    let scope = Scope(rand::thread_rng().gen());
+    println!("[ENTER][{}][{}] {}", scope.0, id, info.into());
+    scope
+}
+
+impl Drop for Scope {
+    fn drop(&mut self) {
+        println!("[EXIT][{}]", self.0);
+    }
+}

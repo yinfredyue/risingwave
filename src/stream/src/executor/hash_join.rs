@@ -507,12 +507,22 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
             input_l.execute(),
             input_r.execute(),
             self.actor_id,
+            self.identity.clone(),
             self.metrics.clone(),
         );
+        let identity = self.identity.clone();
         #[for_await]
         for msg in aligned_stream {
+            let scope = risingwave_common::enter_scope(
+                "hash_join_process_stream",
+                format!("actor_id={}, identity={}", self.actor_id, identity),
+            );
             match msg? {
                 AlignedMessage::Left(chunk) => {
+                    let scope = risingwave_common::enter_scope(
+                        "hash_join_process_left",
+                        format!("actor_id={}, identity={}", self.actor_id, identity),
+                    );
                     #[for_await]
                     for chunk in Self::eq_join_oneside::<{ SideType::Left }>(
                         &mut self.side_l,
@@ -521,7 +531,13 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                         &mut self.cond,
                         chunk,
                         self.append_only_optimize,
+                        self.actor_id,
+                        identity.clone(),
                     ) {
+                        let scope = risingwave_common::enter_scope(
+                            "hash_join_yield_left",
+                            format!("actor_id={}, identity={}", self.actor_id, identity),
+                        );
                         yield chunk.map(|v| match v {
                             Message::Chunk(chunk) => {
                                 Message::Chunk(chunk.reorder_columns(&self.output_indices))
@@ -531,6 +547,10 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                     }
                 }
                 AlignedMessage::Right(chunk) => {
+                    let scope = risingwave_common::enter_scope(
+                        "hash_join_process_right",
+                        format!("actor_id={}, identity={}", self.actor_id, identity),
+                    );
                     #[for_await]
                     for chunk in Self::eq_join_oneside::<{ SideType::Right }>(
                         &mut self.side_l,
@@ -539,7 +559,13 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                         &mut self.cond,
                         chunk,
                         self.append_only_optimize,
+                        self.actor_id,
+                        identity.clone(),
                     ) {
+                        let scope = risingwave_common::enter_scope(
+                            "hash_join_yield_right",
+                            format!("actor_id={}, identity={}", self.actor_id, identity),
+                        );
                         yield chunk.map(|v| match v {
                             Message::Chunk(chunk) => {
                                 Message::Chunk(chunk.reorder_columns(&self.output_indices))
@@ -549,11 +575,20 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                     }
                 }
                 AlignedMessage::Barrier(barrier) => {
+                    let scope = risingwave_common::enter_scope(
+                        "hash_join_flush_data",
+                        format!("identity={}", identity),
+                    );
                     self.flush_data().await?;
+                    drop(scope);
                     let epoch = barrier.epoch.curr;
                     self.side_l.ht.update_epoch(epoch);
                     self.side_r.ht.update_epoch(epoch);
                     self.epoch = epoch;
+                    let scope = risingwave_common::enter_scope(
+                        "hash_join_yield_barrier",
+                        format!("actor_id={}, identity={}", self.actor_id, identity),
+                    );
                     yield Message::Barrier(barrier);
                 }
             }
@@ -610,6 +645,8 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
         cond: &'a mut Option<BoxedExpression>,
         chunk: StreamChunk,
         append_only_optimize: bool,
+        actor_id: u64,
+        identity: String,
     ) {
         let chunk = chunk.compact()?;
         let (data_chunk, ops) = chunk.into_parts();
@@ -655,12 +692,26 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
             Ok(cond_match)
         };
 
+        let _scope = risingwave_common::enter_scope(
+            "hash_join_eq_join_oneside_point1",
+            format!("actor_id={}, identity={}", actor_id, identity),
+        );
+
         let keys = K::build(&side_update.key_indices, &data_chunk)?;
         for (idx, (row, op)) in data_chunk.rows().zip_eq(ops.iter()).enumerate() {
             let key = &keys[idx];
             let value = row.to_owned_row();
             let pk = row.row_by_indices(&side_update.pk_indices);
+
+            let scope = risingwave_common::enter_scope(
+                "hash_join_eq_join_oneside_point2",
+                format!("actor_id={}, identity={}", actor_id, identity),
+            );
+
             let matched_rows = Self::hash_eq_match(key, &mut side_match.ht).await?;
+
+            drop(scope);
+
             match *op {
                 Op::Insert | Op::UpdateInsert => {
                     let mut degree = 0;

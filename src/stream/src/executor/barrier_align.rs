@@ -35,6 +35,7 @@ pub async fn barrier_align(
     mut left: BoxedMessageStream,
     mut right: BoxedMessageStream,
     actor_id: u64,
+    identity: String,
     metrics: Arc<StreamingMetrics>,
 ) {
     let actor_id = actor_id.to_string();
@@ -76,12 +77,20 @@ pub async fn barrier_align(
             }
             Either::Left((Some(msg), _)) => match msg? {
                 Message::Chunk(chunk) => yield AlignedMessage::Left(chunk),
-                Message::Barrier(_) => loop {
+                Message::Barrier(left_barrier) => loop {
+                    let scope = risingwave_common::enter_scope(
+                        "hash_join_wait_right",
+                        format!(
+                            "actor_id={}, identity={}, barrier={:?}",
+                            actor_id, identity, left_barrier
+                        ),
+                    );
                     let start_time = Instant::now();
                     // received left barrier, waiting for right barrier
                     match right.next().await.unwrap()? {
                         Message::Chunk(chunk) => yield AlignedMessage::Right(chunk),
                         Message::Barrier(barrier) => {
+                            assert!(barrier == left_barrier);
                             yield AlignedMessage::Barrier(barrier);
                             metrics
                                 .join_barrier_align_duration
@@ -94,12 +103,20 @@ pub async fn barrier_align(
             },
             Either::Right((Some(msg), _)) => match msg? {
                 Message::Chunk(chunk) => yield AlignedMessage::Right(chunk),
-                Message::Barrier(_) => loop {
+                Message::Barrier(right_barrier) => loop {
+                    let scope = risingwave_common::enter_scope(
+                        "hash_join_wait_left",
+                        format!(
+                            "actor_id={}, identity={}, barrier={:?}",
+                            actor_id, identity, right_barrier
+                        ),
+                    );
                     let start_time = Instant::now();
                     // received right barrier, waiting for left barrier
                     match left.next().await.unwrap()? {
                         Message::Chunk(chunk) => yield AlignedMessage::Left(chunk),
                         Message::Barrier(barrier) => {
+                            assert!(barrier == right_barrier);
                             yield AlignedMessage::Barrier(barrier);
                             metrics
                                 .join_barrier_align_duration

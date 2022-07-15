@@ -184,6 +184,7 @@ impl<S: StateStore> Keyspace<S> {
         B: AsRef<[u8]> + Send,
     {
         let range = prefixed_range(range, &self.prefix);
+        let scope = risingwave_common::enter_scope("storage_inside_iter_with_range", "");
         let iter = self
             .store
             .iter(

@@ -31,7 +31,7 @@ const MIN_BUFFER_SIZE_PER_SHARD: usize = 256 * 1024 * 1024; // 256MB
 pub type TableHolder = CachableEntry<HummockSSTableId, Box<Sstable>>;
 
 // TODO: Define policy based on use cases (read / compaction / ...).
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum CachePolicy {
     /// Disable read cache and not fill the cache afterwards.
     Disable,
@@ -145,9 +145,14 @@ impl SstableStore {
         policy: CachePolicy,
         stats: &mut StoreLocalStatistic,
     ) -> HummockResult<BlockHolder> {
+        let scope = risingwave_common::enter_scope(
+            "sstable_store_get",
+            format!("id={:?} idx={} policy={:?}", sst.id, block_index, policy),
+        );
         stats.cache_data_block_total += 1;
         let fetch_block = async {
             stats.cache_data_block_miss += 1;
+
             let block_meta = sst
                 .meta
                 .block_metas
@@ -158,6 +163,10 @@ impl SstableStore {
                 size: block_meta.len as usize,
             };
             let data_path = self.get_sst_data_path(sst.id);
+            let scope = risingwave_common::enter_scope(
+                "object_store_read",
+                format!("data_path={} block_loc={:?}", data_path, block_loc),
+            );
             let block_data = self
                 .store
                 .read(&data_path, Some(block_loc))
@@ -231,6 +240,8 @@ impl SstableStore {
         load_data: bool,
         stats: &mut StoreLocalStatistic,
     ) -> HummockResult<TableHolder> {
+        let scope =
+            risingwave_common::enter_scope("sstable_store_load_table", format!("id={:?}", sst_id));
         let mut meta_data = None;
         loop {
             stats.cache_meta_block_total += 1;

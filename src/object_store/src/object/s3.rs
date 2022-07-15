@@ -48,6 +48,7 @@ impl ObjectStore for S3ObjectStore {
         fail_point!("s3_read_err", |_| Err(ObjectError::internal(
             "s3 read error"
         )));
+
         let req = self.client.get_object().bucket(&self.bucket).key(path);
 
         let range = match block_loc.as_ref() {
@@ -61,7 +62,17 @@ impl ObjectStore for S3ObjectStore {
             req
         };
 
+        let scope = risingwave_common::enter_scope(
+            "s3_read_p1",
+            format!("path={:?} block_loc={:?}", path, block_loc),
+        );
+
         let resp = req.send().await?;
+
+        let scope = risingwave_common::enter_scope(
+            "s3_read_p2",
+            format!("path={:?} block_loc={:?}", path, block_loc),
+        );
         let val = resp.body.collect().await?.into_bytes();
 
         if block_loc.is_some() && block_loc.as_ref().unwrap().size != val.len() {

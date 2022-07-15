@@ -120,13 +120,17 @@ impl BlockCache {
         f: F,
     ) -> HummockResult<BlockHolder>
     where
-        F: Future<Output = HummockResult<Box<Block>>>,
+        F: Future<Output = HummockResult<Box<Block>>> + Send,
     {
         let h = Self::hash(sst_id, block_idx);
         let key = (sst_id, block_idx);
         let entry = self
             .inner
             .lookup_with_request_dedup::<_, HummockError, _>(h, key, || async {
+                let scope = risingwave_common::enter_scope(
+                    "sstable_start_lookup",
+                    format!("key={:?} hash={}", key, h),
+                );
                 let block = f.await?;
                 let len = block.len();
                 Ok((block, len))

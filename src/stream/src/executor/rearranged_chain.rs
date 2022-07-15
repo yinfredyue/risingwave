@@ -179,6 +179,8 @@ impl RearrangedChainExecutor {
             let mut last_rearranged_epoch = create_epoch;
             let mut stop_rearrange_tx = Some(stop_rearrange_tx);
 
+            tracing::info!(actor = self.actor_id, "begin consuming rearranged message");
+
             // 6. Consume the merged `rearranged` stream.
             #[for_await]
             for rearranged_msg in &mut rearranged {
@@ -204,6 +206,7 @@ impl RearrangedChainExecutor {
 
                     // If we received a message, yield it.
                     RearrangedMessage::RearrangedBarrier(barrier) => {
+                        tracing::info!(actor = self.actor_id, "rearranged barrier: {:?}", barrier);
                         last_rearranged_epoch = barrier.epoch;
                         yield Message::Barrier(barrier);
                     }
@@ -213,7 +216,8 @@ impl RearrangedChainExecutor {
 
             // 7. Rearranged task finished.
             // The reason for finish must be that we told it to stop.
-            tracing::trace!(actor = self.actor_id, "rearranged task finished");
+            tracing::info!(actor = self.actor_id, "rearranged task finished");
+
             if stop_rearrange_tx.is_some() {
                 tracing::error!(actor = self.actor_id, "rearrangement finished passively");
             }
@@ -221,6 +225,7 @@ impl RearrangedChainExecutor {
             // 8. Consume remainings.
             let mut finish_on_barrier = |msg: &Message| {
                 if let Some(barrier) = msg.as_barrier() {
+                    tracing::info!(actor = self.actor_id, "remaining barrier: {:?}", barrier);
                     self.progress.finish(barrier.epoch.curr);
                 }
             };
@@ -240,7 +245,7 @@ impl RearrangedChainExecutor {
             let mut remaining_upstream = upstream.try_lock().unwrap();
 
             // Consume remaining upstream.
-            tracing::trace!(actor = self.actor_id, "begin to consume remaining upstream");
+            tracing::info!(actor = self.actor_id, "begin to consume remaining upstream");
 
             #[for_await]
             for msg in &mut *remaining_upstream {
