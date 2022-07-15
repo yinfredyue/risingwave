@@ -51,28 +51,30 @@ pub async fn barrier_align(
         };
         match select_result {
             Either::Left((None, _)) => {
-                // left stream end, passthrough right chunks
-                while let Some(msg) = right.next().await {
-                    match msg? {
-                        Message::Chunk(chunk) => yield AlignedMessage::Right(chunk),
-                        Message::Barrier(_) => {
-                            panic!("right barrier received while left stream end")
-                        }
-                    }
-                }
-                break;
+                // // left stream end, passthrough right chunks
+                // while let Some(msg) = right.next().await {
+                //     match msg? {
+                //         Message::Chunk(chunk) => yield AlignedMessage::Right(chunk),
+                //         Message::Barrier(_) => {
+                //             panic!("right barrier received while left stream end")
+                //         }
+                //     }
+                // }
+                // break;
+                panic!("left stream closed");
             }
             Either::Right((None, _)) => {
-                // right stream end, passthrough left chunks
-                while let Some(msg) = left.next().await {
-                    match msg? {
-                        Message::Chunk(chunk) => yield AlignedMessage::Left(chunk),
-                        Message::Barrier(_) => {
-                            panic!("left barrier received while right stream end")
-                        }
-                    }
-                }
-                break;
+                // // right stream end, passthrough left chunks
+                // while let Some(msg) = left.next().await {
+                //     match msg? {
+                //         Message::Chunk(chunk) => yield AlignedMessage::Left(chunk),
+                //         Message::Barrier(_) => {
+                //             panic!("left barrier received while right stream end")
+                //         }
+                //     }
+                // }
+                // break;
+                panic!("right stream closed");
             }
             Either::Left((Some(msg), _)) => match msg? {
                 Message::Chunk(chunk) => yield AlignedMessage::Left(chunk),
