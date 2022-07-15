@@ -19,13 +19,15 @@
 
 //! `LruCache` implementation port from github.com/facebook/rocksdb. The class `LruCache` is
 //! thread-safe, because every operation on cache will be protected by a spin lock.
+use std::backtrace::Backtrace;
 use std::collections::HashMap;
 use std::error::Error;
 use std::future::Future;
 use std::hash::Hash;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime};
 
 use parking_lot::Mutex;
 use tokio::sync::oneshot::error::RecvError;
@@ -757,6 +759,39 @@ impl<K: LruKey, T: LruValue> LruCache<K, T> {
     }
 }
 
+struct Guard {
+    msg: String,
+    enabled: Arc<AtomicBool>,
+}
+
+impl Guard {
+    fn new(msg: String) -> Self {
+        println!("{} start", msg);
+        let enabled = Arc::new(AtomicBool::new(true));
+        {
+            let enabled = enabled.clone();
+            let trace = Backtrace::capture().to_string();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                if enabled.load(Ordering::SeqCst) {
+                    println!("{}", trace);
+                }
+            });
+        }
+        Self { msg, enabled }
+    }
+}
+
+impl Drop for Guard {
+    fn drop(&mut self) {
+        if self.enabled.load(Ordering::SeqCst) {
+            panic!("{} cancelled", self.msg);
+        } else {
+            println!("{} ok", self.msg);
+        }
+    }
+}
+
 impl<K: LruKey + Clone + 'static, T: LruValue + 'static> LruCache<K, T> {
     pub async fn lookup_with_request_dedup<F, E, VC>(
         self: &Arc<Self>,
@@ -775,28 +810,47 @@ impl<K: LruKey + Clone + 'static, T: LruValue + 'static> LruCache<K, T> {
                 let entry = recv.await?;
                 Ok(Ok(entry))
             }
-            LookupResult::Miss => unsafe {
-                async_scoped::TokioScope::scope_and_collect(|scope| {
-                    scope.spawn(async {
-                        match fetch_value().await {
-                            Ok((value, charge)) => {
-                                let entry = self.insert(key, hash, charge, value);
-                                Ok(Ok(entry))
-                            }
-                            Err(e) => {
-                                self.clear_pending_request(&key, hash);
-                                Ok(Err(e))
-                            }
-                        }
-                    });
-                })
-                .await
-                .1
-                .into_iter()
-                .next()
-                .unwrap()
-                .unwrap()
-            },
+            // LookupResult::Miss => unsafe {
+            //     async_scoped::TokioScope::scope_and_collect(|scope| {
+            //         scope.spawn(async {
+            //             match fetch_value().await {
+            //                 Ok((value, charge)) => {
+            //                     let entry = self.insert(key, hash, charge, value);
+            //                     Ok(Ok(entry))
+            //                 }
+            //                 Err(e) => {
+            //                     self.clear_pending_request(&key, hash);
+            //                     Ok(Err(e))
+            //                 }
+            //             }
+            //         });
+            //     })
+            //     .await
+            //     .1
+            //     .into_iter()
+            //     .next()
+            //     .unwrap()
+            //     .unwrap()
+            LookupResult::Miss => {
+                let time = SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos();
+                let guard = Guard::new(format!("lookup_with_request_dedup: {:x}", time));
+                let result = fetch_value().await;
+                guard.enabled.store(false, Ordering::SeqCst);
+
+                match result {
+                    Ok((value, charge)) => {
+                        let entry = self.insert(key, hash, charge, value);
+                        Ok(Ok(entry))
+                    }
+                    Err(e) => {
+                        self.clear_pending_request(&key, hash);
+                        Ok(Err(e))
+                    }
+                }
+            }
         }
     }
 }
