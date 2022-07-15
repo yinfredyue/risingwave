@@ -147,7 +147,7 @@ pub(crate) async fn build_ordered_merge_iter<T: HummockIteratorType>(
 
 #[derive(Debug)]
 pub struct SharedBuffer {
-    uncommitted_data: KeyIndexedUncommittedData,
+    pub uncommitted_data: KeyIndexedUncommittedData,
     replicate_batches: BTreeMap<Vec<u8>, SharedBufferBatch>,
     // OrderIndex -> (task payload, task write batch size)
     uploading_tasks: HashMap<OrderIndex, (KeyIndexedUncommittedData, usize)>,
@@ -162,6 +162,7 @@ pub struct SharedBuffer {
 pub enum UploadTaskType {
     FlushWriteBatch,
     SyncEpoch,
+    UpSyncAll(BTreeMap<(Vec<u8>,usize),UncommittedData>),
 }
 
 #[derive(Debug)]
@@ -375,6 +376,10 @@ impl SharedBuffer {
                 swap(&mut self.uncommitted_data, &mut keyed_payload);
                 keyed_payload
             }
+            UploadTaskType::UpSyncAll(vec) => {
+                vec
+            }
+            
         };
 
         // The min order index in the task payload will be the order index of the payload.
@@ -455,7 +460,9 @@ impl SharedBuffer {
         for data in payload.into_values() {
             match data {
                 UncommittedData::Batch(batch) => {
-                    self.upload_batches_size -= batch.size();
+                    if self.upload_batches_size > batch.size(){
+                        self.upload_batches_size -= batch.size();
+                    }
                 }
                 UncommittedData::Sst(sst) => {
                     previous_sst.push(sst);
@@ -475,7 +482,7 @@ impl SharedBuffer {
         for data in self.uncommitted_data.values() {
             match data {
                 UncommittedData::Batch(_) => {
-                    //panic!("there should not be any batch when committing sst");
+                    panic!("there should not be any batch when committing sst");
                 }
                 UncommittedData::Sst((compaction_group_id, sst)) => {
                     assert!(

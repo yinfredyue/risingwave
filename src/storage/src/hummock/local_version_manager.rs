@@ -18,6 +18,10 @@ use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use std::mem::swap;
+use crate::hummock::shared_buffer::UncommittedData;
+use std::collections::BTreeMap;
+use crate::hummock::shared_buffer::KeyIndexedUncommittedData;
 use bytes::Bytes;
 use futures::future::{join_all, try_join_all};
 use itertools::Itertools;
@@ -41,7 +45,7 @@ use super::SstableStoreRef;
 use crate::hummock::conflict_detector::ConflictDetector;
 use crate::hummock::shared_buffer::shared_buffer_batch::SharedBufferItem;
 use crate::hummock::shared_buffer::shared_buffer_uploader::UploadTaskPayload;
-use crate::hummock::shared_buffer::UploadTaskType::{FlushWriteBatch, SyncEpoch};
+use crate::hummock::shared_buffer::UploadTaskType::{FlushWriteBatch, UpSyncAll};
 use crate::hummock::shared_buffer::{OrderIndex, SharedBufferEvent, WriteRequest};
 use crate::hummock::utils::validate_table_key_range;
 use crate::hummock::{
@@ -406,44 +410,48 @@ impl LocalVersionManager {
         last_epoch: Option<HummockEpoch>,
         stats: Option<Arc<StateStoreMetrics>>,
     ) -> HummockResult<()> {
-        let epochs: Vec<u64> = match epoch {
-            Some(epoch) => local
+        let (epoch,last_epoch) = match epoch {
+            Some(epoch) => (epoch,last_epoch.unwrap()),
+            None => (*local
                 .local_version
                 .read()
                 .iter_shared_buffer()
-                .filter(|(epoch_buffer, _)| {
-                    epoch_buffer <= &&epoch && last_epoch.unwrap() < **epoch_buffer
-                })
-                .map(|(epoch_buff, _)| *epoch_buff)
-                .collect(),
-            None => local
+                .max_by_key(|(x,_)| **x).unwrap().0
+                ,
+                *local
                 .local_version
                 .read()
                 .iter_shared_buffer()
-                .map(|(epoch, _)| *epoch)
-                .collect(),
+                .min_by_key(|(x,_)| **x).unwrap().0)
         };
-        tracing::info!("vec:{:?}",epochs);
-        let mut feature_vec = vec![];
-        for epoch in epochs {
-            let mut timer = None;
-            let local_version_m  = local.clone();
-            if let Some(stats) = stats.clone(){
-                timer = Some(stats.shared_buffer_to_l0_duration.start_timer());
-            }
-            feature_vec.push(async move {
-                let a = local_version_m.sync_shared_buffer_epoch(epoch).await;
-                if let Some(timer) = timer{
-                    timer.observe_duration();
-                };
-                a
-            })
+        //tracing::info!("vec:{:?}",epochs);
+        local.sync_shared_buffer_epoch(epoch,last_epoch).await?;
+        let mut timer = None;
+        if let Some(stats) = stats.clone(){
+            timer = Some(stats.shared_buffer_to_l0_duration.start_timer());
         }
-        try_join_all(feature_vec).await?;
+        timer.unwrap().observe_duration();
+
+        // let mut feature_vec = vec![];
+        // for epoch in epochs {
+        //     let mut timer = None;
+        //     let local_version_m  = local.clone();
+        //     if let Some(stats) = stats.clone(){
+        //         timer = Some(stats.shared_buffer_to_l0_duration.start_timer());
+        //     }
+        //     feature_vec.push(async move {
+        //         let a = local_version_m.sync_shared_buffer_epoch(epoch).await;
+        //         if let Some(timer) = timer{
+        //             timer.observe_duration();
+        //         };
+        //         a
+        //     })
+        // }
+        // try_join_all(feature_vec).await?;
         Ok(())
     }
 
-    pub async fn sync_shared_buffer_epoch(&self, epoch: HummockEpoch) -> HummockResult<()> {
+    pub async fn sync_shared_buffer_epoch(&self, epoch:HummockEpoch,last_epoch: HummockEpoch) -> HummockResult<()> {
         let (tx, rx) = oneshot::channel();
         self.buffer_tracker
             .send_event(SharedBufferEvent::SyncEpoch(epoch, tx));
@@ -451,11 +459,17 @@ impl LocalVersionManager {
         for result in join_all(join_handles).await {
             result.expect("should be able to join the flush handle")
         }
-        let (order_index, task_payload, task_write_batch_size) = match self
-            .local_version
-            .read()
+        //let version = self.local_version().write();
+        let keyed_payload = self.local_version.read().scan_shared_buffer(epoch, last_epoch).iter().map(|(_,value)| (*value).clone()).flat_map(|node| {
+            let mut keyed_payload = KeyIndexedUncommittedData::new();
+            swap(&mut node.write().uncommitted_data, &mut keyed_payload);
+            keyed_payload
+        })
+        .collect::<BTreeMap<(Vec<u8>,usize),UncommittedData>>();
+        let (order_index, task_payload, task_write_batch_size) = match
+            self.local_version.read()
             .get_shared_buffer(epoch)
-            .and_then(|shared_buffer| shared_buffer.write().new_upload_task(SyncEpoch))
+            .and_then(|shared_buffer| shared_buffer.write().new_upload_task(UpSyncAll(keyed_payload)))
         {
             Some(task) => task,
             None => {
@@ -463,14 +477,14 @@ impl LocalVersionManager {
                 return Ok(());
             }
         };
-
+        //drop(version);
         let ret = self
             .run_upload_task(order_index, epoch, task_payload, false)
             .await;
         tracing::info!(
-            "sync epoch {} finished. Task size {}",
+            "sync epoch {} finished.",
             epoch,
-            task_write_batch_size
+            //task_write_batch_size
         );
         // if let Some(conflict_detector) = self.write_conflict_detector.as_ref() {
         //     conflict_detector.archive_epoch(epoch);

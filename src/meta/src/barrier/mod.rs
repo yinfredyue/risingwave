@@ -776,28 +776,32 @@ where
                     
                     if resps.iter().all(|node| node.is_sync) {
                         //tracing::info!("commit{:?}",node.command_ctx.prev_epoch);
-                        let mut btree_map = BTreeMap::<u64,HashSet<GroupedSstableInfo>>::default();
+
+                        let mut set = HashSet::<GroupedSstableInfo>::default();
+                        //let mut btree_map = BTreeMap::<u64,HashSet<GroupedSstableInfo>>::default();
                         resps
                             .iter()
                             .flat_map(|resp| GroupedSstableInfoAaa::from_prost(resp))
                             .for_each(|node|{
-                                let entry = btree_map.entry(node.epoch).or_insert(HashSet::<GroupedSstableInfo>::default());
-                                node.grouped_sstable_info.into_iter().for_each(|node1| {entry.insert(node1);});
+                                //let entry = btree_map.entry(node.epoch).or_insert(HashSet::<GroupedSstableInfo>::default());
+                                node.grouped_sstable_info.into_iter().for_each(|node1| {set.insert(node1);});
                             });
-                        let mut vec = vec![];
-                        if !btree_map.contains_key(&node.command_ctx.prev_epoch.0){
-                            btree_map.insert(node.command_ctx.prev_epoch.0, HashSet::default());
-                        }
-                        while let Some((key,value)) = btree_map.pop_first(){
-                            let hummock = self.hummock_manager.clone();
-                            //tracing::info!("commit{:?}",key);
-                            let sst_info = value.into_iter().map(|x| (x.compaction_group_id,x.sst.expect("field not None").to_prost())).collect_vec();
-                            vec.push(async move{
-                                hummock
-                                    .commit_epoch(key, sst_info).await
-                            })
-                        }
-                        try_join_all(vec).await?;
+                        //let mut vec = vec![];
+                        // if !btree_map.contains_key(&node.command_ctx.prev_epoch.0){
+                        //     btree_map.insert(node.command_ctx.prev_epoch.0, HashSet::default());
+                        // }
+                        // while let Some((key,value)) = btree_map.pop_first(){
+                        //     let hummock = self.hummock_manager.clone();
+                        //     //tracing::info!("commit{:?}",key);
+                        //     let sst_info = value.into_iter().map(|x| (x.compaction_group_id,x.sst.expect("field not None").to_prost())).collect_vec();
+                        //     vec.push(async move{
+                        //         hummock
+                        //             .commit_epoch(key, sst_info).await
+                        //     })
+                        // }
+                        // try_join_all(vec).await?;
+                        let sst_info = set.into_iter().map(|x| (x.compaction_group_id,x.sst.expect("field not None").to_prost())).collect_vec();
+                        self.hummock_manager.commit_epoch(node.command_ctx.prev_epoch.0,sst_info).await?;
                         //tracing::info!("commit over {:?}",node.command_ctx.prev_epoch);
                    }
                 }

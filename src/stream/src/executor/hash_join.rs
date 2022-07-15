@@ -549,11 +549,11 @@ impl<K: HashKey, S: StateStore, const T: JoinTypePrimitive> HashJoinExecutor<K, 
                     }
                 }
                 AlignedMessage::Barrier(barrier) => {
-                    self.flush_data().await?;
-                    let epoch = barrier.epoch.curr;
-                    self.side_l.ht.update_epoch(epoch);
-                    self.side_r.ht.update_epoch(epoch);
-                    self.epoch = epoch;
+                        self.flush_data().await?;
+                        let epoch = barrier.epoch.curr;
+                        self.side_l.ht.update_epoch(epoch);
+                        self.side_r.ht.update_epoch(epoch);
+                        self.epoch = epoch;
                     yield Message::Barrier(barrier);
                 }
             }
