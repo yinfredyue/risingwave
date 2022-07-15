@@ -16,9 +16,9 @@ use futures::{pin_mut, StreamExt};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use risingwave_common::array::{Row, RowRef};
-use risingwave_common::catalog::{ColumnDesc, Schema, TableId};
+use risingwave_common::catalog::{ColumnDesc, Schema};
 use risingwave_common::error::Result;
-use risingwave_common::util::sort_util::{OrderPair, OrderType};
+use risingwave_common::util::sort_util::OrderPair;
 use risingwave_storage::table::state_table::StateTable;
 use risingwave_storage::StateStore;
 
@@ -40,11 +40,6 @@ pub struct LookupExecutorParams<S: StateStore> {
     /// `MaterializeExecutor`.
     pub stream: Box<dyn Executor>,
 
-    /// The state store and table id for arrangement. [`LookupExecutor`] will use these to
-    /// construct state table to read the state of arrangement side.
-    pub arrangement_store: S,
-
-    pub arrangement_table_id: TableId,
     /// Should be the same as [`ColumnDesc`] in the arrangement.
     ///
     /// From the perspective of arrangements, `arrangement_col_descs` include all columns of the
@@ -104,6 +99,8 @@ pub struct LookupExecutorParams<S: StateStore> {
 
     /// The join keys on the arrangement side.
     pub arrange_join_key_indices: Vec<usize>,
+
+    pub state_table: StateTable<S>,
 }
 
 impl<S: StateStore> LookupExecutor<S> {
@@ -111,8 +108,6 @@ impl<S: StateStore> LookupExecutor<S> {
         let LookupExecutorParams {
             arrangement,
             stream,
-            arrangement_store,
-            arrangement_table_id,
             arrangement_col_descs,
             arrangement_order_rules,
             pk_indices,
@@ -121,6 +116,7 @@ impl<S: StateStore> LookupExecutor<S> {
             arrange_join_key_indices,
             schema: output_schema,
             column_mapping,
+            state_table,
         } = params;
 
         let output_column_length = stream.schema().len() + arrangement.schema().len();
@@ -193,15 +189,6 @@ impl<S: StateStore> LookupExecutor<S> {
             "mismatched output schema"
         );
 
-        // `arrangement_pk_indices` indicates the primary key in arrangement, usually row_id. Chain
-        // with join key to get relational pk. arrangement: [ a (join key/sort key) | b
-        // (value) | row_id]. The arrangement pk_indices is [2], arrange_join_key_indices will be
-        // [0], so relational pk will be [0, 2].
-        let relational_pk_indices = arrange_join_key_indices
-            .clone()
-            .into_iter()
-            .chain(arrangement_pk_indices.clone().into_iter())
-            .collect_vec();
         Self {
             chunk_data_types,
             schema: output_schema,
@@ -215,20 +202,13 @@ impl<S: StateStore> LookupExecutor<S> {
                 col_types: stream_data_types,
             },
             arrangement: ArrangeJoinSide {
-                pk_indices: arrangement_pk_indices.clone(),
+                pk_indices: arrangement_pk_indices,
                 col_types: arrangement_data_types,
-                col_descs: arrangement_col_descs.clone(),
+                col_descs: arrangement_col_descs,
                 order_rules: arrangement_order_rules,
                 key_indices: arrange_join_key_indices,
                 use_current_epoch,
-                state_table: StateTable::new(
-                    arrangement_store,
-                    arrangement_table_id,
-                    arrangement_col_descs,
-                    vec![OrderType::Ascending; relational_pk_indices.len()],
-                    Some(arrangement_pk_indices),
-                    relational_pk_indices,
-                ),
+                state_table,
             },
             column_mapping,
             key_indices_mapping,

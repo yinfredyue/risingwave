@@ -111,6 +111,7 @@ where
             hummock_manager.delete_versions(&versions_to_delete).await?;
             versions_to_delete.clear();
         }
+        hummock_manager.proceed_version_checkpoint().await.unwrap();
         Ok(vacuum_count as u64)
     }
 
@@ -266,7 +267,7 @@ mod tests {
             compactor_manager.clone(),
         ));
 
-        let pinned_version = hummock_manager
+        hummock_manager
             .pin_version(context_id, u64::MAX)
             .await
             .unwrap();
@@ -278,10 +279,7 @@ mod tests {
                 .unwrap(),
             0
         );
-        hummock_manager
-            .unpin_version(context_id, vec![pinned_version.id])
-            .await
-            .unwrap();
+        hummock_manager.unpin_version(context_id).await.unwrap();
 
         add_test_tables(hummock_manager.as_ref(), context_id).await;
         // Current state: {v0: [], v1: [test_tables], v2: [test_tables_2, to_delete:test_tables],

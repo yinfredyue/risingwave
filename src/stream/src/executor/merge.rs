@@ -15,7 +15,6 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use futures_async_stream::for_await;
 use madsim::time::Instant;
@@ -30,13 +29,14 @@ use tonic::Streaming;
 use super::error::StreamExecutorError;
 use super::*;
 use crate::executor::monitor::StreamingMetrics;
-use crate::task::UpDownActorIds;
+use crate::task::{UpDownActorIds, UpDownFragmentIds};
 
 /// Receive data from `gRPC` and forwards to `MergerExecutor`/`ReceiverExecutor`
 pub struct RemoteInput {
     stream: Streaming<GetStreamResponse>,
     sender: Sender<Message>,
     up_down_ids: UpDownActorIds,
+    up_down_frag: UpDownFragmentIds,
     metrics: Arc<StreamingMetrics>,
 }
 
@@ -46,14 +46,18 @@ impl RemoteInput {
     pub async fn create(
         client: ComputeClient,
         up_down_ids: UpDownActorIds,
+        up_down_frag: UpDownFragmentIds,
         sender: Sender<Message>,
         metrics: Arc<StreamingMetrics>,
     ) -> Result<Self> {
-        let stream = client.get_stream(up_down_ids.0, up_down_ids.1).await?;
+        let stream = client
+            .get_stream(up_down_ids.0, up_down_ids.1, up_down_frag.0, up_down_frag.1)
+            .await?;
         Ok(Self {
             stream,
             sender,
             up_down_ids,
+            up_down_frag,
             metrics,
         })
     }
@@ -61,6 +65,9 @@ impl RemoteInput {
     pub async fn run(self) {
         let up_actor_id = self.up_down_ids.0.to_string();
         let down_actor_id = self.up_down_ids.1.to_string();
+        let up_fragment_id = self.up_down_frag.0.to_string();
+        let down_fragment_id = self.up_down_frag.1.to_string();
+
         let mut rr = 0;
         const SAMPLING_FREQUENCY: u64 = 100;
 
@@ -72,6 +79,11 @@ impl RemoteInput {
                     self.metrics
                         .exchange_recv_size
                         .with_label_values(&[&up_actor_id, &down_actor_id])
+                        .inc_by(bytes as u64);
+
+                    self.metrics
+                        .exchange_frag_recv_size
+                        .with_label_values(&[&up_fragment_id, &down_fragment_id])
                         .inc_by(bytes as u64);
 
                     // add deserialization duration metric with given sampling frequency
@@ -157,7 +169,6 @@ impl MergeExecutor {
     }
 }
 
-#[async_trait]
 impl Executor for MergeExecutor {
     fn execute(self: Box<Self>) -> BoxedMessageStream {
         let upstreams = self.upstreams;
@@ -293,7 +304,7 @@ mod tests {
     use itertools::Itertools;
     use madsim::collections::HashSet;
     use risingwave_common::array::{Op, StreamChunk};
-    use risingwave_pb::data::StreamMessage;
+    use risingwave_pb::stream_plan::StreamMessage;
     use risingwave_pb::task_service::exchange_service_server::{
         ExchangeService, ExchangeServiceServer,
     };
@@ -415,7 +426,7 @@ mod tests {
             tx.send(Ok(GetStreamResponse {
                 message: Some(StreamMessage {
                     stream_message: Some(
-                        risingwave_pb::data::stream_message::StreamMessage::StreamChunk(
+                        risingwave_pb::stream_plan::stream_message::StreamMessage::StreamChunk(
                             stream_chunk,
                         ),
                     ),
@@ -428,7 +439,7 @@ mod tests {
             tx.send(Ok(GetStreamResponse {
                 message: Some(StreamMessage {
                     stream_message: Some(
-                        risingwave_pb::data::stream_message::StreamMessage::Barrier(
+                        risingwave_pb::stream_plan::stream_message::StreamMessage::Barrier(
                             barrier.to_protobuf(),
                         ),
                     ),
@@ -469,6 +480,7 @@ mod tests {
         let input_handle = tokio::spawn(async move {
             let remote_input = RemoteInput::create(
                 ComputeClient::new(addr.into()).await.unwrap(),
+                (0, 0),
                 (0, 0),
                 tx,
                 Arc::new(StreamingMetrics::unused()),

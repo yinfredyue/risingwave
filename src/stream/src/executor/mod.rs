@@ -27,18 +27,21 @@ use risingwave_common::buffer::Bitmap;
 use risingwave_common::catalog::Schema;
 use risingwave_common::error::{Result, ToRwResult};
 use risingwave_common::types::DataType;
-use risingwave_connector::{ConnectorState, SplitImpl};
-use risingwave_pb::common::ActorInfo;
-use risingwave_pb::data::barrier::Mutation as ProstMutation;
-use risingwave_pb::data::stream_message::StreamMessage;
-use risingwave_pb::data::{
-    AddMutation, Barrier as ProstBarrier, DispatcherMutation, Epoch as ProstEpoch,
-    SourceChangeSplitMutation, StopMutation, StreamMessage as ProstStreamMessage, UpdateMutation,
+use risingwave_connector::source::{ConnectorState, SplitImpl};
+use risingwave_pb::data::Epoch as ProstEpoch;
+use risingwave_pb::stream_plan::add_mutation::Dispatchers;
+use risingwave_pb::stream_plan::barrier::Mutation as ProstMutation;
+use risingwave_pb::stream_plan::stream_message::StreamMessage;
+use risingwave_pb::stream_plan::update_mutation::DispatcherUpdate;
+use risingwave_pb::stream_plan::{
+    AddMutation, Barrier as ProstBarrier, Dispatcher as ProstDispatcher, PauseMutation,
+    ResumeMutation, SourceChangeSplitMutation, StopMutation, StreamMessage as ProstStreamMessage,
+    UpdateMutation,
 };
 use smallvec::SmallVec;
 use tracing::trace_span;
 
-use crate::task::{ActorId, DispatcherId, ENABLE_BARRIER_AGGREGATION};
+use crate::task::{ActorId, ENABLE_BARRIER_AGGREGATION};
 
 mod actor;
 pub mod aggregation;
@@ -47,6 +50,7 @@ mod batch_query;
 mod chain;
 mod debug;
 pub mod dispatch;
+mod dynamic_filter;
 mod error;
 mod expand;
 mod filter;
@@ -67,9 +71,9 @@ pub mod receiver;
 mod simple;
 mod sink;
 mod source;
-mod top_n;
 mod top_n_appendonly;
 mod top_n_executor;
+mod top_n_new;
 mod union;
 
 #[cfg(test)]
@@ -82,6 +86,7 @@ pub use batch_query::BatchQueryExecutor;
 pub use chain::ChainExecutor;
 pub use debug::DebugExecutor;
 pub use dispatch::DispatchExecutor;
+pub use dynamic_filter::DynamicFilterExecutor;
 pub use expand::ExpandExecutor;
 pub use filter::FilterExecutor;
 pub use global_simple_agg::GlobalSimpleAggExecutor;
@@ -97,9 +102,10 @@ pub use project::ProjectExecutor;
 pub use rearranged_chain::RearrangedChainExecutor;
 use risingwave_pb::source::{ConnectorSplit, ConnectorSplits};
 use simple::{SimpleExecutor, SimpleExecutorWrapper};
+pub use sink::SinkExecutor;
 pub use source::*;
-pub use top_n::TopNExecutor;
 pub use top_n_appendonly::AppendOnlyTopNExecutor;
+pub use top_n_new::TopNExecutorNew;
 pub use union::UnionExecutor;
 
 pub type BoxedExecutor = Box<dyn Executor>;
@@ -167,18 +173,19 @@ pub const INVALID_EPOCH: u64 = 0;
 
 pub trait ExprFn = Fn(&DataChunk) -> Result<Bitmap> + Send + Sync + 'static;
 
-#[derive(Debug, PartialEq, Clone, Default)]
-pub struct AddOutput {
-    pub map: HashMap<(ActorId, DispatcherId), Vec<ActorInfo>>,
-    pub splits: HashMap<ActorId, Vec<SplitImpl>>,
-}
-
+/// See [`risingwave_pb::stream_plan::barrier::Mutation`] for the semantics of each mutation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Mutation {
     Stop(HashSet<ActorId>),
-    UpdateOutputs(HashMap<(ActorId, DispatcherId), Vec<ActorInfo>>),
-    AddOutput(AddOutput),
+    Update(HashMap<ActorId, DispatcherUpdate>),
+    Add {
+        adds: HashMap<ActorId, Vec<ProstDispatcher>>,
+        // TODO: remove this and use `SourceChangesSplit` after we support multiple mutations.
+        splits: HashMap<ActorId, Vec<SplitImpl>>,
+    },
     SourceChangeSplit(HashMap<ActorId, ConnectorState>),
+    Pause,
+    Resume,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -266,13 +273,13 @@ impl Barrier {
         matches!(self.mutation.as_deref(), Some(Mutation::Stop(actors)) if actors.contains(&actor_id))
     }
 
-    pub fn is_to_add_output(&self, actor_id: ActorId) -> bool {
+    pub fn is_to_add_dispatcher(&self, actor_id: ActorId) -> bool {
         matches!(
             self.mutation.as_deref(),
-            Some(Mutation::AddOutput(map)) if map.map
+            Some(Mutation::Add {adds, ..}) if adds
                 .values()
                 .flatten()
-                .any(|info| info.actor_id == actor_id)
+                .any(|dispatcher| dispatcher.downstream_actor_id.contains(&actor_id))
         )
     }
 }
@@ -295,26 +302,21 @@ impl Mutation {
     fn to_protobuf(&self) -> ProstMutation {
         match self {
             Mutation::Stop(actors) => ProstMutation::Stop(StopMutation {
-                actors: actors.iter().cloned().collect::<Vec<_>>(),
+                actors: actors.iter().copied().collect::<Vec<_>>(),
             }),
-            Mutation::UpdateOutputs(updates) => ProstMutation::Update(UpdateMutation {
-                mutations: updates
-                    .iter()
-                    .map(|(&(actor_id, dispatcher_id), actors)| DispatcherMutation {
-                        actor_id,
-                        dispatcher_id,
-                        info: actors.clone(),
-                    })
-                    .collect(),
+            Mutation::Update(updates) => ProstMutation::Update(UpdateMutation {
+                actor_dispatcher_update: updates.clone(),
             }),
-            Mutation::AddOutput(adds) => ProstMutation::Add(AddMutation {
-                mutations: adds
-                    .map
+            Mutation::Add { adds, .. } => ProstMutation::Add(AddMutation {
+                actor_dispatchers: adds
                     .iter()
-                    .map(|(&(actor_id, dispatcher_id), actors)| DispatcherMutation {
-                        actor_id,
-                        dispatcher_id,
-                        info: actors.clone(),
+                    .map(|(&actor_id, dispatchers)| {
+                        (
+                            actor_id,
+                            Dispatchers {
+                                dispatchers: dispatchers.clone(),
+                            },
+                        )
                     })
                     .collect(),
                 ..Default::default()
@@ -339,6 +341,8 @@ impl Mutation {
                         .collect(),
                 })
             }
+            Mutation::Pause => ProstMutation::Pause(PauseMutation {}),
+            Mutation::Resume => ProstMutation::Resume(ResumeMutation {}),
         }
     }
 
@@ -348,30 +352,19 @@ impl Mutation {
                 Mutation::Stop(HashSet::from_iter(stop.get_actors().clone()))
             }
 
-            ProstMutation::Update(update) => Mutation::UpdateOutputs(
-                update
-                    .mutations
+            ProstMutation::Update(update) => {
+                Mutation::Update(update.actor_dispatcher_update.clone())
+            }
+
+            ProstMutation::Add(add) => Mutation::Add {
+                adds: add
+                    .actor_dispatchers
                     .iter()
-                    .map(|mutation| {
-                        (
-                            (mutation.actor_id, mutation.dispatcher_id),
-                            mutation.get_info().clone(),
-                        )
-                    })
-                    .collect::<HashMap<(ActorId, DispatcherId), Vec<ActorInfo>>>(),
-            ),
-            ProstMutation::Add(adds) => Mutation::AddOutput(AddOutput {
-                map: adds
-                    .mutations
-                    .iter()
-                    .map(|mutation| {
-                        (
-                            (mutation.actor_id, mutation.dispatcher_id),
-                            mutation.get_info().clone(),
-                        )
-                    })
-                    .collect::<HashMap<(ActorId, DispatcherId), Vec<ActorInfo>>>(),
-                splits: adds
+                    .map(|(&actor_id, dispatchers)| (actor_id, dispatchers.dispatchers.clone()))
+                    .collect(),
+                // TODO: remove this and use `SourceChangesSplit` after we support multiple
+                // mutations.
+                splits: add
                     .actor_splits
                     .iter()
                     .map(|(&actor_id, splits)| {
@@ -385,7 +378,8 @@ impl Mutation {
                         )
                     })
                     .collect(),
-            }),
+            },
+
             ProstMutation::Splits(s) => {
                 let mut change_splits: Vec<(ActorId, ConnectorState)> =
                     Vec::with_capacity(s.actor_splits.len());
@@ -412,6 +406,8 @@ impl Mutation {
                         .collect::<HashMap<ActorId, ConnectorState>>(),
                 )
             }
+            ProstMutation::Pause(_) => Mutation::Pause,
+            ProstMutation::Resume(_) => Mutation::Resume,
         };
         Ok(mutation)
     }

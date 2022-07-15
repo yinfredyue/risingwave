@@ -110,10 +110,15 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
         pk_indices: PkIndices,
         executor_id: u64,
         key_indices: Vec<usize>,
-        state_tables: Vec<StateTable<S>>,
+        mut state_tables: Vec<StateTable<S>>,
     ) -> Result<Self> {
         let input_info = input.info();
         let schema = generate_agg_schema(input.as_ref(), &agg_calls, Some(&key_indices));
+
+        // TODO: enable sanity check for hash agg executor <https://github.com/singularity-data/risingwave/issues/3885>
+        for state_table in &mut state_tables {
+            state_table.disable_sanity_check();
+        }
 
         Ok(Self {
             input,
@@ -573,7 +578,7 @@ mod tests {
         let append_only = false;
         let agg_calls = vec![
             AggCall {
-                kind: AggKind::RowCount,
+                kind: AggKind::Count,
                 args: AggArgs::None,
                 return_type: DataType::Int64,
                 append_only,
@@ -660,7 +665,7 @@ mod tests {
         let append_only = false;
         let agg_calls = vec![
             AggCall {
-                kind: AggKind::RowCount,
+                kind: AggKind::Count,
                 args: AggArgs::None,
                 return_type: DataType::Int64,
                 append_only,
@@ -755,7 +760,7 @@ mod tests {
         let keys = vec![0];
         let agg_calls = vec![
             AggCall {
-                kind: AggKind::RowCount,
+                kind: AggKind::Count,
                 args: AggArgs::None,
                 return_type: DataType::Int64,
                 append_only: false,
@@ -844,7 +849,7 @@ mod tests {
         let append_only = true;
         let agg_calls = vec![
             AggCall {
-                kind: AggKind::RowCount,
+                kind: AggKind::Count,
                 args: AggArgs::None,
                 return_type: DataType::Int64,
                 append_only,

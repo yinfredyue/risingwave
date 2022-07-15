@@ -36,6 +36,7 @@
 #![feature(drain_filter)]
 #![feature(custom_test_frameworks)]
 #![feature(lint_reasons)]
+#![feature(map_try_insert)]
 #![cfg_attr(coverage, feature(no_coverage))]
 #![test_runner(risingwave_test_runner::test_runner::run_failpont_tests)]
 
@@ -103,6 +104,10 @@ pub struct MetaNodeOpts {
     #[clap(long)]
     disable_recovery: bool,
 
+    /// enable migrate actors when recovery, disable by default.
+    #[clap(long)]
+    enable_migrate: bool,
+
     #[clap(long, default_value = "10")]
     meta_leader_lease_secs: u64,
 
@@ -163,6 +168,7 @@ pub fn start(opts: MetaNodeOpts) -> Pin<Box<dyn Future<Output = ()> + Send>> {
             opts.meta_leader_lease_secs,
             MetaOpts {
                 enable_recovery: !opts.disable_recovery,
+                enable_migrate: opts.enable_migrate,
                 checkpoint_interval,
                 max_idle_ms,
                 in_flight_barrier_nums,
