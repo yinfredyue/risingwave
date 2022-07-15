@@ -459,7 +459,7 @@ impl LocalVersionManager {
         {
             Some(task) => task,
             None => {
-                tracing::info!("sync epoch {} has no more task to do", epoch);
+                //tracing::info!("sync epoch {} has no more task to do", epoch);
                 return Ok(());
             }
         };

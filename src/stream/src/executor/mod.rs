@@ -235,6 +235,7 @@ pub struct Barrier {
     pub epoch: Epoch,
     pub mutation: Option<Arc<Mutation>>,
     pub span: tracing::Span,
+    pub is_sync: bool,
 }
 
 impl Default for Barrier {
@@ -243,6 +244,7 @@ impl Default for Barrier {
             span: tracing::Span::none(),
             epoch: Epoch::default(),
             mutation: None,
+            is_sync: true,
         }
     }
 }
@@ -481,7 +483,7 @@ impl Mutation {
 impl Barrier {
     pub fn to_protobuf(&self) -> ProstBarrier {
         let Barrier {
-            epoch, mutation, ..
+            epoch, mutation, is_sync,..
         }: Barrier = self.clone();
         ProstBarrier {
             epoch: Some(ProstEpoch {
@@ -490,7 +492,7 @@ impl Barrier {
             }),
             mutation: mutation.map(|mutation| mutation.to_protobuf()),
             span: vec![],
-            is_sync: false,
+            is_sync,
         }
     }
 
@@ -502,6 +504,7 @@ impl Barrier {
             .transpose()?
             .map(Arc::new);
         let epoch = prost.get_epoch().unwrap();
+        let is_sync = prost.is_sync;
         Ok(Barrier {
             span: if ENABLE_BARRIER_AGGREGATION {
                 trace_span!("barrier", epoch = ?epoch, mutation = ?mutation)
@@ -510,6 +513,7 @@ impl Barrier {
             },
             epoch: Epoch::new(epoch.curr, epoch.prev),
             mutation,
+            is_sync,
         })
     }
 }

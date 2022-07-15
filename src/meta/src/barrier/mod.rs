@@ -429,7 +429,7 @@ where
         let interval = env.opts.checkpoint_interval;
         let in_flight_barrier_nums = env.opts.in_flight_barrier_nums;
         tracing::info!(
-            "Starting barrier manager with: interval={:?}, enable_recovery={} , in_flight_barrier_nums={}",
+            "Starting barrier manager with: interval={:?}, enable_recovery={} , in_flight_barrier_nums={},test hehehe",
             interval,
             enable_recovery,
             in_flight_barrier_nums,
@@ -561,7 +561,7 @@ where
                 .update_inflight_prev_epoch(self.env.meta_store())
                 .await
                 .unwrap();
-            let is_sync = if barrier_nums % 20 == 0 || !matches!(command, Command::Plain(_)) {
+            let is_sync = if barrier_nums % 40 == 0 || !matches!(command, Command::Plain(_)) {
                 barrier_nums = 1;
                 true
             } else {
@@ -790,7 +790,7 @@ where
                         }
                         while let Some((key,value)) = btree_map.pop_first(){
                             let hummock = self.hummock_manager.clone();
-                            tracing::info!("commit{:?}",key);
+                            //tracing::info!("commit{:?}",key);
                             let sst_info = value.into_iter().map(|x| (x.compaction_group_id,x.sst.expect("field not None").to_prost())).collect_vec();
                             vec.push(async move{
                                 hummock
@@ -798,7 +798,7 @@ where
                             })
                         }
                         try_join_all(vec).await?;
-                        tracing::info!("commit over {:?}",node.command_ctx.prev_epoch);
+                        //tracing::info!("commit over {:?}",node.command_ctx.prev_epoch);
                    }
                 }
                 Err(err) => {
