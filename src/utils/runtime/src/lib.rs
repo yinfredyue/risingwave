@@ -18,8 +18,10 @@
 
 mod trace_runtime;
 
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::time::Duration;
 
+use madsim::rand::Rng;
 use tracing::Level;
 use tracing_subscriber::filter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -161,6 +163,11 @@ pub fn init_risingwave_logger(settings: LoggerSettings) {
 
     let tokio_console_layer = if settings.enable_tokio_console {
         let (console_layer, server) = console_subscriber::ConsoleLayer::builder()
+            .server_addr({
+                let port = madsim::rand::thread_rng().gen_range(40000..50000);
+                println!("console on port {}", port);
+                SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)
+            })
             .with_default_env()
             .build();
         let console_layer = console_layer.with_filter(

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
+async-scoped = { version = "0.7", features = ["use-tokio"] }
 async-stream = "0.3"
 async-trait = "0.1"
 auto_enums = "0.7"

@@ -726,7 +726,7 @@ impl<K: LruKey, T: LruValue> LruCache<K, T> {
     }
 }
 
-impl<K: LruKey + Clone, T: LruValue> LruCache<K, T> {
+impl<K: LruKey + Clone + 'static, T: LruValue + 'static> LruCache<K, T> {
     pub async fn lookup_with_request_dedup<F, E, VC>(
         self: &Arc<Self>,
         hash: u64,
@@ -734,9 +734,9 @@ impl<K: LruKey + Clone, T: LruValue> LruCache<K, T> {
         fetch_value: F,
     ) -> Result<Result<CachableEntry<K, T>, E>, RecvError>
     where
-        F: FnOnce() -> VC,
-        E: Error,
-        VC: Future<Output = Result<(T, usize), E>>,
+        F: FnOnce() -> VC + Send,
+        E: Error + Send + 'static,
+        VC: Future<Output = Result<(T, usize), E>> + Send,
     {
         match self.lookup_for_request(hash, key.clone()) {
             LookupResult::Cached(entry) => Ok(Ok(entry)),
@@ -744,15 +744,27 @@ impl<K: LruKey + Clone, T: LruValue> LruCache<K, T> {
                 let entry = recv.await?;
                 Ok(Ok(entry))
             }
-            LookupResult::Miss => match fetch_value().await {
-                Ok((value, charge)) => {
-                    let entry = self.insert(key, hash, charge, value);
-                    Ok(Ok(entry))
-                }
-                Err(e) => {
-                    self.clear_pending_request(&key, hash);
-                    Ok(Err(e))
-                }
+            LookupResult::Miss => unsafe {
+                async_scoped::TokioScope::scope_and_collect(|scope| {
+                    scope.spawn(async {
+                        match fetch_value().await {
+                            Ok((value, charge)) => {
+                                let entry = self.insert(key, hash, charge, value);
+                                Ok(Ok(entry))
+                            }
+                            Err(e) => {
+                                self.clear_pending_request(&key, hash);
+                                Ok(Err(e))
+                            }
+                        }
+                    });
+                })
+                .await
+                .1
+                .into_iter()
+                .next()
+                .unwrap()
+                .unwrap()
             },
         }
     }
