@@ -59,6 +59,8 @@ pub mod session_config;
 pub mod test_utils;
 pub mod types;
 
+pub mod bugen_debug;
+
 pub mod test_prelude {
     pub use super::array::{DataChunkTestExt, StreamChunkTestExt};
     pub use super::catalog::test_utils::ColumnDescTestExt;

@@ -17,6 +17,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use risingwave_common::bugen_debug;
 use risingwave_common::error::ErrorCode::{self, TaskNotFound};
 use risingwave_common::error::{Result, RwError};
 use risingwave_pb::batch_plan::{
@@ -55,7 +56,9 @@ impl BatchManager {
         let task_id = task.get_task_id().clone();
         let task = Arc::new(task);
 
-        task.clone().async_execute().await?;
+        bugen_debug::ACTOR_INFO
+            .scope("batch".to_owned(), task.clone().async_execute())
+            .await?;
         if let hash_map::Entry::Vacant(e) = self.tasks.lock().entry(task_id.clone()) {
             e.insert(task);
             Ok(())

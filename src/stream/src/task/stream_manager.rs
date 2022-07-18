@@ -21,6 +21,7 @@ use itertools::Itertools;
 use madsim::collections::{HashMap, HashSet};
 use parking_lot::Mutex;
 use risingwave_common::buffer::Bitmap;
+use risingwave_common::bugen_debug;
 use risingwave_common::config::StreamingConfig;
 use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_common::util::addr::{is_local_address, HostAddr};
@@ -618,7 +619,11 @@ impl LocalStreamManagerCore {
                 actor_id,
                 tokio::spawn(monitor.instrument(async move {
                     // unwrap the actor result to panic on error
-                    actor.run().await.expect("actor failed");
+                    bugen_debug::ACTOR_INFO
+                        .scope(format!("{}", actor_id), async move {
+                            actor.run().await.expect("actor failed")
+                        })
+                        .await
                 })),
             );
 

@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use futures::{pin_mut, StreamExt};
 use futures_async_stream::try_stream;
+use risingwave_common::bugen_debug;
 use tracing::event;
 use tracing_futures::Instrument;
 
@@ -54,7 +55,15 @@ pub async fn trace(
 
     pin_mut!(input);
 
-    while let Some(message) = input.next().instrument(span()).await.transpose()? {
+    while let Some(message) = bugen_debug::ACTOR_INFO
+        .scope(
+            format!("{}:{}:{}", actor_id, executor_id as u32, info.identity),
+            input.next(),
+        )
+        .instrument(span())
+        .await
+        .transpose()?
+    {
         if let Message::Chunk(chunk) = &message {
             if chunk.cardinality() > 0 {
                 if ENABLE_EXECUTOR_ROW_COUNT {

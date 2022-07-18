@@ -27,11 +27,13 @@ use std::hash::Hash;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 use parking_lot::Mutex;
 use tokio::sync::oneshot::error::RecvError;
 use tokio::sync::oneshot::{channel, Receiver, Sender};
+
+use crate::bugen_debug;
 
 const IN_CACHE: u8 = 1;
 const REVERSE_IN_CACHE: u8 = !IN_CACHE;
@@ -792,7 +794,7 @@ impl Drop for Guard {
     }
 }
 
-impl<K: LruKey + Clone + 'static, T: LruValue + 'static> LruCache<K, T> {
+impl<K: LruKey + std::fmt::Debug + Clone + 'static, T: LruValue + 'static> LruCache<K, T> {
     pub async fn lookup_with_request_dedup<F, E, VC>(
         self: &Arc<Self>,
         hash: u64,
@@ -807,7 +809,19 @@ impl<K: LruKey + Clone + 'static, T: LruValue + 'static> LruCache<K, T> {
         match self.lookup_for_request(hash, key.clone()) {
             LookupResult::Cached(entry) => Ok(Ok(entry)),
             LookupResult::WaitPendingRequest(recv) => {
+                bugen_debug::ACTOR_INFO.with(|a| {
+                    println!(
+                        "lookup_with_request_dedup {:?}({}): wait pending request",
+                        key, a
+                    );
+                });
                 let entry = recv.await?;
+                bugen_debug::ACTOR_INFO.with(|a| {
+                    println!(
+                        "lookup_with_request_dedup {:?}({}): wait pending request ok",
+                        key, a
+                    );
+                });
                 Ok(Ok(entry))
             }
             // LookupResult::Miss => unsafe {
@@ -836,7 +850,10 @@ impl<K: LruKey + Clone + 'static, T: LruValue + 'static> LruCache<K, T> {
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .unwrap()
                     .as_nanos();
-                let guard = Guard::new(format!("lookup_with_request_dedup: {:x}", time));
+                let guard =
+                    Guard::new(bugen_debug::ACTOR_INFO.with(|a| {
+                        format!("lookup_with_request_dedup {:?}({}): at{:x}", key, a, time)
+                    }));
                 let result = fetch_value().await;
                 guard.enabled.store(false, Ordering::SeqCst);
 
