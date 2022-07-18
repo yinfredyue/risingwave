@@ -14,12 +14,11 @@
 
 use std::future::Future;
 use std::ops::RangeBounds;
-
-use crate::monitor::StateStoreMetrics;
 use std::sync::Arc;
 
 use bytes::Bytes;
 
+use crate::monitor::StateStoreMetrics;
 use crate::storage_value::StorageValue;
 use crate::store::*;
 use crate::{define_state_store_associated_type, StateStore, StateStoreIter};
@@ -120,7 +119,12 @@ impl StateStore for PanicStateStore {
         }
     }
 
-    fn sync(&self, _epoch: Option<u64>, _last_epoch: Option<u64>,_stats: Option<Arc<StateStoreMetrics>>) -> Self::SyncFuture<'_> {
+    fn sync(
+        &self,
+        _epoch: Option<u64>,
+        _last_epoch: Option<u64>,
+        _stats: Option<Arc<StateStoreMetrics>>,
+    ) -> Self::SyncFuture<'_> {
         async move {
             panic!("should not sync from the panic state store!");
         }

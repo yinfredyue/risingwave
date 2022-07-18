@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{HashMap, HashSet, VecDeque, BTreeMap};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::once;
 use std::mem::take;
 use std::sync::Arc;
@@ -28,11 +28,12 @@ use risingwave_common::error::{ErrorCode, Result, RwError};
 use risingwave_common::util::epoch::{Epoch, INVALID_EPOCH};
 use risingwave_pb::common::worker_node::State::Running;
 use risingwave_pb::common::WorkerType;
+use risingwave_pb::hummock::{KeyRange as ProseKeyRange, SstableInfo as ProseSstableInf};
 use risingwave_pb::meta::table_fragments::ActorState;
-use risingwave_pb::hummock::{SstableInfo as ProseSstableInf,KeyRange as ProseKeyRange};
 use risingwave_pb::stream_plan::Barrier;
 use risingwave_pb::stream_service::{
-    BarrierCompleteRequest, BarrierCompleteResponse as ProseBarrierCompleteResponse, InjectBarrierRequest,
+    BarrierCompleteRequest, BarrierCompleteResponse as ProseBarrierCompleteResponse,
+    InjectBarrierRequest,
 };
 use smallvec::SmallVec;
 use tokio::sync::mpsc::UnboundedSender;
@@ -64,17 +65,17 @@ mod recovery;
 
 type Scheduled = (Command, SmallVec<[Notifier; 1]>);
 
-#[derive(Clone, PartialEq,Hash,Eq)]
+#[derive(Clone, PartialEq, Hash, Eq)]
 pub struct GroupedSstableInfoAaa {
     pub epoch: u64,
     pub grouped_sstable_info: Vec<GroupedSstableInfo>,
 }
-#[derive(Clone, PartialEq,Hash,Eq)]
+#[derive(Clone, PartialEq, Hash, Eq)]
 pub struct GroupedSstableInfo {
     pub compaction_group_id: u64,
-    pub sst:Option<SstableInfo>,
+    pub sst: Option<SstableInfo>,
 }
-#[derive(Clone, PartialEq, Eq,Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct SstableInfo {
     pub id: u64,
     pub key_range: Option<KeyRange>,
@@ -82,67 +83,65 @@ pub struct SstableInfo {
     pub table_ids: Vec<u32>,
     pub unit_id: u64,
 }
-#[derive(Clone, PartialEq, Eq,Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct KeyRange {
     pub left: Vec<u8>,
     pub right: Vec<u8>,
     pub inf: bool,
 }
-impl SstableInfo{
-    pub fn to_prost(self) -> ProseSstableInf{
-        let key_range = match self.key_range{
-            Some(k_range) =>{Some(ProseKeyRange{
-                left:k_range.left,
-                right:k_range.right,
-                inf:k_range.inf,
-            })},
-            None =>{None},
+impl SstableInfo {
+    pub fn to_prost(self) -> ProseSstableInf {
+        let key_range = match self.key_range {
+            Some(k_range) => Some(ProseKeyRange {
+                left: k_range.left,
+                right: k_range.right,
+                inf: k_range.inf,
+            }),
+            None => None,
         };
-        ProseSstableInf{
-            id:self.id,
+        ProseSstableInf {
+            id: self.id,
             key_range,
-            file_size:self.file_size,
-            table_ids:self.table_ids,
-            unit_id:self.unit_id,
+            file_size: self.file_size,
+            table_ids: self.table_ids,
+            unit_id: self.unit_id,
         }
     }
 }
-impl GroupedSstableInfoAaa{
-    pub fn from_prost(barrier_complete_response: &ProseBarrierCompleteResponse) -> Vec<Self>{
+impl GroupedSstableInfoAaa {
+    pub fn from_prost(barrier_complete_response: &ProseBarrierCompleteResponse) -> Vec<Self> {
         let grouped_sstable_info_vec = barrier_complete_response.sycned_sstables.clone();
         let mut return_vec = vec![];
-        for grouped_sstable_info_aaa in grouped_sstable_info_vec{
+        for grouped_sstable_info_aaa in grouped_sstable_info_vec {
             let mut grouped_sstable_info = vec![];
-            for group in grouped_sstable_info_aaa.grouped_sstable_info{
-                let sst = match group.sst{
-                    Some(sst_table_id) =>{
-                        let key_range = match sst_table_id.key_range{
-                            Some(k_r) => {
-                                Some(KeyRange{
-                                    left: k_r.left,
-                                    right: k_r.right,
-                                    inf: k_r.inf,
-                                })
-                            },
-                            None =>{None},
+            for group in grouped_sstable_info_aaa.grouped_sstable_info {
+                let sst = match group.sst {
+                    Some(sst_table_id) => {
+                        let key_range = match sst_table_id.key_range {
+                            Some(k_r) => Some(KeyRange {
+                                left: k_r.left,
+                                right: k_r.right,
+                                inf: k_r.inf,
+                            }),
+                            None => None,
                         };
-                        Some(SstableInfo{
-                            id:sst_table_id.id,
-                            key_range:key_range,
-                            file_size:sst_table_id.file_size,
-                            table_ids:sst_table_id.table_ids,
-                            unit_id:sst_table_id.unit_id,
+                        Some(SstableInfo {
+                            id: sst_table_id.id,
+                            key_range,
+                            file_size: sst_table_id.file_size,
+                            table_ids: sst_table_id.table_ids,
+                            unit_id: sst_table_id.unit_id,
                         })
-                    },
-                    None =>{None},
+                    }
+                    None => None,
                 };
-                grouped_sstable_info.push(GroupedSstableInfo{
-                    compaction_group_id:group.compaction_group_id,
+                grouped_sstable_info.push(GroupedSstableInfo {
+                    compaction_group_id: group.compaction_group_id,
                     sst,
                 });
             }
-            return_vec.push(GroupedSstableInfoAaa{
-                epoch:grouped_sstable_info_aaa.epoch,
+            return_vec.push(GroupedSstableInfoAaa {
+                epoch: grouped_sstable_info_aaa.epoch,
                 grouped_sstable_info,
             });
         }
@@ -248,6 +247,9 @@ pub struct GlobalBarrierManager<S: MetaStore> {
     /// Enable recovery or not when failover.
     enable_recovery: bool,
 
+    /// Enable migrate expired actors to newly joined node
+    enable_migrate: bool,
+
     /// The queue of scheduled barriers.
     scheduled_barriers: ScheduledBarriers,
 
@@ -328,6 +330,7 @@ where
         }
         self.command_ctx_queue.push_back(EpochNode {
             timer: Some(timer),
+            wait_commit_timer: None,
             result: None,
             state: InFlight,
             command_ctx,
@@ -341,6 +344,7 @@ where
         &mut self,
         prev_epoch: u64,
         result: Result<Vec<ProseBarrierCompleteResponse>>,
+        wait_commit_timer: HistogramTimer,
     ) -> VecDeque<EpochNode<S>> {
         // change state to complete, and wait for nodes with the smaller epoch to commit
         if let Some(node) = self
@@ -351,6 +355,7 @@ where
             assert!(matches!(node.state, InFlight));
             node.state = Complete;
             node.result = Some(result);
+            node.wait_commit_timer = Some(wait_commit_timer);
         };
         // Find all continuous nodes with 'Complete' starting from first node
         let index = self
@@ -379,7 +384,7 @@ where
     fn can_inject_barrier(&self, in_flight_barrier_nums: usize) -> bool {
         self.command_ctx_queue
             .iter()
-            .filter(|x| matches!(x.state, InFlight ))
+            .filter(|x| matches!(x.state, InFlight))
             .count()
             < in_flight_barrier_nums
     }
@@ -401,6 +406,7 @@ where
 pub struct EpochNode<S: MetaStore> {
     timer: Option<HistogramTimer>,
     result: Option<Result<Vec<ProseBarrierCompleteResponse>>>,
+    wait_commit_timer: Option<HistogramTimer>,
     state: BarrierEpochState,
     command_ctx: Arc<CommandContext<S>>,
     notifiers: SmallVec<[Notifier; 1]>,
@@ -426,6 +432,7 @@ where
         metrics: Arc<MetaMetrics>,
     ) -> Self {
         let enable_recovery = env.opts.enable_recovery;
+        let enable_migrate = env.opts.enable_migrate;
         let interval = env.opts.checkpoint_interval;
         let in_flight_barrier_nums = env.opts.in_flight_barrier_nums;
         tracing::info!(
@@ -438,6 +445,7 @@ where
         Self {
             interval,
             enable_recovery,
+            enable_migrate,
             cluster_manager,
             catalog_manager,
             fragment_manager,
@@ -713,8 +721,9 @@ where
         tracker: &mut CreateMviewProgressTracker,
         checkpoint_control: &mut CheckpointControl<S>,
     ) {
+        let wait_commit_timer = self.metrics.barrier_wait_commit_latency.start_timer();
         // change the state is Complete
-        let mut complete_nodes = checkpoint_control.complete(prev_epoch, result);
+        let mut complete_nodes = checkpoint_control.complete(prev_epoch, result, wait_commit_timer);
         // try commit complete nodes
         let (mut index, mut err_msg) = (0, None);
         for (i, node) in complete_nodes.iter_mut().enumerate() {
@@ -735,6 +744,9 @@ where
             for node in fail_nodes {
                 if let Some(timer) = node.timer {
                     timer.observe_duration();
+                }
+                if let Some(wait_commit_timer) = node.wait_commit_timer {
+                    wait_commit_timer.observe_duration();
                 }
                 node.notifiers
                     .into_iter()
@@ -773,37 +785,54 @@ where
                     // We must ensure all epochs are committed in ascending order,
                     // because the storage engine will
                     // query from new to old in the order in which the L0 layer files are generated. see https://github.com/singularity-data/risingwave/issues/1251
-                    
+
                     if resps.iter().all(|node| node.is_sync) {
-                        //tracing::info!("commit{:?}",node.command_ctx.prev_epoch);
+                        // tracing::info!("commit{:?}",node.command_ctx.prev_epoch);
 
                         let mut set = HashSet::<GroupedSstableInfo>::default();
-                        //let mut btree_map = BTreeMap::<u64,HashSet<GroupedSstableInfo>>::default();
+                        // let mut btree_map =
+                        // BTreeMap::<u64,HashSet<GroupedSstableInfo>>::default();
                         resps
                             .iter()
                             .flat_map(|resp| GroupedSstableInfoAaa::from_prost(resp))
-                            .for_each(|node|{
-                                //let entry = btree_map.entry(node.epoch).or_insert(HashSet::<GroupedSstableInfo>::default());
-                                node.grouped_sstable_info.into_iter().for_each(|node1| {set.insert(node1);});
+                            .for_each(|node| {
+                                // let entry =
+                                // btree_map.entry(node.epoch).
+                                // or_insert(HashSet::<GroupedSstableInfo>::default());
+                                node.grouped_sstable_info.into_iter().for_each(|node1| {
+                                    set.insert(node1);
+                                });
                             });
-                        //let mut vec = vec![];
+                        // let mut vec = vec![];
                         // if !btree_map.contains_key(&node.command_ctx.prev_epoch.0){
                         //     btree_map.insert(node.command_ctx.prev_epoch.0, HashSet::default());
                         // }
                         // while let Some((key,value)) = btree_map.pop_first(){
                         //     let hummock = self.hummock_manager.clone();
                         //     //tracing::info!("commit{:?}",key);
-                        //     let sst_info = value.into_iter().map(|x| (x.compaction_group_id,x.sst.expect("field not None").to_prost())).collect_vec();
+                        //     let sst_info = value.into_iter().map(|x|
+                        // (x.compaction_group_id,x.sst.expect("field not
+                        // None").to_prost())).collect_vec();
                         //     vec.push(async move{
                         //         hummock
                         //             .commit_epoch(key, sst_info).await
                         //     })
                         // }
                         // try_join_all(vec).await?;
-                        let sst_info = set.into_iter().map(|x| (x.compaction_group_id,x.sst.expect("field not None").to_prost())).collect_vec();
-                        self.hummock_manager.commit_epoch(node.command_ctx.prev_epoch.0,sst_info).await?;
-                        //tracing::info!("commit over {:?}",node.command_ctx.prev_epoch);
-                   }
+                        let sst_info = set
+                            .into_iter()
+                            .map(|x| {
+                                (
+                                    x.compaction_group_id,
+                                    x.sst.expect("field not None").to_prost(),
+                                )
+                            })
+                            .collect_vec();
+                        self.hummock_manager
+                            .commit_epoch(node.command_ctx.prev_epoch.0, sst_info)
+                            .await?;
+                        // tracing::info!("commit over {:?}",node.command_ctx.prev_epoch);
+                    }
                 }
                 Err(err) => {
                     tracing::warn!(
@@ -811,11 +840,13 @@ where
                         node.command_ctx.prev_epoch.0,
                         err
                     );
+                    return Err(err.clone());
                 }
             };
         }
 
         node.timer.take().unwrap().observe_duration();
+        node.wait_commit_timer.take().unwrap().observe_duration();
         let responses = node.result.take().unwrap()?;
         node.command_ctx.post_collect().await?;
 

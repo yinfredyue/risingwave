@@ -15,7 +15,6 @@
 use std::future::Future;
 use std::ops::Bound::{Excluded, Included};
 use std::ops::RangeBounds;
-use crate::monitor::StateStoreMetrics;
 use std::sync::Arc;
 
 use bytes::Bytes;
@@ -41,7 +40,7 @@ use crate::hummock::shared_buffer::{
 };
 use crate::hummock::utils::prune_ssts;
 use crate::hummock::HummockResult;
-use crate::monitor::StoreLocalStatistic;
+use crate::monitor::{StateStoreMetrics, StoreLocalStatistic};
 use crate::storage_value::StorageValue;
 use crate::store::*;
 use crate::{define_state_store_associated_type, StateStore, StateStoreIter};
@@ -459,17 +458,32 @@ impl StateStore for HummockStorage {
         async move { Ok(self.local_version_manager.wait_epoch(epoch).await?) }
     }
 
-    fn sync(&self, epoch: Option<u64>, last_epoch: Option<u64>,stats: Option<Arc<StateStoreMetrics>>) -> Self::SyncFuture<'_> {
+    fn sync(
+        &self,
+        epoch: Option<u64>,
+        last_epoch: Option<u64>,
+        stats: Option<Arc<StateStoreMetrics>>,
+    ) -> Self::SyncFuture<'_> {
         async move {
-            LocalVersionManager::sync_shared_buffer(self.local_version_manager().clone(), epoch, last_epoch , stats).await?;
+            let size = LocalVersionManager::sync_shared_buffer(
+                self.local_version_manager().clone(),
+                epoch,
+                last_epoch,
+                stats,
+            )
+            .await?;
             // self.local_version_manager()
             //     .sync_shared_buffer(epoch, last_epoch)
             //     .await?;
-            Ok(())
+            Ok(size)
         }
     }
 
-    fn get_uncommitted_ssts(&self, epoch: u64, last_epoch: u64) -> Vec<(u64,Vec<LocalSstableInfo>)> {
+    fn get_uncommitted_ssts(
+        &self,
+        epoch: u64,
+        last_epoch: u64,
+    ) -> Vec<(u64, Vec<LocalSstableInfo>)> {
         self.local_version_manager
             .get_uncommitted_ssts(epoch, last_epoch)
     }

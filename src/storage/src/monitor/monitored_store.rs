@@ -224,15 +224,24 @@ where
         }
     }
 
-    fn sync(&self, epoch: Option<u64>, last_epoch: Option<u64> ,_stats: Option<Arc<StateStoreMetrics>>) -> Self::SyncFuture<'_> {
+    fn sync(
+        &self,
+        epoch: Option<u64>,
+        last_epoch: Option<u64>,
+        _stats: Option<Arc<StateStoreMetrics>>,
+    ) -> Self::SyncFuture<'_> {
         async move {
-            //let timer = self.stats.shared_buffer_to_l0_duration.start_timer();
-            self.inner
-                .sync(epoch, last_epoch,Some(self.stats.clone()))
+            let timer = self.stats.shared_buffer_to_l0_duration.start_timer();
+            let size = self
+                .inner
+                .sync(epoch, last_epoch, Some(self.stats.clone()))
                 .await
                 .inspect_err(|e| error!("Failed in sync: {:?}", e))?;
-            //timer.observe_duration();
-            Ok(())
+            timer.observe_duration();
+            if size != 0 {
+                self.stats.write_l0_size_every_epoch.observe(size as _);
+            }
+            Ok(size)
         }
     }
 
@@ -253,7 +262,11 @@ where
         }
     }
 
-    fn get_uncommitted_ssts(&self, epoch: u64, last_epoch: u64) -> Vec<(u64,Vec<LocalSstableInfo>)> {
+    fn get_uncommitted_ssts(
+        &self,
+        epoch: u64,
+        last_epoch: u64,
+    ) -> Vec<(u64, Vec<LocalSstableInfo>)> {
         self.inner.get_uncommitted_ssts(epoch, last_epoch)
     }
 

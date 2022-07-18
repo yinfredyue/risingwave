@@ -16,6 +16,7 @@ use core::time::Duration;
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use itertools::Itertools;
 use madsim::collections::{HashMap, HashSet};
 use parking_lot::Mutex;
@@ -169,8 +170,17 @@ impl LocalStreamManager {
         actor_ids_to_collect: impl IntoIterator<Item = ActorId>,
     ) -> Result<()> {
         let core = self.core.lock();
+        let timer = core
+            .streaming_metrics
+            .barrier_inflight_latency
+            .start_timer();
         let mut barrier_manager = core.context.lock_barrier_manager();
-        barrier_manager.send_barrier(barrier, actor_ids_to_send, actor_ids_to_collect)?;
+        barrier_manager.send_barrier(
+            barrier,
+            actor_ids_to_send,
+            actor_ids_to_collect,
+            Some(timer),
+        )?;
         Ok(())
     }
 
@@ -184,18 +194,30 @@ impl LocalStreamManager {
     /// Use `epoch` to find collect rx. And wait for all actor to be collected before
     /// returning.
     pub async fn collect_barrier(&self, epoch: u64) -> CollectResult {
-        let rx = {
+        let (rx, timer) = {
             let core = self.core.lock();
             let mut barrier_manager = core.context.lock_barrier_manager();
             barrier_manager.remove_collect_rx(epoch)
         };
         // Wait for all actors finishing this barrier.
-        rx.await.unwrap()
+        let result = rx.expect("no rx for local mode").await.unwrap();
+        timer.expect("no timer for test").observe_duration();
+        result
     }
 
-    pub async fn sync_epoch(&self, prev_epoch: u64, last_epoch: u64) -> Vec<(u64,Vec<LocalSstableInfo>)> {
-        dispatch_state_store!(self.state_store(), store, {
-            match store.sync(Some(prev_epoch), Some(last_epoch),None).await {
+    pub async fn sync_epoch(
+        &self,
+        prev_epoch: u64,
+        last_epoch: u64,
+    ) -> Vec<(u64, Vec<LocalSstableInfo>)> {
+        let timer = self
+            .core
+            .lock()
+            .streaming_metrics
+            .barrier_sync_latency
+            .start_timer();
+        let local_sst_info = dispatch_state_store!(self.state_store(), store, {
+            match store.sync(Some(prev_epoch), Some(last_epoch), None).await {
                 Ok(_) => store.get_uncommitted_ssts(prev_epoch, last_epoch),
                 // TODO: Handle sync failure by propagating it
                 // back to global barrier manager
@@ -204,7 +226,9 @@ impl LocalStreamManager {
                     prev_epoch, e
                 ),
             }
-        })
+        });
+        timer.observe_duration();
+        local_sst_info
     }
 
     pub async fn clear_storage_buffer(&self) {
@@ -222,7 +246,11 @@ impl LocalStreamManager {
         let core = self.core.lock();
         let mut barrier_manager = core.context.lock_barrier_manager();
         assert!(barrier_manager.is_local_mode());
-        barrier_manager.send_barrier(barrier, empty(), empty())?;
+        let timer = core
+            .streaming_metrics
+            .barrier_inflight_latency
+            .start_timer();
+        barrier_manager.send_barrier(barrier, empty(), empty(), Some(timer))?;
         barrier_manager.remove_collect_rx(barrier.epoch.prev);
         Ok(())
     }
@@ -257,7 +285,7 @@ impl LocalStreamManager {
             epoch,
             mutation: Some(Arc::new(Mutation::Stop(actor_ids_to_collect.clone()))),
             span: tracing::Span::none(),
-            is_sync:true,
+            is_sync: true,
         };
 
         self.send_barrier(barrier, actor_ids_to_send, actor_ids_to_collect)?;
@@ -758,14 +786,9 @@ impl LocalStreamManagerCore {
         );
 
         for actor in actors {
-            let ret = self.actors.insert(actor.get_actor_id(), actor.clone());
-            if ret.is_some() {
-                return Err(ErrorCode::InternalError(format!(
-                    "duplicated actor {}",
-                    actor.get_actor_id()
-                ))
-                .into());
-            }
+            self.actors
+                .try_insert(actor.get_actor_id(), actor.clone())
+                .map_err(|_| anyhow!("duplicated actor {}", actor.get_actor_id()))?;
         }
 
         for actor in actors {

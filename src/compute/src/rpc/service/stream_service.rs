@@ -18,7 +18,9 @@ use itertools::Itertools;
 use risingwave_common::catalog::TableId;
 use risingwave_common::error::{tonic_err, Result as RwResult};
 use risingwave_pb::catalog::Source;
-use risingwave_pb::stream_service::barrier_complete_response::{GroupedSstableInfo, GroupedSstableInfoAaa};
+use risingwave_pb::stream_service::barrier_complete_response::{
+    GroupedSstableInfo, GroupedSstableInfoAaa,
+};
 use risingwave_pb::stream_service::stream_service_server::StreamService;
 use risingwave_pb::stream_service::*;
 use risingwave_stream::executor::{Barrier, Epoch};
@@ -164,13 +166,14 @@ impl StreamService for StreamServiceImpl {
         let is_create_mv = collect_result.create_mview_progress.iter().any(|n| n.done);
         let mut last_epoch_guard = self.last_epoch.write().await;
         let mut is_sync = true;
-        //tracing::info!("aaa{:?}||{:?}&& {:?}",is_create_mv,req.is_sync,last_epoch_guard.lt(&req.prev_epoch));
+        // tracing::info!("aaa{:?}||{:?}&&
+        // {:?}",is_create_mv,req.is_sync,last_epoch_guard.lt(&req.prev_epoch));
         let synced_sstables =
             if (req.is_sync || is_create_mv) && last_epoch_guard.lt(&req.prev_epoch) {
                 let last_epoch_1 = last_epoch_guard.clone();
                 *last_epoch_guard = req.prev_epoch;
                 drop(last_epoch_guard);
-                tracing::info!("sync succ {:?}",req.prev_epoch);
+                tracing::info!("sync succ {:?}", req.prev_epoch);
                 // RwLockWriteGuard::unlock_fair(last_epoch_guard);
                 self.mgr.sync_epoch(req.prev_epoch, last_epoch_1).await
             } else {
@@ -186,15 +189,19 @@ impl StreamService for StreamServiceImpl {
             create_mview_progress: collect_result.create_mview_progress,
             sycned_sstables: synced_sstables
                 .into_iter()
-                .map(|(epoch,synced_sst)|{
-                    let grouped_sstable_info = synced_sst.into_iter().map(|(compaction_group_id,sst)|GroupedSstableInfo {
-                        compaction_group_id,
-                        sst: Some(sst),
-                    }).collect_vec();
-                    GroupedSstableInfoAaa{
-                        epoch,grouped_sstable_info
-                    }}
-                )
+                .map(|(epoch, synced_sst)| {
+                    let grouped_sstable_info = synced_sst
+                        .into_iter()
+                        .map(|(compaction_group_id, sst)| GroupedSstableInfo {
+                            compaction_group_id,
+                            sst: Some(sst),
+                        })
+                        .collect_vec();
+                    GroupedSstableInfoAaa {
+                        epoch,
+                        grouped_sstable_info,
+                    }
+                })
                 .collect_vec(),
             is_sync,
         }))

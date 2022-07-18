@@ -162,7 +162,7 @@ pub struct SharedBuffer {
 pub enum UploadTaskType {
     FlushWriteBatch,
     SyncEpoch,
-    UpSyncAll(BTreeMap<(Vec<u8>,usize),UncommittedData>),
+    UpSyncAll(BTreeMap<(Vec<u8>, usize), UncommittedData>),
 }
 
 #[derive(Debug)]
@@ -376,10 +376,7 @@ impl SharedBuffer {
                 swap(&mut self.uncommitted_data, &mut keyed_payload);
                 keyed_payload
             }
-            UploadTaskType::UpSyncAll(vec) => {
-                vec
-            }
-            
+            UploadTaskType::UpSyncAll(vec) => vec,
         };
 
         // The min order index in the task payload will be the order index of the payload.
@@ -460,7 +457,7 @@ impl SharedBuffer {
         for data in payload.into_values() {
             match data {
                 UncommittedData::Batch(batch) => {
-                    if self.upload_batches_size > batch.size(){
+                    if self.upload_batches_size > batch.size() {
                         self.upload_batches_size -= batch.size();
                     }
                 }

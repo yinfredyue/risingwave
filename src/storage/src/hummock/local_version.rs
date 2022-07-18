@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound::{Excluded, Included};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
@@ -31,6 +31,7 @@ use super::shared_buffer::SharedBuffer;
 pub struct LocalVersion {
     shared_buffer: BTreeMap<HummockEpoch, Arc<RwLock<SharedBuffer>>>,
     pinned_version: Arc<PinnedVersion>,
+    pub version_ids_in_use: BTreeSet<HummockVersionId>,
 }
 
 impl LocalVersion {
@@ -38,9 +39,12 @@ impl LocalVersion {
         version: HummockVersion,
         unpin_worker_tx: UnboundedSender<HummockVersionId>,
     ) -> Self {
+        let mut version_ids_in_use = BTreeSet::new();
+        version_ids_in_use.insert(version.id);
         Self {
             shared_buffer: BTreeMap::default(),
             pinned_version: Arc::new(PinnedVersion::new(version, unpin_worker_tx)),
+            version_ids_in_use,
         }
     }
 
@@ -56,17 +60,16 @@ impl LocalVersion {
         &self,
         epoch: HummockEpoch,
         last_epoch: HummockEpoch,
-    ) -> Vec<(HummockEpoch,&Arc<RwLock<SharedBuffer>>)> {
+    ) -> Vec<(HummockEpoch, &Arc<RwLock<SharedBuffer>>)> {
         let mut shard_buffer = vec![];
         for (epoch, value) in self
             .shared_buffer
             .range((Excluded(&last_epoch), Included(&epoch)))
         {
-            shard_buffer.push((*epoch,value));
+            shard_buffer.push((*epoch, value));
         }
         shard_buffer
     }
-
 
     pub fn iter_shared_buffer(
         &self,
@@ -91,6 +94,8 @@ impl LocalVersion {
             self.shared_buffer
                 .retain(|epoch, _| epoch > &new_pinned_version.max_committed_epoch);
         }
+
+        self.version_ids_in_use.insert(new_pinned_version.id);
 
         // update pinned version
         self.pinned_version = Arc::new(PinnedVersion {

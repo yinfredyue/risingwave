@@ -12,16 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::mem::swap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use std::mem::swap;
-use crate::hummock::shared_buffer::UncommittedData;
-use std::collections::BTreeMap;
-use crate::hummock::shared_buffer::KeyIndexedUncommittedData;
 use bytes::Bytes;
 use futures::future::{join_all, try_join_all};
 use itertools::Itertools;
@@ -46,7 +43,9 @@ use crate::hummock::conflict_detector::ConflictDetector;
 use crate::hummock::shared_buffer::shared_buffer_batch::SharedBufferItem;
 use crate::hummock::shared_buffer::shared_buffer_uploader::UploadTaskPayload;
 use crate::hummock::shared_buffer::UploadTaskType::{FlushWriteBatch, UpSyncAll};
-use crate::hummock::shared_buffer::{OrderIndex, SharedBufferEvent, WriteRequest};
+use crate::hummock::shared_buffer::{
+    KeyIndexedUncommittedData, OrderIndex, SharedBufferEvent, UncommittedData, WriteRequest,
+};
 use crate::hummock::utils::validate_table_key_range;
 use crate::hummock::{
     HummockEpoch, HummockError, HummockResult, HummockVersionId, INVALID_VERSION_ID,
@@ -200,6 +199,7 @@ impl LocalVersionManager {
 
         // Unpin unused version.
         tokio::spawn(LocalVersionManager::start_unpin_worker(
+            Arc::downgrade(&local_version_manager),
             version_unpin_worker_rx,
             hummock_meta_client,
         ));
@@ -264,7 +264,7 @@ impl LocalVersionManager {
             }
             match tokio::time::timeout(Duration::from_secs(10), receiver.changed()).await {
                 Err(_) => {
-                    return Err(HummockError::wait_epoch(format!("timeout {:?}",epoch)));
+                    return Err(HummockError::wait_epoch(format!("timeout {:?}", epoch)));
                 }
                 Ok(Err(_)) => {
                     return Err(HummockError::wait_epoch("tx dropped"));
@@ -409,27 +409,32 @@ impl LocalVersionManager {
         epoch: Option<HummockEpoch>,
         last_epoch: Option<HummockEpoch>,
         stats: Option<Arc<StateStoreMetrics>>,
-    ) -> HummockResult<()> {
-        let (epoch,last_epoch) = match epoch {
-            Some(epoch) => (epoch,last_epoch.unwrap()),
-            None => (*local
-                .local_version
-                .read()
-                .iter_shared_buffer()
-                .max_by_key(|(x,_)| **x).unwrap().0
-                ,
+    ) -> HummockResult<usize> {
+        let (epoch, last_epoch) = match epoch {
+            Some(epoch) => (epoch, last_epoch.unwrap()),
+            None => (
                 *local
-                .local_version
-                .read()
-                .iter_shared_buffer()
-                .min_by_key(|(x,_)| **x).unwrap().0)
+                    .local_version
+                    .read()
+                    .iter_shared_buffer()
+                    .max_by_key(|(x, _)| **x)
+                    .unwrap()
+                    .0,
+                *local
+                    .local_version
+                    .read()
+                    .iter_shared_buffer()
+                    .min_by_key(|(x, _)| **x)
+                    .unwrap()
+                    .0,
+            ),
         };
-        //tracing::info!("vec:{:?}",epochs);
-        local.sync_shared_buffer_epoch(epoch,last_epoch).await?;
+        // tracing::info!("vec:{:?}",epochs);
         let mut timer = None;
-        if let Some(stats) = stats.clone(){
+        if let Some(stats) = stats.clone() {
             timer = Some(stats.shared_buffer_to_l0_duration.start_timer());
         }
+        let size = local.sync_shared_buffer_epoch(epoch, last_epoch).await?;
         timer.unwrap().observe_duration();
 
         // let mut feature_vec = vec![];
@@ -448,10 +453,15 @@ impl LocalVersionManager {
         //     })
         // }
         // try_join_all(feature_vec).await?;
-        Ok(())
+        Ok(size)
     }
 
-    pub async fn sync_shared_buffer_epoch(&self, epoch:HummockEpoch,last_epoch: HummockEpoch) -> HummockResult<()> {
+    pub async fn sync_shared_buffer_epoch(
+        &self,
+        epoch: HummockEpoch,
+        last_epoch: HummockEpoch,
+    ) -> HummockResult<usize> {
+        tracing::trace!("sync epoch {}", epoch);
         let (tx, rx) = oneshot::channel();
         self.buffer_tracker
             .send_event(SharedBufferEvent::SyncEpoch(epoch, tx));
@@ -459,39 +469,48 @@ impl LocalVersionManager {
         for result in join_all(join_handles).await {
             result.expect("should be able to join the flush handle")
         }
-        //let version = self.local_version().write();
-        let keyed_payload = self.local_version.read().scan_shared_buffer(epoch, last_epoch).iter().map(|(_,value)| (*value).clone()).flat_map(|node| {
-            let mut keyed_payload = KeyIndexedUncommittedData::new();
-            swap(&mut node.write().uncommitted_data, &mut keyed_payload);
-            keyed_payload
-        })
-        .collect::<BTreeMap<(Vec<u8>,usize),UncommittedData>>();
-        let (order_index, task_payload, task_write_batch_size) = match
-            self.local_version.read()
+        // let version = self.local_version().write();
+        let keyed_payload = self
+            .local_version
+            .read()
+            .scan_shared_buffer(epoch, last_epoch)
+            .iter()
+            .map(|(_, value)| (*value).clone())
+            .flat_map(|node| {
+                let mut keyed_payload = KeyIndexedUncommittedData::new();
+                swap(&mut node.write().uncommitted_data, &mut keyed_payload);
+                keyed_payload
+            })
+            .collect::<BTreeMap<(Vec<u8>, usize), UncommittedData>>();
+        let (order_index, task_payload, task_write_batch_size) = match self
+            .local_version
+            .read()
             .get_shared_buffer(epoch)
-            .and_then(|shared_buffer| shared_buffer.write().new_upload_task(UpSyncAll(keyed_payload)))
-        {
+            .and_then(|shared_buffer| {
+                shared_buffer
+                    .write()
+                    .new_upload_task(UpSyncAll(keyed_payload))
+            }) {
             Some(task) => task,
             None => {
-                //tracing::info!("sync epoch {} has no more task to do", epoch);
-                return Ok(());
+                tracing::trace!("sync epoch {} has no more task to do", epoch);
+                return Ok(0);
             }
         };
-        //drop(version);
-        let ret = self
-            .run_upload_task(order_index, epoch, task_payload, false)
-            .await;
-        tracing::info!(
+
+        self.run_upload_task(order_index, epoch, task_payload, false)
+            .await?;
+        tracing::trace!(
             "sync epoch {} finished.",
             epoch,
-            //task_write_batch_size
+            // task_write_batch_size
         );
         // if let Some(conflict_detector) = self.write_conflict_detector.as_ref() {
         //     conflict_detector.archive_epoch(epoch);
         // }
         self.buffer_tracker
             .send_event(SharedBufferEvent::EpochSynced(epoch));
-        ret
+        Ok(task_write_batch_size)
     }
 
     async fn run_upload_task(
@@ -539,12 +558,12 @@ impl LocalVersionManager {
         &self,
         epoch: HummockEpoch,
         last_epoch: HummockEpoch,
-    ) -> Vec<(HummockEpoch,Vec<LocalSstableInfo>)> {
+    ) -> Vec<(HummockEpoch, Vec<LocalSstableInfo>)> {
         self.local_version
             .read()
             .scan_shared_buffer(epoch, last_epoch)
             .iter()
-            .map(|(epoch,shared_buffer)| (*epoch,shared_buffer.read().get_ssts_to_commit()))
+            .map(|(epoch, shared_buffer)| (*epoch, shared_buffer.read().get_ssts_to_commit()))
             .collect_vec()
     }
 
@@ -649,6 +668,7 @@ impl LocalVersionManager {
 // concurrent worker thread of `LocalVersionManager`
 impl LocalVersionManager {
     async fn start_unpin_worker(
+        local_version_manager_weak: Weak<LocalVersionManager>,
         mut rx: UnboundedReceiver<HummockVersionId>,
         hummock_meta_client: Arc<dyn HummockMetaClient>,
     ) {
@@ -662,11 +682,12 @@ impl LocalVersionManager {
         let mut retry_backoff = get_backoff_strategy();
         let mut min_execute_interval_tick = tokio::time::interval(min_execute_interval);
         min_execute_interval_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        let mut versions_to_unpin = vec![];
+        let mut need_unpin = false;
         // For each run in the loop, accumulate versions to unpin and call unpin RPC once.
         loop {
             min_execute_interval_tick.tick().await;
             // 1. Collect new versions to unpin.
+            let mut versions_to_unpin = vec![];
             'collect: loop {
                 match rx.try_recv() {
                     Ok(version) => {
@@ -683,13 +704,32 @@ impl LocalVersionManager {
                     },
                 }
             }
-            if versions_to_unpin.is_empty() {
+            if !versions_to_unpin.is_empty() {
+                need_unpin = true;
+            }
+            if !need_unpin {
                 continue;
             }
+            let local_version_manager = match local_version_manager_weak.upgrade() {
+                None => {
+                    tracing::info!("Shutdown hummock unpin worker");
+                    return;
+                }
+                Some(local_version_manager) => local_version_manager,
+            };
+            let unpin_before = {
+                let mut local_version = local_version_manager.local_version.write();
+                for version in &versions_to_unpin {
+                    local_version.version_ids_in_use.remove(version);
+                }
+                *local_version.version_ids_in_use.first().unwrap()
+            };
+
             // 2. Call unpin RPC, including versions failed to unpin in previous RPC calls.
-            match hummock_meta_client.unpin_version(&versions_to_unpin).await {
+            match hummock_meta_client.unpin_version_before(unpin_before).await {
                 Ok(_) => {
                     versions_to_unpin.clear();
+                    need_unpin = false;
                     retry_backoff = get_backoff_strategy();
                 }
                 Err(err) => {

@@ -14,7 +14,6 @@
 
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
-use crate::monitor::StateStoreMetrics;
 use std::future::Future;
 use std::ops::Bound::{Excluded, Included, Unbounded};
 use std::ops::{Bound, RangeBounds};
@@ -26,6 +25,7 @@ use parking_lot::RwLock;
 
 use crate::error::{StorageError, StorageResult};
 use crate::hummock::HummockError;
+use crate::monitor::StateStoreMetrics;
 use crate::storage_value::StorageValue;
 use crate::store::*;
 use crate::{define_state_store_associated_type, StateStore, StateStoreIter};
@@ -233,10 +233,15 @@ impl StateStore for MemoryStateStore {
         }
     }
 
-    fn sync(&self, _epoch: Option<u64>, _last_epoch: Option<u64>,_stats: Option<Arc<StateStoreMetrics>>) -> Self::SyncFuture<'_> {
+    fn sync(
+        &self,
+        _epoch: Option<u64>,
+        _last_epoch: Option<u64>,
+        _stats: Option<Arc<StateStoreMetrics>>,
+    ) -> Self::SyncFuture<'_> {
         async move {
             // memory backend doesn't support push to S3, so this is a no-op
-            Ok(())
+            Ok(0)
         }
     }
 
