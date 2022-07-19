@@ -29,6 +29,7 @@ use risingwave_hummock_sdk::{is_remote_sst_id, HummockEpoch, LocalSstableInfo};
 use risingwave_pb::hummock::{KeyRange, SstableInfo};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+use tracing::info;
 
 use self::shared_buffer_batch::SharedBufferBatch;
 use crate::hummock::iterator::{
@@ -385,7 +386,7 @@ impl SharedBuffer {
             .map(|(_, order_index)| order_index)
             .min()
             .cloned();
-
+       // tracing::info!("???sfjsa{:?}",min_order_index);
         if let Some(min_order_index) = min_order_index {
             let task_write_batch_size = keyed_payload
                 .values()
@@ -441,6 +442,7 @@ impl SharedBuffer {
         self.global_upload_task_size
             .fetch_sub(task_write_batch_size, Relaxed);
         for sst in new_sst {
+            //tracing::info!("sdasdf{:?}",sst);
             let data = UncommittedData::Sst(sst);
             let insert_result = self
                 .uncommitted_data
@@ -471,10 +473,10 @@ impl SharedBuffer {
     }
 
     pub fn get_ssts_to_commit(&self) -> Vec<LocalSstableInfo> {
-        assert!(
-            self.uploading_tasks.is_empty(),
-            "when committing sst there should not be uploading task"
-        );
+        // assert!(
+        //     self.uploading_tasks.is_empty(),
+        //     "when committing sst there should not be uploading task"
+        // );
         let mut ret = Vec::new();
         for data in self.uncommitted_data.values() {
             match data {
@@ -482,6 +484,7 @@ impl SharedBuffer {
                     panic!("there should not be any batch when committing sst");
                 }
                 UncommittedData::Sst((compaction_group_id, sst)) => {
+                    //tracing::info!("test sst{:?}",sst.id);
                     assert!(
                         is_remote_sst_id(sst.id),
                         "all sst should be remote when trying to get ssts to commit"

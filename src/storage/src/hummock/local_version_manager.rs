@@ -43,9 +43,7 @@ use crate::hummock::conflict_detector::ConflictDetector;
 use crate::hummock::shared_buffer::shared_buffer_batch::SharedBufferItem;
 use crate::hummock::shared_buffer::shared_buffer_uploader::UploadTaskPayload;
 use crate::hummock::shared_buffer::UploadTaskType::{FlushWriteBatch, UpSyncAll};
-use crate::hummock::shared_buffer::{
-    KeyIndexedUncommittedData, OrderIndex, SharedBufferEvent, UncommittedData, WriteRequest,
-};
+use crate::hummock::shared_buffer::{KeyIndexedUncommittedData, OrderIndex, SharedBuffer, SharedBufferEvent, UncommittedData, WriteRequest};
 use crate::hummock::utils::validate_table_key_range;
 use crate::hummock::{
     HummockEpoch, HummockError, HummockResult, HummockVersionId, INVALID_VERSION_ID,
@@ -482,25 +480,24 @@ impl LocalVersionManager {
                 keyed_payload
             })
             .collect::<BTreeMap<(Vec<u8>, usize), UncommittedData>>();
-        let (order_index, task_payload, task_write_batch_size) = match self
-            .local_version
-            .read()
-            .get_shared_buffer(epoch)
-            .and_then(|shared_buffer| {
-                shared_buffer
-                    .write()
-                    .new_upload_task(UpSyncAll(keyed_payload))
-            }) {
+        //tracing::info!("shaedsafd {:?}",keyed_payload);
+        if self.local_version.read().get_shared_buffer(epoch).is_none() {
+            self.local_version.write().new_shared_buffer(epoch,Arc::new(AtomicUsize::new(0)));
+        }
+        let (order_index, task_payload, task_write_batch_size) = match self.local_version.read().
+            get_shared_buffer(epoch)
+            .unwrap()
+            .write().new_upload_task(UpSyncAll(keyed_payload)){
             Some(task) => task,
             None => {
-                tracing::trace!("sync epoch {} has no more task to do", epoch);
+                tracing::info!("sync epoch {} has no more task to do", epoch);
                 return Ok(0);
             }
         };
 
         self.run_upload_task(order_index, epoch, task_payload, false)
             .await?;
-        tracing::trace!(
+        tracing::info!(
             "sync epoch {} finished.",
             epoch,
             // task_write_batch_size
