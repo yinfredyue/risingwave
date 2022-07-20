@@ -54,6 +54,7 @@ macro_rules! for_all_metrics {
             write_batch_duration: Histogram,
             write_batch_size: Histogram,
             write_build_l0_sst_duration: Histogram,
+            write_l0_sst_duration: Histogram,
             write_build_l0_bytes: GenericCounter<AtomicU64>,
             write_l0_size_every_epoch: Histogram,
 
@@ -252,6 +253,20 @@ impl StateStoreMetrics {
         ).unwrap();
 
         let opts = histogram_opts!(
+            "state_store_write_l0_sst_duration",
+            "Total time of batch_write_build_table that have been issued to state store",
+            exponential_buckets(0.001, 2.0, 16).unwrap() // max 32s
+        );
+        let write_l0_sst_duration =
+            register_histogram_with_registry!(opts, registry).unwrap();
+
+        let write_build_l0_bytes = register_int_counter_with_registry!(
+            "state_store_write_build_l0_bytes",
+            "Total size of compaction files size that have been written to object store from shared buffer",
+            registry
+        ).unwrap();
+
+        let opts = histogram_opts!(
             "state_store_write_l0_size_every_epoch",
             "Total size of upload to l0 every epoch",
             exponential_buckets(10.0, 2.0, 25).unwrap()
@@ -416,6 +431,7 @@ impl StateStoreMetrics {
             write_batch_duration,
             write_batch_size,
             write_build_l0_sst_duration,
+            write_l0_sst_duration,
             write_build_l0_bytes,
             write_l0_size_every_epoch,
             iter_merge_sstable_counts,

@@ -23,6 +23,7 @@ use dyn_clone::DynClone;
 use futures::future::{try_join_all, BoxFuture};
 use futures::{stream, FutureExt, StreamExt, TryFutureExt};
 use itertools::Itertools;
+use log::info;
 use risingwave_common::config::constant::hummock::{CompactionFilterFlag, TABLE_OPTION_DUMMY_TTL};
 use risingwave_common::config::StorageConfig;
 use risingwave_hummock_sdk::compact::compact_task_to_string;
@@ -640,7 +641,6 @@ impl Compactor {
             self.compact_task.target_file_size as usize,
             max_target_file_size,
         );
-
         // NOTICE: should be user_key overlap, NOT full_key overlap!
         let mut builder = CapacitySplitTableBuilder::new(
             || async {
@@ -665,11 +665,10 @@ impl Compactor {
 
         // Monitor time cost building shared buffer to SSTs.
         let compact_timer = if self.context.is_share_buffer_compact {
-            self.context.stats.write_build_l0_sst_duration.start_timer()
+            self.context.stats.clone().write_build_l0_sst_duration.start_timer()
         } else {
-            self.context.stats.compact_sst_duration.start_timer()
+            self.context.stats.clone().compact_sst_duration.start_timer()
         };
-
         Compactor::compact_and_build_sst(
             &mut builder,
             kr,
@@ -679,9 +678,10 @@ impl Compactor {
             compaction_filter,
         )
         .await?;
+        compact_timer.observe_duration();
+        let timer_upload = self.context.stats.write_l0_sst_duration.start_timer();
         let builder_len = builder.len();
         let sealed_builders = builder.finish();
-        compact_timer.observe_duration();
 
         let mut ssts = Vec::with_capacity(builder_len);
         let mut upload_join_handles = vec![];
@@ -708,7 +708,6 @@ impl Compactor {
                 self.context.stats.compaction_upload_sst_counts.inc();
             }
         }
-
         // Wait for all upload to finish
         try_join_all(upload_join_handles.into_iter().map(|join_handle| {
             join_handle.map(|result| match result {
@@ -720,7 +719,7 @@ impl Compactor {
             })
         }))
         .await?;
-
+        timer_upload.observe_duration();
         self.context
             .stats
             .get_table_id_total_time_duration

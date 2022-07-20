@@ -616,6 +616,24 @@ def section_hummock(panels):
                 "sum(rate(state_store_iter_in_process_counts[$__rate_interval])) by(job,instance)", "iter_in_process_counts - {{job}} @ {{instance}}"
             ),
         ]),
+        panels.timeseries_latency(
+            "Write To L0 Compaction",
+            quantile(lambda quantile, legend: panels.target(
+                f"histogram_quantile({quantile}, sum(rate(state_store_write_build_l0_sst_duration_bucket[$__rate_interval])) by (le))", f"barrier_send_latency_p{legend}"
+            ), [50, 90, 99, 999, "max"]) + [
+                panels.target(
+                    "rate(state_store_write_build_l0_sst_duration_sum[$__rate_interval]) / rate(state_store_write_build_l0_sst_duration_count[$__rate_interval])", "barrier_send_latency_avg"
+                ),
+            ]),
+        panels.timeseries_latency(
+            "Upload To S3",
+            quantile(lambda quantile, legend: panels.target(
+                f"histogram_quantile({quantile}, sum(rate(state_store_write_l0_sst_duration_bucket[$__rate_interval])) by (le))", f"barrier_send_latency_p{legend}"
+            ), [50, 90, 99, 999, "max"]) + [
+                panels.target(
+                    "rate(state_store_write_l0_sst_duration_sum[$__rate_interval]) / rate(state_store_write_l0_sst_duration_count[$__rate_interval])", "barrier_send_latency_avg"
+                ),
+            ]),
         panels.timeseries_latency("Read Duration - Get", [
             panels.target(
                 "histogram_quantile(0.50, sum(rate(state_store_get_duration_bucket[$__rate_interval])) by (le, job, instance))", "p50 - {{job}} @ {{instance}}"

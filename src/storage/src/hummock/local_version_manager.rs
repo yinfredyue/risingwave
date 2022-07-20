@@ -480,7 +480,7 @@ impl LocalVersionManager {
                 keyed_payload
             })
             .collect::<BTreeMap<(Vec<u8>, usize), UncommittedData>>();
-        //tracing::info!("shaedsafd {:?}",keyed_payload);
+
         if self.local_version.read().get_shared_buffer(epoch).is_none() {
             self.local_version.write().new_shared_buffer(epoch,Arc::new(AtomicUsize::new(0)));
         }
