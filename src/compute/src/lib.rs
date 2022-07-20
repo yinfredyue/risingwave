@@ -36,6 +36,7 @@ pub mod rpc;
 pub mod server;
 
 use clap::Parser;
+use tokio::runtime::Runtime;
 
 /// Command-line arguments for compute-node.
 #[derive(Parser, Debug)]
@@ -75,6 +76,7 @@ pub struct ComputeNodeOpts {
 
 use std::future::Future;
 use std::pin::Pin;
+use std::time::Duration;
 
 use crate::server::compute_node_serve;
 
@@ -100,4 +102,15 @@ pub fn start(opts: ComputeNodeOpts) -> Pin<Box<dyn Future<Output = ()> + Send>> 
             compute_node_serve(listen_address, client_address, opts).await;
         join_handle.await.unwrap();
     })
+}
+
+#[no_mangle]
+pub unsafe fn start_dylib(rt: *const Runtime) {
+    let rt = &*rt;
+    rt.block_on(async {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        println!("slept 250ms");
+        let _guard = rt.enter();
+        start(ComputeNodeOpts::parse()).await;
+    });
 }

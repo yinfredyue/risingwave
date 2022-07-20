@@ -20,6 +20,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use futures::Future;
+use tokio::runtime::Runtime;
 use tracing::Level;
 use tracing_subscriber::filter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -265,20 +266,7 @@ fn spawn_prof_thread(profile_path: String) -> std::thread::JoinHandle<()> {
     })
 }
 
-/// Start RisingWave components with configs from environment variable.
-///
-/// Currently, the following env variables will be read:
-///
-/// * `RW_WORKER_THREADS`: number of tokio worker threads. If not set, it will use tokio's default
-///   config (equivalent to CPU cores).
-/// * `RW_DEADLOCK_DETECTION`: whether to enable deadlock detection. If not set, will enable in
-///   debug mode, and disable in release mode.
-/// * `RW_PROFILE_PATH`: the path to generate flamegraph. If set, then profiling is automatically
-///   enabled.
-pub fn main_okk<F>(f: F) -> F::Output
-where
-    F: Future + Send + 'static,
-{
+pub fn runtime_okk() -> Runtime {
     set_panic_abort();
 
     let mut builder = tokio::runtime::Builder::new_multi_thread();
@@ -305,5 +293,22 @@ where
         spawn_prof_thread(profile_path);
     }
 
-    builder.enable_all().build().unwrap().block_on(f)
+    builder.enable_all().build().unwrap()
+}
+
+/// Start RisingWave components with configs from environment variable.
+///
+/// Currently, the following env variables will be read:
+///
+/// * `RW_WORKER_THREADS`: number of tokio worker threads. If not set, it will use tokio's default
+///   config (equivalent to CPU cores).
+/// * `RW_DEADLOCK_DETECTION`: whether to enable deadlock detection. If not set, will enable in
+///   debug mode, and disable in release mode.
+/// * `RW_PROFILE_PATH`: the path to generate flamegraph. If set, then profiling is automatically
+///   enabled.
+pub fn main_okk<F>(f: F) -> F::Output
+where
+    F: Future + Send + 'static,
+{
+    runtime_okk().block_on(f)
 }

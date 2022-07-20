@@ -9,10 +9,10 @@ static-link = ["workspace-static-link"]
 [dependencies]
 anyhow = "1"
 clap = { version = "3", features = ["derive"] }
+libloading = "0.7"
 log = { version = "0.4", features = ["release_max_level_info"] }
 madsim = "=0.2.0-alpha.4"
 risingwave_compactor = { path = "../storage/compactor" }
-risingwave_compute = { path = "../compute" }
 risingwave_ctl = { path = "../ctl" }
 risingwave_frontend = { path = "../frontend" }
 risingwave_meta = { path = "../meta" }
@@ -40,9 +40,9 @@ path = "src/bin/frontend_node.rs"
 name = "meta-node"
 path = "src/bin/meta_node.rs"
 
-[[bin]]
-name = "compute-node"
-path = "src/bin/compute_node.rs"
+# [[bin]]
+# name = "compute-node"
+# path = "src/bin/compute_node.rs"
 
 [[bin]]
 name = "compactor"
@@ -51,3 +51,7 @@ path = "src/bin/compactor.rs"
 [[bin]]
 name = "risectl"
 path = "src/bin/ctl.rs"
+
+[[bin]]
+name = "compute-node-dylib"
+path = "src/bin/compute_node_dylib.rs"

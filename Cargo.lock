@@ -4099,11 +4099,11 @@ version = "0.1.10"
 dependencies = [
  "anyhow",
  "clap 3.2.13",
+ "libloading",
  "log",
  "madsim",
  "madsim-tokio",
  "risingwave_compactor",
- "risingwave_compute",
  "risingwave_ctl",
  "risingwave_frontend",
  "risingwave_meta",

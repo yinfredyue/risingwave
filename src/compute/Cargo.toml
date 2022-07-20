@@ -66,3 +66,5 @@ futures-async-stream = "0.2"
 rand = "0.8"
 tempfile = "3"
 
+[lib]
+crate-type = ["lib", "cdylib"]

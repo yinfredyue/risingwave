@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg_attr(coverage, feature(no_coverage))]
+use libloading::library_filename;
+use risingwave_rt::runtime_okk;
+use tokio::runtime::Runtime;
 
-use tikv_jemallocator::Jemalloc;
+type StartFn = fn(rt: *const Runtime);
 
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
-
-#[cfg_attr(coverage, no_coverage)]
 fn main() {
-    use clap::StructOpt;
+    risingwave_rt::init_risingwave_logger(risingwave_rt::LoggerSettings::new(false, false));
 
-    let opts = risingwave_compute::ComputeNodeOpts::parse();
+    let rt = runtime_okk();
 
-    risingwave_rt::init_risingwave_logger(risingwave_rt::LoggerSettings::new(
-        opts.enable_jaeger_tracing,
-        false,
-    ));
+    unsafe {
+        let mylib = Box::leak(Box::new(
+            libloading::Library::new(library_filename("risingwave_compute")).unwrap(),
+        ));
+        let start_fn = mylib.get::<StartFn>(b"start_dylib").unwrap();
 
-    risingwave_rt::main_okk(risingwave_compute::start(opts))
+        start_fn(&rt);
+    }
 }
