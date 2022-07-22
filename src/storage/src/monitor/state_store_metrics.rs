@@ -246,11 +246,6 @@ impl StateStoreMetrics {
         );
         let write_build_l0_sst_duration =
             register_histogram_with_registry!(opts, registry).unwrap();
-        let write_build_l0_bytes = register_int_counter_with_registry!(
-            "state_store_write_build_l0_bytes",
-            "Total size of compaction files size that have been written to object store from shared buffer",
-            registry
-        ).unwrap();
 
         let opts = histogram_opts!(
             "state_store_write_l0_sst_duration",
