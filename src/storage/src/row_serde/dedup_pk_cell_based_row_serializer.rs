@@ -20,9 +20,10 @@ use risingwave_common::catalog::{ColumnDesc, ColumnId};
 use risingwave_common::error::Result;
 use risingwave_common::types::VirtualNode;
 
+use super::cell_based_row_deserializer::CellBasedRowDeserializer;
 use super::cell_based_row_serializer::CellBasedRowSerializer;
-use super::{Encoding, KeyBytes, ValueBytes};
-
+use super::{KeyBytes, RowSerde, RowSerialize, ValueBytes};
+#[derive(Clone)]
 /// [`DedupPkCellBasedRowSerializer`] is identical to [`CellBasedRowSerializer`].
 /// Difference is that before serializing a row, pk datums are filtered out.
 pub struct DedupPkCellBasedRowSerializer {
@@ -85,7 +86,7 @@ impl DedupPkCellBasedRowSerializer {
     }
 }
 
-impl Encoding for DedupPkCellBasedRowSerializer {
+impl RowSerialize for DedupPkCellBasedRowSerializer {
     fn create_row_serializer(
         pk_indices: &[usize],
         column_descs: &[ColumnDesc],
@@ -121,6 +122,26 @@ impl Encoding for DedupPkCellBasedRowSerializer {
     }
 }
 
+impl RowSerde for DedupPkCellBasedRowSerializer {
+    type Deserializer = CellBasedRowDeserializer;
+    type Serializer = DedupPkCellBasedRowSerializer;
+
+    fn create_serializer(
+        pk_indices: &[usize],
+        column_descs: &[ColumnDesc],
+        column_ids: &[ColumnId],
+    ) -> Self::Serializer {
+        RowSerialize::create_row_serializer(pk_indices, column_descs, column_ids)
+    }
+
+    fn create_deserializer(
+        column_mapping: std::sync::Arc<super::ColumnDescMapping>,
+        data_types: Vec<risingwave_common::types::DataType>,
+    ) -> Self::Deserializer {
+        super::RowDeserialize::create_row_deserializer(column_mapping, data_types)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
@@ -129,8 +150,8 @@ mod tests {
     use risingwave_common::types::DataType;
 
     use super::*;
-    use crate::encoding::cell_based_row_deserializer::make_cell_based_row_deserializer;
-    use crate::encoding::Decoding;
+    use crate::row_serde::cell_based_row_deserializer::make_cell_based_row_deserializer;
+    use crate::row_serde::RowDeserialize;
     use crate::table::storage_table::DEFAULT_VNODE;
 
     #[test]

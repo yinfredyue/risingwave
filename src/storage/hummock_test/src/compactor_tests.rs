@@ -20,6 +20,7 @@ mod tests {
 
     use bytes::Bytes;
     use itertools::Itertools;
+    use parking_lot::RwLock;
     use rand::Rng;
     use risingwave_common::catalog::TableId;
     use risingwave_common::config::constant::hummock::CompactionFilterFlag;
@@ -124,6 +125,7 @@ mod tests {
             is_share_buffer_compact: false,
             sstable_id_generator: get_remote_sstable_id_generator(hummock_meta_client.clone()),
             compaction_executor: None,
+            table_id_to_slice_transform: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -193,7 +195,7 @@ mod tests {
             .id;
         storage
             .local_version_manager()
-            .try_update_pinned_version(version);
+            .try_update_pinned_version(None, (false, vec![], Some(version)));
         let table = storage
             .sstable_store()
             .sstable(output_table_id, &mut StoreLocalStatistic::default())
@@ -306,7 +308,7 @@ mod tests {
         // 5. storage get back the correct kv after compaction
         storage
             .local_version_manager()
-            .try_update_pinned_version(version);
+            .try_update_pinned_version(None, (false, vec![], Some(version)));
         let get_val = storage
             .get(
                 &key,
@@ -348,6 +350,7 @@ mod tests {
             is_share_buffer_compact: false,
             sstable_id_generator: get_remote_sstable_id_generator(hummock_meta_client.clone()),
             compaction_executor: None,
+            table_id_to_slice_transform: Arc::new(RwLock::new(HashMap::new())),
         };
 
         // 1. add sstables
@@ -450,6 +453,7 @@ mod tests {
             is_share_buffer_compact: false,
             sstable_id_generator: get_remote_sstable_id_generator(hummock_meta_client.clone()),
             compaction_executor: None,
+            table_id_to_slice_transform: Arc::new(RwLock::new(HashMap::new())),
         };
 
         // 1. add sstables
@@ -567,7 +571,7 @@ mod tests {
         // to update version for hummock_storage
         storage
             .local_version_manager()
-            .try_update_pinned_version(version);
+            .try_update_pinned_version(None, (false, vec![], Some(version)));
 
         // 6. scan kv to check key table_id
         let scan_result = storage
@@ -608,6 +612,7 @@ mod tests {
             is_share_buffer_compact: false,
             sstable_id_generator: get_remote_sstable_id_generator(hummock_meta_client.clone()),
             compaction_executor: None,
+            table_id_to_slice_transform: Arc::new(RwLock::new(HashMap::new())),
         };
 
         // 1. add sstables
@@ -728,7 +733,7 @@ mod tests {
         // to update version for hummock_storage
         storage
             .local_version_manager()
-            .try_update_pinned_version(version);
+            .try_update_pinned_version(None, (false, vec![], Some(version)));
 
         // 6. scan kv to check key table_id
         let scan_result = storage
