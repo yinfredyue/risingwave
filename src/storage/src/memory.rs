@@ -319,6 +319,7 @@ mod tests {
                         epoch: 0,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     }
                 )
                 .await
@@ -337,6 +338,7 @@ mod tests {
                         epoch: 0,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     }
                 )
                 .await
@@ -352,6 +354,7 @@ mod tests {
                         epoch: 1,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     }
                 )
                 .await
@@ -366,6 +369,7 @@ mod tests {
                         epoch: 0,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     }
                 )
                 .await
@@ -380,6 +384,7 @@ mod tests {
                         epoch: 0,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     }
                 )
                 .await
@@ -394,6 +399,7 @@ mod tests {
                         epoch: 0,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     }
                 )
                 .await
@@ -408,6 +414,7 @@ mod tests {
                         epoch: 1,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     }
                 )
                 .await
@@ -422,6 +429,7 @@ mod tests {
                         epoch: 1,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     }
                 )
                 .await
@@ -436,6 +444,7 @@ mod tests {
                         epoch: 1,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     }
                 )
                 .await

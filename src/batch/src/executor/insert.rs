@@ -304,6 +304,7 @@ mod tests {
                     epoch,
                     table_id: Default::default(),
                     ttl: None,
+                    ..Default::default()
                 },
             )
             .await?;

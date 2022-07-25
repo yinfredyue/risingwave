@@ -88,6 +88,7 @@ async fn test_failpoints_state_store_read_upload() {
                 epoch: 1,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -131,6 +132,7 @@ async fn test_failpoints_state_store_read_upload() {
                 epoch: 2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await;
@@ -142,6 +144,7 @@ async fn test_failpoints_state_store_read_upload() {
                 epoch: 2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await;
@@ -154,6 +157,7 @@ async fn test_failpoints_state_store_read_upload() {
                 epoch: 2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -186,6 +190,7 @@ async fn test_failpoints_state_store_read_upload() {
                 epoch: 5,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -199,6 +204,7 @@ async fn test_failpoints_state_store_read_upload() {
                 epoch: 5,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await

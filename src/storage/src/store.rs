@@ -194,6 +194,7 @@ pub struct ReadOptions {
     pub epoch: u64,
     pub table_id: Option<TableId>,
     pub ttl: Option<u32>, // second
+    pub use_bloom_filter: bool,
 }
 
 #[derive(Default, Clone)]

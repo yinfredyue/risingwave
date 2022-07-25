@@ -68,6 +68,7 @@ impl Operations {
                                 epoch: u64::MAX,
                                 table_id: None,
                                 ttl: None,
+                                ..Default::default()
                             },
                         )
                         .await

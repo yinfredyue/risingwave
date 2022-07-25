@@ -148,11 +148,10 @@ impl HummockStorage {
         sstable: TableHolder,
         internal_key: &[u8],
         key: &[u8],
-        _read_options: &ReadOptions,
+        read_options: &ReadOptions,
         stats: &mut StoreLocalStatistic,
     ) -> HummockResult<Option<Option<Bytes>>> {
-        // TODO: via read_options to determine whether to check bloom_filter next PR
-        if sstable.value().surely_not_have_user_key(key) {
+        if read_options.use_bloom_filter && sstable.value().surely_not_have_user_key(key) {
             stats.bloom_filter_true_negative_count += 1;
             return Ok(None);
         }

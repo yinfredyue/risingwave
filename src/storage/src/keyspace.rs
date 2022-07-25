@@ -89,6 +89,7 @@ impl<S: StateStore> Keyspace<S> {
                     epoch,
                     table_id: Some(self.table_id),
                     ttl: None,
+                    ..Default::default()
                 },
             )
             .await
@@ -109,6 +110,7 @@ impl<S: StateStore> Keyspace<S> {
                     epoch,
                     table_id: Some(self.table_id),
                     ttl: None,
+                    ..Default::default()
                 },
             )
             .await
@@ -150,6 +152,7 @@ impl<S: StateStore> Keyspace<S> {
                     epoch,
                     table_id: Some(self.table_id),
                     ttl: None,
+                    ..Default::default()
                 },
             )
             .await?;
@@ -187,6 +190,7 @@ impl<S: StateStore> Keyspace<S> {
                     epoch,
                     table_id: Some(self.table_id),
                     ttl: None,
+                    ..Default::default()
                 },
             )
             .await?;

@@ -29,6 +29,7 @@ mod tests {
     use risingwave_hummock_sdk::compaction_group::hummock_version_ext::HummockVersionExt;
     use risingwave_hummock_sdk::compaction_group::StaticCompactionGroupId;
     use risingwave_hummock_sdk::key::get_table_id;
+    use risingwave_hummock_sdk::slice_transform::{FullKeySliceTransform, SliceTransformImpl};
     use risingwave_meta::hummock::compaction::ManualCompactionOption;
     use risingwave_meta::hummock::test_utils::{
         register_table_ids_to_compaction_group, setup_compute_env,
@@ -210,6 +211,7 @@ mod tests {
                     epoch: (32 * 1000) << 16,
                     table_id: Default::default(),
                     ttl: None,
+                    use_bloom_filter: false,
                 },
             )
             .await
@@ -225,6 +227,7 @@ mod tests {
                     epoch: (31 * 1000) << 16,
                     table_id: Default::default(),
                     ttl: None,
+                    use_bloom_filter: false,
                 },
             )
             .await;
@@ -314,6 +317,7 @@ mod tests {
                     epoch: 129,
                     table_id: Default::default(),
                     ttl: None,
+                    use_bloom_filter: false,
                 },
             )
             .await
@@ -340,6 +344,13 @@ mod tests {
             worker_node.id,
         ));
         let storage = get_hummock_storage(hummock_meta_client.clone()).await;
+
+        let mut table_id_to_slice_transform = HashMap::new();
+        table_id_to_slice_transform.insert(
+            1,
+            SliceTransformImpl::FullKey(FullKeySliceTransform::default()),
+        );
+
         let compact_ctx = CompactorContext {
             options: storage.options().clone(),
             sstable_store: storage.sstable_store(),
@@ -348,7 +359,7 @@ mod tests {
             is_share_buffer_compact: false,
             sstable_id_generator: get_remote_sstable_id_generator(hummock_meta_client.clone()),
             compaction_executor: None,
-            table_id_to_slice_transform: Arc::new(RwLock::new(HashMap::new())),
+            table_id_to_slice_transform: Arc::new(RwLock::new(table_id_to_slice_transform)),
         };
 
         // 1. add sstables
@@ -441,6 +452,17 @@ mod tests {
             worker_node.id,
         ));
         let storage = get_hummock_storage(hummock_meta_client.clone()).await;
+        let mut table_id_to_slice_transform = HashMap::new();
+        table_id_to_slice_transform.insert(
+            1,
+            SliceTransformImpl::FullKey(FullKeySliceTransform::default()),
+        );
+
+        table_id_to_slice_transform.insert(
+            2,
+            SliceTransformImpl::FullKey(FullKeySliceTransform::default()),
+        );
+
         let compact_ctx = CompactorContext {
             options: storage.options().clone(),
             sstable_store: storage.sstable_store(),
@@ -449,7 +471,7 @@ mod tests {
             is_share_buffer_compact: false,
             sstable_id_generator: get_remote_sstable_id_generator(hummock_meta_client.clone()),
             compaction_executor: None,
-            table_id_to_slice_transform: Arc::new(RwLock::new(HashMap::new())),
+            table_id_to_slice_transform: Arc::new(RwLock::new(table_id_to_slice_transform)),
         };
 
         // 1. add sstables
@@ -576,6 +598,7 @@ mod tests {
                     epoch,
                     table_id: Default::default(),
                     ttl: None,
+                    use_bloom_filter: false,
                 },
             )
             .await
@@ -598,6 +621,11 @@ mod tests {
             worker_node.id,
         ));
         let storage = get_hummock_storage(hummock_meta_client.clone()).await;
+        let mut table_id_to_slice_transform = HashMap::new();
+        table_id_to_slice_transform.insert(
+            2,
+            SliceTransformImpl::FullKey(FullKeySliceTransform::default()),
+        );
         let compact_ctx = CompactorContext {
             options: storage.options().clone(),
             sstable_store: storage.sstable_store(),
@@ -606,7 +634,7 @@ mod tests {
             is_share_buffer_compact: false,
             sstable_id_generator: get_remote_sstable_id_generator(hummock_meta_client.clone()),
             compaction_executor: None,
-            table_id_to_slice_transform: Arc::new(RwLock::new(HashMap::new())),
+            table_id_to_slice_transform: Arc::new(RwLock::new(table_id_to_slice_transform)),
         };
 
         // 1. add sstables
@@ -736,6 +764,7 @@ mod tests {
                     epoch,
                     table_id: Default::default(),
                     ttl: None,
+                    use_bloom_filter: false,
                 },
             )
             .await

@@ -103,6 +103,7 @@ async fn test_basic() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -116,6 +117,7 @@ async fn test_basic() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -131,6 +133,7 @@ async fn test_basic() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -158,6 +161,7 @@ async fn test_basic() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -186,6 +190,7 @@ async fn test_basic() {
                 epoch: epoch3,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -200,6 +205,7 @@ async fn test_basic() {
                 epoch: epoch3,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -214,6 +220,7 @@ async fn test_basic() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -229,6 +236,7 @@ async fn test_basic() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -244,6 +252,7 @@ async fn test_basic() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -258,6 +267,7 @@ async fn test_basic() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -273,6 +283,7 @@ async fn test_basic() {
                 epoch: epoch3,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -297,6 +308,7 @@ async fn test_basic() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -310,6 +322,7 @@ async fn test_basic() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -518,6 +531,7 @@ async fn test_reload_storage() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -533,6 +547,7 @@ async fn test_reload_storage() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -560,6 +575,7 @@ async fn test_reload_storage() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -575,6 +591,7 @@ async fn test_reload_storage() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -590,6 +607,7 @@ async fn test_reload_storage() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -605,6 +623,7 @@ async fn test_reload_storage() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -619,6 +638,7 @@ async fn test_reload_storage() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             },
         )
         .await
@@ -670,6 +690,7 @@ async fn test_write_anytime() {
                             epoch,
                             table_id: Default::default(),
                             ttl: None,
+                            ..Default::default()
                         }
                     )
                     .await
@@ -685,6 +706,7 @@ async fn test_write_anytime() {
                             epoch,
                             table_id: Default::default(),
                             ttl: None,
+                            ..Default::default()
                         }
                     )
                     .await
@@ -700,6 +722,7 @@ async fn test_write_anytime() {
                             epoch,
                             table_id: Default::default(),
                             ttl: None,
+                            ..Default::default()
                         }
                     )
                     .await
@@ -714,6 +737,7 @@ async fn test_write_anytime() {
                         epoch,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     },
                 )
                 .await
@@ -765,6 +789,7 @@ async fn test_write_anytime() {
                             epoch,
                             table_id: Default::default(),
                             ttl: None,
+                            ..Default::default()
                         }
                     )
                     .await
@@ -778,6 +803,7 @@ async fn test_write_anytime() {
                         epoch,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     }
                 )
                 .await
@@ -792,6 +818,7 @@ async fn test_write_anytime() {
                             epoch,
                             table_id: Default::default(),
                             ttl: None,
+                            ..Default::default()
                         }
                     )
                     .await
@@ -805,6 +832,7 @@ async fn test_write_anytime() {
                         epoch,
                         table_id: Default::default(),
                         ttl: None,
+                        ..Default::default()
                     },
                 )
                 .await
@@ -944,6 +972,7 @@ async fn test_delete_get() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
+                ..Default::default()
             }
         )
         .await

@@ -32,7 +32,9 @@ use risingwave_hummock_sdk::key::{
     extract_table_id_and_epoch, get_epoch, get_table_id, Epoch, FullKey,
 };
 use risingwave_hummock_sdk::key_range::KeyRange;
-use risingwave_hummock_sdk::slice_transform::SliceTransformImpl;
+use risingwave_hummock_sdk::slice_transform::{
+    DummySliceTransform, MultiSliceTransform, SliceTransformImpl,
+};
 use risingwave_hummock_sdk::{CompactionGroupId, HummockSstableId, VersionedComparator};
 use risingwave_pb::hummock::{
     CompactTask, LevelType, SstableInfo, SubscribeCompactTasksResponse, VacuumTask,
@@ -360,11 +362,16 @@ impl Compactor {
         let mut compact_success = true;
         let mut output_ssts = Vec::with_capacity(parallelism);
         let mut compaction_futures = vec![];
+        // build slice_transform
+        let multi_slice_transform =
+            Self::build_slice_transform(context.clone(), &compact_task).await;
+
         let compactor = Compactor::new(context, compact_task.clone());
 
         let mut local_stats = StoreLocalStatistic::default();
         for (split_index, _) in compact_task.splits.iter().enumerate() {
             let compactor = compactor.clone();
+            let slice_transform = multi_slice_transform.clone();
             let iter = build_ordered_merge_iter::<ForwardIter>(
                 &payload,
                 sstable_store.clone(),
@@ -375,7 +382,11 @@ impl Compactor {
             .await? as BoxedForwardHummockIterator;
             let compaction_executor = compactor.context.compaction_executor.as_ref().cloned();
 
-            let split_task = async move { compactor.compact_key_range(split_index, iter).await };
+            let split_task = async move {
+                compactor
+                    .compact_key_range(split_index, iter, slice_transform)
+                    .await
+            };
             let rx = Compactor::request_execution(compaction_executor, split_task)?;
             compaction_futures.push(rx);
         }
@@ -442,11 +453,89 @@ impl Compactor {
         }
     }
 
+    fn build_multi_compaction_filter(compact_task: &CompactTask) -> MultiCompactionFilter {
+        use risingwave_common::catalog::TableOption;
+        let mut multi_filter = MultiCompactionFilter::default();
+        let compaction_filter_flag =
+            CompactionFilterFlag::from_bits(compact_task.compaction_filter_mask)
+                .unwrap_or_default();
+        if compaction_filter_flag.contains(CompactionFilterFlag::STATE_CLEAN) {
+            let state_clean_up_filter = Box::new(StateCleanUpCompactionFilter::new(
+                HashSet::from_iter(compact_task.existing_table_ids.clone()),
+            ));
+
+            multi_filter.register(state_clean_up_filter);
+        }
+
+        if compaction_filter_flag.contains(CompactionFilterFlag::TTL) {
+            let id_to_ttl = compact_task
+                .table_options
+                .iter()
+                .filter(|id_to_option| {
+                    let table_option: TableOption = id_to_option.1.into();
+                    table_option.ttl.is_some()
+                })
+                .map(|id_to_option| (*id_to_option.0, id_to_option.1.ttl))
+                .collect();
+            let ttl_filter = Box::new(TTLCompactionFilter::new(
+                id_to_ttl,
+                compact_task.current_epoch_time,
+            ));
+            multi_filter.register(ttl_filter);
+        }
+
+        multi_filter
+    }
+
+    async fn build_slice_transform(
+        context: Arc<CompactorContext>,
+        compact_task: &CompactTask,
+    ) -> SliceTransformImpl {
+        if compact_task.existing_table_ids.is_empty() {
+            return SliceTransformImpl::Dummy(DummySliceTransform::default());
+        }
+
+        let mut multi_slice_transform = MultiSliceTransform::default();
+        let mut remaining_table_id_set: HashSet<u32> =
+            HashSet::from_iter(compact_task.existing_table_ids.clone());
+
+        let mut loop_count = 0;
+        while !remaining_table_id_set.is_empty() {
+            let table_id_to_slice_transform =
+                context.table_id_to_slice_transform.as_ref().read().clone();
+
+            remaining_table_id_set.drain_filter(|table_id| {
+                match table_id_to_slice_transform.get(table_id) {
+                    Some(slice_transform) => {
+                        multi_slice_transform.register(*table_id, slice_transform.clone());
+                        true
+                    }
+
+                    None => false,
+                }
+            });
+
+            if !remaining_table_id_set.is_empty() {
+                // poll
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                if loop_count > 10 {
+                    panic!( "build_slice_transform unexpected wait loop_count {} remaining_table_id_set {:?} multi_slice_transform_size {}",
+                    loop_count,
+                    remaining_table_id_set,
+                    multi_slice_transform.size(),)
+                }
+            }
+
+            loop_count += 1;
+        }
+
+        SliceTransformImpl::Multi(multi_slice_transform)
+    }
+
     /// Handle a compaction task and report its status to hummock manager.
     /// Always return `Ok` and let hummock manager handle errors.
     pub async fn compact(context: Arc<CompactorContext>, compact_task: CompactTask) -> bool {
-        use risingwave_common::catalog::TableOption;
-        tracing::info!("Ready to handle compaction task: {}", compact_task.task_id,);
+        tracing::info!("Ready to handle compaction task: {}", compact_task.task_id);
         let group_label = compact_task.compaction_group_id.to_string();
         let cur_level_label = compact_task.input_ssts[0].level_idx.to_string();
         let compaction_read_bytes = compact_task.input_ssts[0]
@@ -502,45 +591,25 @@ impl Compactor {
         let mut compact_success = true;
         let mut output_ssts = Vec::with_capacity(parallelism);
         let mut compaction_futures = vec![];
+
+        // build compaction_filter
+        let multi_filter = Self::build_multi_compaction_filter(&compact_task);
+
+        // build slice_transform
+        let multi_slice_transform =
+            Self::build_slice_transform(context.clone(), &compact_task).await;
+
         let mut compactor = Compactor::new(context, compact_task.clone());
-
-        let mut multi_filter = MultiCompactionFilter::default();
-        let compaction_filter_flag =
-            CompactionFilterFlag::from_bits(compact_task.compaction_filter_mask)
-                .unwrap_or_default();
-        if compaction_filter_flag.contains(CompactionFilterFlag::STATE_CLEAN) {
-            let state_clean_up_filter = Box::new(StateCleanUpCompactionFilter::new(
-                HashSet::from_iter(compact_task.existing_table_ids),
-            ));
-
-            multi_filter.register(state_clean_up_filter);
-        }
-
-        if compaction_filter_flag.contains(CompactionFilterFlag::TTL) {
-            let id_to_ttl = compact_task
-                .table_options
-                .iter()
-                .filter(|id_to_option| {
-                    let table_option: TableOption = id_to_option.1.into();
-                    table_option.ttl.is_some()
-                })
-                .map(|id_to_option| (*id_to_option.0, id_to_option.1.ttl))
-                .collect();
-            let ttl_filter = Box::new(TTLCompactionFilter::new(
-                id_to_ttl,
-                compact_task.current_epoch_time,
-            ));
-            multi_filter.register(ttl_filter);
-        }
 
         for (split_index, _) in compact_task.splits.iter().enumerate() {
             let compactor = compactor.clone();
             let compaction_executor = compactor.context.compaction_executor.as_ref().cloned();
             let filter = multi_filter.clone();
+            let slice_transform = multi_slice_transform.clone();
             let split_task = async move {
                 let merge_iter = compactor.build_sst_iter().await?;
                 compactor
-                    .compact_key_range_with_filter(split_index, merge_iter, filter)
+                    .compact_key_range_with_filter(split_index, merge_iter, filter, slice_transform)
                     .await
             };
             let rx = match Compactor::request_execution(compaction_executor, split_task) {
@@ -642,6 +711,7 @@ impl Compactor {
         split_index: usize,
         iter: BoxedForwardHummockIterator,
         compaction_filter: impl CompactionFilter,
+        slice_transform: SliceTransformImpl,
     ) -> HummockResult<CompactOutput> {
         let split = self.compact_task.splits[split_index].clone();
         let kr = KeyRange {
@@ -678,7 +748,11 @@ impl Compactor {
                     1 => CompressionAlgorithm::Lz4,
                     _ => CompressionAlgorithm::Zstd,
                 };
-                let builder = SstableBuilder::new(table_id, options);
+                let builder = SstableBuilder::new_with_slice_transform(
+                    table_id,
+                    options,
+                    slice_transform.clone(),
+                );
                 get_id_time.fetch_add(cost, Ordering::Relaxed);
                 Ok(builder)
             },
@@ -754,9 +828,10 @@ impl Compactor {
         &self,
         split_index: usize,
         iter: BoxedForwardHummockIterator,
+        slice_transform: SliceTransformImpl,
     ) -> HummockResult<CompactOutput> {
         let dummy_compaction_filter = DummyCompactionFilter {};
-        self.compact_key_range_impl(split_index, iter, dummy_compaction_filter)
+        self.compact_key_range_impl(split_index, iter, dummy_compaction_filter, slice_transform)
             .await
     }
 
@@ -765,8 +840,9 @@ impl Compactor {
         split_index: usize,
         iter: BoxedForwardHummockIterator,
         compaction_filter: impl CompactionFilter,
+        slice_transform: SliceTransformImpl,
     ) -> HummockResult<CompactOutput> {
-        self.compact_key_range_impl(split_index, iter, compaction_filter)
+        self.compact_key_range_impl(split_index, iter, compaction_filter, slice_transform)
             .await
     }
 

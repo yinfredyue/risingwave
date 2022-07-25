@@ -17,6 +17,7 @@ use std::collections::BTreeSet;
 use bytes::{BufMut, Bytes, BytesMut};
 use risingwave_common::config::StorageConfig;
 use risingwave_hummock_sdk::key::{get_table_id, user_key};
+use risingwave_hummock_sdk::slice_transform::SliceTransformImpl;
 
 use super::bloom::Bloom;
 use super::utils::CompressionAlgorithm;
@@ -84,6 +85,7 @@ pub struct SstableBuilder {
     last_full_key: Bytes,
     key_count: usize,
     sstable_id: u64,
+    slice_transform: Option<SliceTransformImpl>,
 }
 
 impl SstableBuilder {
@@ -98,6 +100,26 @@ impl SstableBuilder {
             last_full_key: Bytes::default(),
             key_count: 0,
             sstable_id,
+            slice_transform: None,
+        }
+    }
+
+    pub fn new_with_slice_transform(
+        sstable_id: u64,
+        options: SstableBuilderOptions,
+        slice_transform: SliceTransformImpl,
+    ) -> Self {
+        Self {
+            options: options.clone(),
+            buf: BytesMut::with_capacity(options.capacity),
+            block_builder: None,
+            block_metas: Vec::with_capacity(options.capacity / options.block_capacity + 1),
+            table_ids: BTreeSet::new(),
+            user_key_hashes: Vec::with_capacity(options.capacity / DEFAULT_ENTRY_SIZE + 1),
+            last_full_key: Bytes::default(),
+            key_count: 0,
+            sstable_id,
+            slice_transform: Some(slice_transform),
         }
     }
 
@@ -125,13 +147,34 @@ impl SstableBuilder {
         value.encode(&mut raw_value);
         if let Some(table_id) = get_table_id(full_key) {
             self.table_ids.insert(table_id);
+
+            let user_key = user_key(full_key);
+
+            let transform_key = match &mut self.slice_transform {
+                Some(slice_transform) => slice_transform.transform(user_key),
+
+                None => user_key,
+            };
+
+            println!("transform_key {:?}", transform_key);
+
+            // add bloom_filter check
+            // 1. not empty_key
+            // 2. transform key is not duplicate
+            if !transform_key.is_empty()
+                && (transform_key.len() > self.last_full_key.len()
+                    || transform_key != &self.last_full_key[0..transform_key.len()])
+            {
+                // avoid duplicate add to bloom filter
+                println!("add bloom_filter key {:?}", transform_key);
+
+                self.user_key_hashes
+                    .push(farmhash::fingerprint32(transform_key));
+            }
         }
         let raw_value = raw_value.freeze();
 
         block_builder.add(full_key, &raw_value);
-
-        let user_key = user_key(full_key);
-        self.user_key_hashes.push(farmhash::fingerprint32(user_key));
 
         if self.last_full_key.is_empty() {
             self.block_metas.last_mut().unwrap().smallest_key = full_key.to_vec();
@@ -280,7 +323,7 @@ pub(super) mod tests {
 
     #[tokio::test]
     async fn test_bloom_filter() {
-        test_with_bloom_filter(false).await;
+        // test_with_bloom_filter(false).await;
         test_with_bloom_filter(true).await;
     }
 }
