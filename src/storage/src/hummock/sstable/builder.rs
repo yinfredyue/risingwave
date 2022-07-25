@@ -145,36 +145,30 @@ impl SstableBuilder {
         // TODO: refine me
         let mut raw_value = BytesMut::default();
         value.encode(&mut raw_value);
+        let mut transform_key = user_key(full_key);
         if let Some(table_id) = get_table_id(full_key) {
             self.table_ids.insert(table_id);
 
-            let user_key = user_key(full_key);
+            transform_key = match &mut self.slice_transform {
+                Some(slice_transform) => slice_transform.transform(transform_key),
 
-            let transform_key = match &mut self.slice_transform {
-                Some(slice_transform) => slice_transform.transform(user_key),
-
-                None => user_key,
+                None => transform_key,
             };
-
-            println!("transform_key {:?}", transform_key);
-
-            // add bloom_filter check
-            // 1. not empty_key
-            // 2. transform key is not duplicate
-            if !transform_key.is_empty()
-                && (transform_key.len() > self.last_full_key.len()
-                    || transform_key != &self.last_full_key[0..transform_key.len()])
-            {
-                // avoid duplicate add to bloom filter
-                println!("add bloom_filter key {:?}", transform_key);
-
-                self.user_key_hashes
-                    .push(farmhash::fingerprint32(transform_key));
-            }
         }
         let raw_value = raw_value.freeze();
-
         block_builder.add(full_key, &raw_value);
+
+        // add bloom_filter check
+        // 1. not empty_key
+        // 2. transform key is not duplicate
+        if !transform_key.is_empty()
+            && (transform_key.len() > self.last_full_key.len()
+                || transform_key != &self.last_full_key[0..transform_key.len()])
+        {
+            // avoid duplicate add to bloom filter
+            self.user_key_hashes
+                .push(farmhash::fingerprint32(transform_key));
+        }
 
         if self.last_full_key.is_empty() {
             self.block_metas.last_mut().unwrap().smallest_key = full_key.to_vec();
@@ -323,7 +317,7 @@ pub(super) mod tests {
 
     #[tokio::test]
     async fn test_bloom_filter() {
-        // test_with_bloom_filter(false).await;
+        test_with_bloom_filter(false).await;
         test_with_bloom_filter(true).await;
     }
 }
