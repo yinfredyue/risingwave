@@ -81,7 +81,6 @@ pub struct SstableInfo {
     pub key_range: Option<KeyRange>,
     pub file_size: u64,
     pub table_ids: Vec<u32>,
-    pub unit_id: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct KeyRange {
@@ -104,7 +103,6 @@ impl SstableInfo {
             key_range,
             file_size: self.file_size,
             table_ids: self.table_ids,
-            unit_id: self.unit_id,
         }
     }
 }
@@ -130,7 +128,6 @@ impl GroupedSstableInfoAaa {
                             key_range,
                             file_size: sst_table_id.file_size,
                             table_ids: sst_table_id.table_ids,
-                            unit_id: sst_table_id.unit_id,
                         })
                     }
                     None => None,
