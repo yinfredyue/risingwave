@@ -55,6 +55,7 @@ pub use error::*;
 use parking_lot::RwLock;
 pub use risingwave_common::cache::{CachableEntry, LookupResult, LruCache};
 use risingwave_common::catalog::TableId;
+use risingwave_hummock_sdk::compaction_group::StaticCompactionGroupId;
 use risingwave_hummock_sdk::slice_transform::SliceTransformImpl;
 use value::*;
 
@@ -63,7 +64,7 @@ use self::key::user_key;
 pub use self::sstable_store::*;
 pub use self::state_store::HummockStateStoreIter;
 use super::monitor::StateStoreMetrics;
-use crate::hummock::compaction_group_client::CompactionGroupClient;
+use crate::hummock::compaction_group_client::{CompactionGroupClient, DummyCompactionGroupClient};
 use crate::hummock::conflict_detector::ConflictDetector;
 use crate::hummock::local_version_manager::LocalVersionManager;
 use crate::hummock::sstable::SstableIteratorReadOptions;
@@ -90,20 +91,21 @@ pub struct HummockStorage {
 
 impl HummockStorage {
     /// Creates a [`HummockStorage`] with default stats. Should only be used by tests.
-    pub async fn with_default_stats(
+    pub async fn for_test(
         options: Arc<StorageConfig>,
         sstable_store: SstableStoreRef,
         hummock_meta_client: Arc<dyn HummockMetaClient>,
-        hummock_metrics: Arc<StateStoreMetrics>,
-        compaction_group_client: Arc<dyn CompactionGroupClient>,
+        table_id_to_slice_transform: Arc<RwLock<HashMap<u32, SliceTransformImpl>>>,
     ) -> HummockResult<Self> {
         Self::new(
             options,
             sstable_store,
             hummock_meta_client,
-            hummock_metrics,
-            compaction_group_client,
-            Arc::new(RwLock::new(HashMap::new())),
+            Arc::new(StateStoreMetrics::unused()),
+            Arc::new(DummyCompactionGroupClient::new(
+                StaticCompactionGroupId::StateDefault.into(),
+            )),
+            table_id_to_slice_transform,
         )
         .await
     }

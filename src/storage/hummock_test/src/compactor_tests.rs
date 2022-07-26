@@ -28,7 +28,7 @@ mod tests {
     use risingwave_common::util::epoch::Epoch;
     use risingwave_hummock_sdk::compaction_group::hummock_version_ext::HummockVersionExt;
     use risingwave_hummock_sdk::compaction_group::StaticCompactionGroupId;
-    use risingwave_hummock_sdk::key::{get_table_id, TABLE_PREFIX_LEN};
+    use risingwave_hummock_sdk::key::{get_table_id, table_prefix, TABLE_PREFIX_LEN};
     use risingwave_hummock_sdk::slice_transform::{
         FixedLengthSliceTransform, FullKeySliceTransform, SliceTransformImpl,
     };
@@ -40,7 +40,6 @@ mod tests {
     use risingwave_meta::hummock::MockHummockMetaClient;
     use risingwave_pb::hummock::{HummockVersion, TableOption};
     use risingwave_rpc_client::HummockMetaClient;
-    use risingwave_storage::hummock::compaction_group_client::DummyCompactionGroupClient;
     use risingwave_storage::hummock::compactor::{
         get_remote_sstable_id_generator, Compactor, CompactorContext,
     };
@@ -65,14 +64,36 @@ mod tests {
         });
         let sstable_store = mock_sstable_store();
 
-        HummockStorage::with_default_stats(
+        HummockStorage::for_test(
             options.clone(),
             sstable_store,
             hummock_meta_client.clone(),
-            Arc::new(StateStoreMetrics::unused()),
-            Arc::new(DummyCompactionGroupClient::new(
-                StaticCompactionGroupId::StateDefault.into(),
-            )),
+            Arc::new(RwLock::new(HashMap::new())),
+        )
+        .await
+        .unwrap()
+    }
+
+    async fn get_hummock_storage_with_slice_transform(
+        hummock_meta_client: Arc<dyn HummockMetaClient>,
+        table_id_to_slice_transform: Arc<RwLock<HashMap<u32, SliceTransformImpl>>>,
+    ) -> HummockStorage {
+        let remote_dir = "hummock_001_test".to_string();
+        let options = Arc::new(StorageConfig {
+            sstable_size_mb: 1,
+            block_size_kb: 1,
+            bloom_false_positive: 0.1,
+            data_directory: remote_dir.clone(),
+            write_conflict_detection_enabled: true,
+            ..Default::default()
+        });
+        let sstable_store = mock_sstable_store();
+
+        HummockStorage::for_test(
+            options.clone(),
+            sstable_store,
+            hummock_meta_client.clone(),
+            table_id_to_slice_transform,
         )
         .await
         .unwrap()
@@ -346,13 +367,19 @@ mod tests {
             hummock_manager_ref.clone(),
             worker_node.id,
         ));
-        let storage = get_hummock_storage(hummock_meta_client.clone()).await;
 
         let mut table_id_to_slice_transform = HashMap::new();
         table_id_to_slice_transform.insert(
             1,
             SliceTransformImpl::FullKey(FullKeySliceTransform::default()),
         );
+
+        let table_id_to_slice_transform = Arc::new(RwLock::new(table_id_to_slice_transform));
+        let storage = get_hummock_storage_with_slice_transform(
+            hummock_meta_client.clone(),
+            table_id_to_slice_transform.clone(),
+        )
+        .await;
 
         let compact_ctx = CompactorContext {
             options: storage.options().clone(),
@@ -362,7 +389,7 @@ mod tests {
             is_share_buffer_compact: false,
             sstable_id_generator: get_remote_sstable_id_generator(hummock_meta_client.clone()),
             compaction_executor: None,
-            table_id_to_slice_transform: Arc::new(RwLock::new(table_id_to_slice_transform)),
+            table_id_to_slice_transform,
         };
 
         // 1. add sstables
@@ -454,7 +481,6 @@ mod tests {
             hummock_manager_ref.clone(),
             worker_node.id,
         ));
-        let storage = get_hummock_storage(hummock_meta_client.clone()).await;
         let mut table_id_to_slice_transform = HashMap::new();
         table_id_to_slice_transform.insert(
             1,
@@ -466,6 +492,13 @@ mod tests {
             SliceTransformImpl::FullKey(FullKeySliceTransform::default()),
         );
 
+        let table_id_to_slice_transform = Arc::new(RwLock::new(table_id_to_slice_transform));
+        let storage = get_hummock_storage_with_slice_transform(
+            hummock_meta_client.clone(),
+            table_id_to_slice_transform.clone(),
+        )
+        .await;
+
         let compact_ctx = CompactorContext {
             options: storage.options().clone(),
             sstable_store: storage.sstable_store(),
@@ -474,7 +507,7 @@ mod tests {
             is_share_buffer_compact: false,
             sstable_id_generator: get_remote_sstable_id_generator(hummock_meta_client.clone()),
             compaction_executor: None,
-            table_id_to_slice_transform: Arc::new(RwLock::new(table_id_to_slice_transform)),
+            table_id_to_slice_transform: table_id_to_slice_transform.clone(),
         };
 
         // 1. add sstables
@@ -623,12 +656,18 @@ mod tests {
             hummock_manager_ref.clone(),
             worker_node.id,
         ));
-        let storage = get_hummock_storage(hummock_meta_client.clone()).await;
+
         let mut table_id_to_slice_transform = HashMap::new();
         table_id_to_slice_transform.insert(
             2,
             SliceTransformImpl::FullKey(FullKeySliceTransform::default()),
         );
+        let table_id_to_slice_transform = Arc::new(RwLock::new(table_id_to_slice_transform));
+        let storage = get_hummock_storage_with_slice_transform(
+            hummock_meta_client.clone(),
+            table_id_to_slice_transform.clone(),
+        )
+        .await;
         let compact_ctx = CompactorContext {
             options: storage.options().clone(),
             sstable_store: storage.sstable_store(),
@@ -637,7 +676,7 @@ mod tests {
             is_share_buffer_compact: false,
             sstable_id_generator: get_remote_sstable_id_generator(hummock_meta_client.clone()),
             compaction_executor: None,
-            table_id_to_slice_transform: Arc::new(RwLock::new(table_id_to_slice_transform)),
+            table_id_to_slice_transform: table_id_to_slice_transform.clone(),
         };
 
         // 1. add sstables
@@ -792,7 +831,6 @@ mod tests {
 
         let existing_table_id = 2;
         let key_prefix = "key_prefix".as_bytes();
-        let storage = get_hummock_storage(hummock_meta_client.clone()).await;
         let mut table_id_to_slice_transform = HashMap::new();
         table_id_to_slice_transform.insert(
             existing_table_id,
@@ -800,6 +838,14 @@ mod tests {
                 TABLE_PREFIX_LEN + key_prefix.len(),
             )),
         );
+
+        let table_id_to_slice_transform = Arc::new(RwLock::new(table_id_to_slice_transform));
+
+        let storage = get_hummock_storage_with_slice_transform(
+            hummock_meta_client.clone(),
+            table_id_to_slice_transform.clone(),
+        )
+        .await;
         let compact_ctx = CompactorContext {
             options: storage.options().clone(),
             sstable_store: storage.sstable_store(),
@@ -808,7 +854,7 @@ mod tests {
             is_share_buffer_compact: false,
             sstable_id_generator: get_remote_sstable_id_generator(hummock_meta_client.clone()),
             compaction_executor: None,
-            table_id_to_slice_transform: Arc::new(RwLock::new(table_id_to_slice_transform)),
+            table_id_to_slice_transform: table_id_to_slice_transform.clone(),
         };
 
         // 1. add sstables
@@ -923,6 +969,8 @@ mod tests {
             .try_update_pinned_version(None, (false, vec![], Some(version)));
 
         // 6. scan kv to check key table_id
+        let table_prefix = table_prefix(existing_table_id);
+        let bloom_filter_key = [table_prefix, key_prefix.to_vec()].concat();
         let scan_result = storage
             .scan(
                 key_prefix..,
@@ -932,12 +980,11 @@ mod tests {
                     table_id: Default::default(),
                     ttl: None,
                     // bloom_filter_key: None,
-                    bloom_filter_key: Some(key_prefix.to_vec()),
+                    bloom_filter_key: Some(bloom_filter_key),
                 },
             )
             .await
             .unwrap();
-        println!("scan_result {:?}", scan_result);
 
         let mut scan_count = 0;
         for (k, _) in scan_result {

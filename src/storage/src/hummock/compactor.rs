@@ -492,12 +492,23 @@ impl Compactor {
         compact_task: &CompactTask,
     ) -> SliceTransformImpl {
         if compact_task.existing_table_ids.is_empty() {
-            // existing_table_ids is empty for two case
-            // 1. shared buffer compaction
-            // 2. the table in sst has been deleted
+            // existing_table_ids is empty
+            // the table in sst has been deleted
 
             // use full key as default
             return SliceTransformImpl::FullKey(FullKeySliceTransform::default());
+        }
+
+        #[cfg(debug_assertions)]
+        {
+            // some test not config
+            if compact_task
+                .existing_table_ids
+                .iter()
+                .any(|table_id| *table_id == 0)
+            {
+                return SliceTransformImpl::FullKey(FullKeySliceTransform::default());
+            }
         }
 
         let mut multi_slice_transform = MultiSliceTransform::default();

@@ -156,7 +156,6 @@ impl HummockStorage {
 
                 let mut sstables = vec![];
 
-                println!("pruned_sstables_len {}", pruned_sstables.len(),);
                 for sstable_info in pruned_sstables {
                     if let Some(bloom_filter_key) = read_options.bloom_filter_key.as_ref() {
                         let sstable = self
@@ -171,8 +170,6 @@ impl HummockStorage {
                         sstables.push((*sstable_info).clone());
                     }
                 }
-
-                println!("sstables len {}", sstables.len());
 
                 overlapped_iters.push(Box::new(ConcatIteratorInner::<T::SstableIteratorType>::new(
                     sstables,

@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use risingwave_hummock_sdk::compaction_group::StaticCompactionGroupId;
+use parking_lot::RwLock;
 use risingwave_meta::hummock::test_utils::setup_compute_env;
 use risingwave_meta::hummock::MockHummockMetaClient;
 use risingwave_rpc_client::HummockMetaClient;
-use risingwave_storage::hummock::compaction_group_client::DummyCompactionGroupClient;
 use risingwave_storage::hummock::iterator::test_utils::mock_sstable_store;
 use risingwave_storage::hummock::test_utils::default_config_for_test;
 use risingwave_storage::hummock::*;
-use risingwave_storage::monitor::StateStoreMetrics;
 use risingwave_storage::storage_value::StorageValue;
 use risingwave_storage::store::{ReadOptions, StateStoreIter, WriteOptions};
 use risingwave_storage::StateStore;
@@ -88,14 +87,11 @@ async fn test_snapshot_inner(enable_sync: bool, enable_commit: bool) {
         worker_node.id,
     ));
 
-    let hummock_storage = HummockStorage::with_default_stats(
+    let hummock_storage = HummockStorage::for_test(
         hummock_options,
         sstable_store,
         mock_hummock_meta_client.clone(),
-        Arc::new(StateStoreMetrics::unused()),
-        Arc::new(DummyCompactionGroupClient::new(
-            StaticCompactionGroupId::StateDefault.into(),
-        )),
+        Arc::new(RwLock::new(HashMap::new())),
     )
     .await
     .unwrap();
@@ -209,14 +205,11 @@ async fn test_snapshot_range_scan_inner(enable_sync: bool, enable_commit: bool) 
         hummock_manager_ref.clone(),
         worker_node.id,
     ));
-    let hummock_storage = HummockStorage::with_default_stats(
+    let hummock_storage = HummockStorage::for_test(
         hummock_options,
         sstable_store,
         mock_hummock_meta_client.clone(),
-        Arc::new(StateStoreMetrics::unused()),
-        Arc::new(DummyCompactionGroupClient::new(
-            StaticCompactionGroupId::StateDefault.into(),
-        )),
+        Arc::new(RwLock::new(HashMap::new())),
     )
     .await
     .unwrap();
@@ -277,14 +270,12 @@ async fn test_snapshot_backward_range_scan_inner(enable_sync: bool, enable_commi
         hummock_manager_ref.clone(),
         worker_node.id,
     ));
-    let hummock_storage = HummockStorage::with_default_stats(
-        hummock_options.clone(),
+
+    let hummock_storage = HummockStorage::for_test(
+        hummock_options,
         sstable_store,
         mock_hummock_meta_client.clone(),
-        Arc::new(StateStoreMetrics::unused()),
-        Arc::new(DummyCompactionGroupClient::new(
-            StaticCompactionGroupId::StateDefault.into(),
-        )),
+        Arc::new(RwLock::new(HashMap::new())),
     )
     .await
     .unwrap();

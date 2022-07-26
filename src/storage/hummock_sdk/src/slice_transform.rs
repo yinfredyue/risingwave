@@ -88,12 +88,12 @@ pub struct FixedLengthSliceTransform {
 
 impl SliceTransform for FixedLengthSliceTransform {
     fn transform<'a>(&mut self, full_key: &'a [u8]) -> &'a [u8] {
-        println!(
-            "full_key_len {} fixed_length {} transform_key {:?}",
-            full_key.len(),
-            self.fixed_length,
-            String::from_utf8_lossy(&full_key[0..self.fixed_length])
-        );
+        // println!(
+        //     "full_key_len {} fixed_length {} transform_key {:?}",
+        //     full_key.len(),
+        //     self.fixed_length,
+        //     String::from_utf8_lossy(&full_key[0..self.fixed_length])
+        // );
         &full_key[0..self.fixed_length]
     }
 }

@@ -148,25 +148,13 @@ impl SstableBuilder {
         let mut transform_key = user_key(full_key);
         if let Some(table_id) = get_table_id(full_key) {
             self.table_ids.insert(table_id);
-            println!("Add transform table_id {}", table_id);
 
             transform_key = match &mut self.slice_transform {
                 Some(slice_transform) => slice_transform.transform(transform_key),
 
-                None => {
-                    println!("None slice_transform {}", table_id);
-                    transform_key
-                }
+                None => transform_key,
             };
-        } else {
-            println!("None table_id");
         }
-
-        println!(
-            "Add full_key_len {} transform_key_len {}",
-            full_key.len(),
-            transform_key.len(),
-        );
 
         let raw_value = raw_value.freeze();
         block_builder.add(full_key, &raw_value);
@@ -179,10 +167,6 @@ impl SstableBuilder {
                 || transform_key != &self.last_full_key[0..transform_key.len()])
         {
             // avoid duplicate add to bloom filter
-            println!(
-                "push bloom_filter {:?}",
-                String::from_utf8_lossy(transform_key)
-            );
             self.user_key_hashes
                 .push(farmhash::fingerprint32(transform_key));
         }
