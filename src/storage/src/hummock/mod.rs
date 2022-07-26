@@ -151,10 +151,17 @@ impl HummockStorage {
         read_options: &ReadOptions,
         stats: &mut StoreLocalStatistic,
     ) -> HummockResult<Option<Option<Bytes>>> {
-        if read_options.use_bloom_filter && sstable.value().surely_not_have_user_key(key) {
-            stats.bloom_filter_true_negative_count += 1;
-            return Ok(None);
+        // if read_options.use_bloom_filter && sstable.value().surely_not_have_user_key(key) {
+        //     stats.bloom_filter_true_negative_count += 1;
+        //     return Ok(None);
+        // }
+        if let Some(bloom_filter_key) = read_options.bloom_filter_key.as_deref() {
+            if sstable.value().surely_not_have_user_key(bloom_filter_key) {
+                stats.bloom_filter_true_negative_count += 1;
+                return Ok(None);
+            }
         }
+
         // Might have the key, take it as might positive.
         stats.bloom_filter_might_positive_count += 1;
         // TODO: now SstableIterator does not use prefetch through SstableIteratorReadOptions, so we

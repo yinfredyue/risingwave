@@ -33,7 +33,7 @@ use risingwave_hummock_sdk::key::{
 };
 use risingwave_hummock_sdk::key_range::KeyRange;
 use risingwave_hummock_sdk::slice_transform::{
-    DummySliceTransform, MultiSliceTransform, SliceTransformImpl,
+    FullKeySliceTransform, MultiSliceTransform, SliceTransformImpl,
 };
 use risingwave_hummock_sdk::{CompactionGroupId, HummockSstableId, VersionedComparator};
 use risingwave_pb::hummock::{
@@ -492,7 +492,12 @@ impl Compactor {
         compact_task: &CompactTask,
     ) -> SliceTransformImpl {
         if compact_task.existing_table_ids.is_empty() {
-            return SliceTransformImpl::Dummy(DummySliceTransform::default());
+            // existing_table_ids is empty for two case
+            // 1. shared buffer compaction
+            // 2. the table in sst has been deleted
+
+            // use full key as default
+            return SliceTransformImpl::FullKey(FullKeySliceTransform::default());
         }
 
         let mut multi_slice_transform = MultiSliceTransform::default();

@@ -34,6 +34,7 @@ pub enum SliceTransformImpl {
     FullKey(FullKeySliceTransform),
     Dummy(DummySliceTransform),
     Multi(MultiSliceTransform),
+    FixedLength(FixedLengthSliceTransform),
 }
 
 macro_rules! impl_slice_transform {
@@ -55,7 +56,8 @@ macro_rules! for_all_slice_transform_variants {
             { Schema },
             { FullKey },
             { Dummy },
-            { Multi }
+            { Multi },
+            { FixedLength }
         }
     };
 }
@@ -76,6 +78,29 @@ pub struct DummySliceTransform;
 impl SliceTransform for DummySliceTransform {
     fn transform<'a>(&mut self, _full_key: &'a [u8]) -> &'a [u8] {
         &[]
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct FixedLengthSliceTransform {
+    fixed_length: usize,
+}
+
+impl SliceTransform for FixedLengthSliceTransform {
+    fn transform<'a>(&mut self, full_key: &'a [u8]) -> &'a [u8] {
+        println!(
+            "full_key_len {} fixed_length {} transform_key {:?}",
+            full_key.len(),
+            self.fixed_length,
+            String::from_utf8_lossy(&full_key[0..self.fixed_length])
+        );
+        &full_key[0..self.fixed_length]
+    }
+}
+
+impl FixedLengthSliceTransform {
+    pub fn new(fixed_length: usize) -> Self {
+        Self { fixed_length }
     }
 }
 

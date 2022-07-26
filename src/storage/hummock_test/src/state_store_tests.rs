@@ -103,7 +103,7 @@ async fn test_basic() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                bloom_filter_key: Some(anchor.to_vec()),
             },
         )
         .await
@@ -117,7 +117,7 @@ async fn test_basic() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                bloom_filter_key: Some("bb".as_bytes().to_vec()),
             },
         )
         .await
@@ -133,7 +133,7 @@ async fn test_basic() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                bloom_filter_key: Some("ab".as_bytes().to_vec()),
             },
         )
         .await
@@ -161,7 +161,7 @@ async fn test_basic() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                bloom_filter_key: Some(anchor.to_vec()),
             },
         )
         .await
@@ -190,7 +190,7 @@ async fn test_basic() {
                 epoch: epoch3,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                bloom_filter_key: Some(anchor.to_vec()),
             },
         )
         .await
@@ -205,7 +205,7 @@ async fn test_basic() {
                 epoch: epoch3,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                bloom_filter_key: Some("ff".as_bytes().to_vec()),
             },
         )
         .await
@@ -220,7 +220,8 @@ async fn test_basic() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                // ..Default::default()
+                bloom_filter_key: None,
             },
         )
         .await
@@ -236,7 +237,7 @@ async fn test_basic() {
                 epoch: epoch1,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                bloom_filter_key: Some(anchor.to_vec()),
             },
         )
         .await
@@ -252,7 +253,7 @@ async fn test_basic() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                bloom_filter_key: Some(anchor.to_vec()),
             },
         )
         .await
@@ -267,7 +268,7 @@ async fn test_basic() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                bloom_filter_key: None,
             },
         )
         .await
@@ -308,7 +309,7 @@ async fn test_basic() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                bloom_filter_key: Some("bb".as_bytes().to_vec()),
             },
         )
         .await
@@ -322,7 +323,7 @@ async fn test_basic() {
                 epoch: epoch2,
                 table_id: Default::default(),
                 ttl: None,
-                ..Default::default()
+                bloom_filter_key: Some("dd".as_bytes().to_vec()),
             },
         )
         .await

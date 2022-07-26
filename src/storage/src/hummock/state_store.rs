@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::future::Future;
-use std::ops::Bound::{Excluded, Included};
+use std::ops::Bound::{Excluded, Included, *};
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
@@ -82,6 +82,12 @@ impl HummockStorage {
         B: AsRef<[u8]> + Send,
         T: HummockIteratorType,
     {
+        let _start_key = match key_range.start_bound() {
+            Included(range_start) => range_start.as_ref(),
+            Excluded(range_start) => range_start.as_ref(),
+            Unbounded => "".as_bytes(),
+        };
+
         let epoch = read_options.epoch;
         let compaction_group_id = match read_options.table_id.as_ref() {
             None => None,
@@ -143,31 +149,44 @@ impl HummockStorage {
                 assert!(start_table_idx < table_infos.len() && end_table_idx < table_infos.len());
                 let matched_table_infos = &table_infos[start_table_idx..=end_table_idx];
 
-                let tables = match T::Direction::direction() {
-                    DirectionEnum::Backward => matched_table_infos
-                        .iter()
-                        .rev()
-                        .map(|&info| info.clone())
-                        .collect_vec(),
-                    DirectionEnum::Forward => matched_table_infos
-                        .iter()
-                        .map(|&info| info.clone())
-                        .collect_vec(),
+                let pruned_sstables = match T::Direction::direction() {
+                    DirectionEnum::Backward => matched_table_infos.iter().rev().collect_vec(),
+                    DirectionEnum::Forward => matched_table_infos.iter().collect_vec(),
                 };
 
+                let mut sstables = vec![];
+
+                println!("pruned_sstables_len {}", pruned_sstables.len(),);
+                for sstable_info in pruned_sstables {
+                    if let Some(bloom_filter_key) = read_options.bloom_filter_key.as_ref() {
+                        let sstable = self
+                            .sstable_store
+                            .sstable(sstable_info.id, &mut stats)
+                            .await?;
+
+                        if !sstable.value().surely_not_have_user_key(bloom_filter_key) {
+                            sstables.push((*sstable_info).clone());
+                        }
+                    } else {
+                        sstables.push((*sstable_info).clone());
+                    }
+                }
+
+                println!("sstables len {}", sstables.len());
+
                 overlapped_iters.push(Box::new(ConcatIteratorInner::<T::SstableIteratorType>::new(
-                    tables,
+                    sstables,
                     self.sstable_store(),
                     iter_read_options.clone(),
                 )) as BoxedHummockIterator<T::Direction>);
             } else {
                 for table_info in table_infos.into_iter().rev() {
-                    let table = self
+                    let sstable = self
                         .sstable_store
                         .sstable(table_info.id, &mut stats)
                         .await?;
                     overlapped_iters.push(Box::new(T::SstableIteratorType::create(
-                        table,
+                        sstable,
                         self.sstable_store(),
                         iter_read_options.clone(),
                     )));
