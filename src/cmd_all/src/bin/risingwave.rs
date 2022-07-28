@@ -30,6 +30,8 @@ type RwFns = HashMap<&'static str, Box<dyn Fn(Vec<String>) -> Result<()>>>;
 
 #[cfg_attr(coverage, no_coverage)]
 fn main() -> Result<()> {
+    std::thread::spawn(|| memstat());
+
     let mut fns: RwFns = HashMap::new();
 
     // compute node configuration
@@ -167,4 +169,19 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn memstat() {
+    let e = tikv_jemalloc_ctl::epoch::mib().unwrap();
+    let allocated = tikv_jemalloc_ctl::stats::allocated::mib().unwrap();
+    let resident = tikv_jemalloc_ctl::stats::resident::mib().unwrap();
+
+    loop {
+        e.advance().unwrap();
+
+        let allocated = allocated.read().unwrap();
+        let resident = resident.read().unwrap();
+        tracing::info!("{} mibs allocated/{} mibs resident", allocated, resident);
+        std::thread::sleep(std::time::Duration::from_secs(10));
+    }
 }
