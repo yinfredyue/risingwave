@@ -19,8 +19,9 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use itertools::Itertools;
-use risingwave_hummock_sdk::key::key_with_epoch;
+use risingwave_hummock_sdk::key::{key_with_epoch, prefixed_range};
 use risingwave_hummock_sdk::LocalSstableInfo;
+// use risingwave_pb::batch_plan::scan_range::Bound;
 use risingwave_pb::hummock::LevelType;
 
 use super::iterator::{
@@ -72,15 +73,17 @@ impl HummockIteratorType for BackwardIter {
 }
 
 impl HummockStorage {
-    async fn iter_inner<R, B, T>(
+    async fn iter_inner<R, B, T, P>(
         &self,
-        key_range: R,
+        prefix_key: P,
+        suffix_range: R,
         read_options: ReadOptions,
     ) -> StorageResult<HummockStateStoreIter>
     where
         R: RangeBounds<B> + Send,
         B: AsRef<[u8]> + Send,
         T: HummockIteratorType,
+        P: AsRef<[u8]> + Send,
     {
         let epoch = read_options.epoch;
         let compaction_group_id = match read_options.table_id.as_ref() {
@@ -91,6 +94,7 @@ impl HummockStorage {
         let iter_read_options = Arc::new(SstableIteratorReadOptions::default());
         let mut overlapped_iters = vec![];
 
+        let key_range = prefixed_range(suffix_range, prefix_key.as_ref());
         let (shared_buffer_data, pinned_version) = self.read_filter(&read_options, &key_range)?;
 
         let mut stats = StoreLocalStatistic::default();
@@ -178,14 +182,15 @@ impl HummockStorage {
                 }
             }
         }
+
         self.stats
             .iter_merge_sstable_counts
             .with_label_values(&["sub-iter"])
             .observe(overlapped_iters.len() as f64);
 
         let key_range = (
-            key_range.start_bound().map(|b| b.as_ref().to_owned()),
-            key_range.end_bound().map(|b| b.as_ref().to_owned()),
+            key_range.start_bound().map(|b| b.clone()),
+            key_range.end_bound().map(|b| b.clone()),
         );
 
         let mut user_iterator = T::UserIteratorBuilder::create(
@@ -361,6 +366,26 @@ impl StateStore for HummockStorage {
         }
     }
 
+    fn prefix_scan<R, B, P>(
+        &self,
+        prefix_key: P,
+        col_bound_range: R,
+        limit: Option<usize>,
+        read_options: ReadOptions,
+    ) -> Self::PrefixScanFuture<'_, R, B, P>
+    where
+        R: RangeBounds<B> + Send + 'static,
+        B: AsRef<[u8]> + Send + 'static,
+        P: AsRef<[u8]> + Send + 'static,
+    {
+        async move {
+            self.prefix_iter(prefix_key, col_bound_range, read_options)
+                .await?
+                .collect(limit)
+                .await
+        }
+    }
+
     fn backward_scan<R, B>(
         &self,
         key_range: R,
@@ -444,7 +469,21 @@ impl StateStore for HummockStorage {
         R: RangeBounds<B> + Send,
         B: AsRef<[u8]> + Send,
     {
-        self.iter_inner::<R, B, ForwardIter>(key_range, read_options)
+        self.iter_inner::<_, _, ForwardIter, _>(b"", key_range, read_options)
+    }
+
+    fn prefix_iter<R, B, P>(
+        &self,
+        prefix_key: P,
+        suffix_range: R,
+        read_options: ReadOptions,
+    ) -> Self::PrefixIterFuture<'_, R, B, P>
+    where
+        R: RangeBounds<B> + Send,
+        B: AsRef<[u8]> + Send,
+        P: AsRef<[u8]> + Send,
+    {
+        self.iter_inner::<R, B, ForwardIter, P>(prefix_key, suffix_range, read_options)
     }
 
     /// Returns a backward iterator that scans from the end key to the begin key
@@ -462,7 +501,7 @@ impl StateStore for HummockStorage {
             key_range.end_bound().map(|v| v.as_ref().to_vec()),
             key_range.start_bound().map(|v| v.as_ref().to_vec()),
         );
-        self.iter_inner::<_, _, BackwardIter>(key_range, read_options)
+        self.iter_inner::<_, _, BackwardIter, _>(b"", key_range, read_options)
     }
 
     fn wait_epoch(&self, epoch: u64) -> Self::WaitEpochFuture<'_> {
