@@ -13,7 +13,9 @@
 // limitations under the License.
 
 use std::collections::HashMap;
+use std::env;
 use std::ffi::OsString;
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::{anyhow, Result};
@@ -59,6 +61,13 @@ pub async fn playground() -> Result<()> {
         "playground".to_string()
     };
 
+    let apply_config = |cmd: &mut Command| {
+        if let Ok(prefix_config) = env::var("PREFIX_CONFIG") {
+            cmd.arg("--config-path")
+                .arg(Path::new(&prefix_config).join("risingwave.toml"));
+        }
+    };
+
     let services = match load_risedev_config(&profile).await {
         Ok((steps, services)) => {
             tracing::info!(
@@ -91,6 +100,7 @@ pub async fn playground() -> Result<()> {
                                 HummockInMemoryStrategy::Isolated
                             },
                         )?;
+                        apply_config(&mut command);
                         rw_services.push(RisingWaveService::Compute(
                             command.get_args().map(ToOwned::to_owned).collect(),
                         ));
@@ -98,6 +108,7 @@ pub async fn playground() -> Result<()> {
                     ServiceConfig::MetaNode(c) => {
                         let mut command = Command::new("meta-node");
                         MetaNodeService::apply_command_args(&mut command, c)?;
+                        apply_config(&mut command);
                         rw_services.push(RisingWaveService::Meta(
                             command.get_args().map(ToOwned::to_owned).collect(),
                         ));
@@ -112,6 +123,7 @@ pub async fn playground() -> Result<()> {
                     ServiceConfig::Compactor(c) => {
                         let mut command = Command::new("compactor");
                         CompactorService::apply_command_args(&mut command, c)?;
+                        apply_config(&mut command);
                         rw_services.push(RisingWaveService::Compactor(
                             command.get_args().map(ToOwned::to_owned).collect(),
                         ));

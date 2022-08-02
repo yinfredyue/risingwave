@@ -160,13 +160,14 @@ impl InnerConnectorSourceReader {
                     tracing::warn!("connector reader {} stream stopped", id);
                     break;
                 }
-                Ok(Some(msg)) => {
+                Ok(Some(msg)) if !msg.is_empty() => {
                     self.metrics
                         .partition_input_count
                         .with_label_values(&[actor_id.as_str(), source_id.as_str(), id.as_str()])
                         .inc_by(msg.len() as u64);
                     output.send(Either::Left(msg)).await.ok();
                 }
+                Ok(Some(_)) => {}
             }
         }
     }

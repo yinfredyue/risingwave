@@ -56,10 +56,9 @@ impl SplitReader for NexmarkSplitReader {
         };
 
         let use_real_time = properties.use_real_time;
-        let mut min_event_gap_in_ns = 0;
-        if !use_real_time {
-            min_event_gap_in_ns = properties.min_event_gap_in_ns;
-        }
+        let min_event_gap_in_ns = use_real_time
+            .then_some(0)
+            .unwrap_or(properties.min_event_gap_in_ns);
 
         let max_chunk_size = properties.max_chunk_size;
         let event_num = properties.event_num;
