@@ -14,12 +14,14 @@
 
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
+use anyhow::anyhow;
 
 use futures::StreamExt;
 use parking_lot::Mutex;
 use risingwave_common::array::DataChunk;
-use risingwave_common::error::ErrorCode::InternalError;
-use risingwave_common::error::{ErrorCode, Result, RwError};
+use risingwave_common::error::ErrorCode::{InternalError};
+use risingwave_common::error::{ErrorCode, RwError};
+use crate::error::Result;
 use risingwave_common::util::debug_context::{DebugContext, DEBUG_CONTEXT};
 use risingwave_pb::batch_plan::{
     PlanFragment, TaskId as ProstTaskId, TaskOutputId as ProstOutputId,
@@ -87,7 +89,7 @@ impl TaskId {
 }
 
 impl TryFrom<&ProstOutputId> for TaskOutputId {
-    type Error = RwError;
+    type Error = BatchError;
 
     fn try_from(prost: &ProstOutputId) -> Result<Self> {
         Ok(TaskOutputId {
@@ -109,7 +111,7 @@ impl TaskOutputId {
 pub struct TaskOutput {
     receiver: ChanReceiverImpl,
     output_id: TaskOutputId,
-    failure: Arc<Mutex<Option<RwError>>>,
+    failure: Arc<Mutex<Option<BatchError>>>,
 }
 
 impl TaskOutput {
@@ -140,10 +142,10 @@ impl TaskOutput {
                     let possible_err = self.failure.lock().clone();
                     return if let Some(err) = possible_err {
                         // Task error
-                        Err(err)
+                        Err(err.into())
                     } else {
                         // Channel error
-                        Err(e)
+                        Err(e.into())
                     };
                 }
             }
@@ -153,7 +155,8 @@ impl TaskOutput {
 
     /// Directly takes data without serialization.
     pub async fn direct_take_data(&mut self) -> Result<Option<DataChunk>> {
-        Ok(self.receiver.recv().await?.map(|c| c.into_data_chunk()))
+        let a = self.receiver.recv().await.map_err(|e| BatchError::from(e))?;
+        Ok(a.map(|c| c.into_data_chunk()))
     }
 
     pub fn id(&self) -> &TaskOutputId {
@@ -179,7 +182,7 @@ pub struct BatchTaskExecution<C> {
     context: C,
 
     /// The execution failure.
-    failure: Arc<Mutex<Option<RwError>>>,
+    failure: Arc<Mutex<Option<BatchError>>>,
 
     /// Shutdown signal sender.
     shutdown_tx: Mutex<Option<Sender<u64>>>,
@@ -220,7 +223,7 @@ impl<C: BatchTaskContext> BatchTaskExecution<C> {
         trace!(
             "Prepare executing plan [{:?}]: {}",
             self.task_id,
-            serde_json::to_string_pretty(self.plan.get_root()?).unwrap()
+            serde_json::to_string_pretty(self.plan.get_root().map_err(|e| BatchError::from(e))?).unwrap()
         );
         *self.state.lock() = TaskStatus::Running;
 
@@ -303,7 +306,7 @@ impl<C: BatchTaskContext> BatchTaskExecution<C> {
                                 break;
                             },
                             x => {
-                                return Err(InternalError(format!("Failed to send data: {:?}", x)))?;
+                                return Err(anyhow!((format!("Failed to send data: {:?}", x))))?;
                             }
                         }
                     }
@@ -329,7 +332,7 @@ impl<C: BatchTaskContext> BatchTaskExecution<C> {
                                 break;
                             },
                             x => {
-                                return Err(InternalError(format!("Failed to send data: {:?}", x)))?;
+                                return Err(anyhow!((format!("Failed to send data: {:?}", x))))?;
                             }
                         }
                     }
@@ -341,16 +344,16 @@ impl<C: BatchTaskContext> BatchTaskExecution<C> {
 
     pub fn abort_task(&self) -> Result<()> {
         let sender = self.shutdown_tx.lock().take().ok_or_else(|| {
-            ErrorCode::InternalError(format!(
+            anyhow!((format!(
                 "Task{:?}'s shutdown channel does not exist. \
                     Either the task has been aborted once, \
                     or the channel has neven been initialized.",
                 self.task_id
-            ))
+            )))
         })?;
         *self.state.lock() = TaskStatus::Aborting;
         sender.send(0).map_err(|err| {
-            ErrorCode::InternalError(format!(
+            anyhow!(format!(
                 "Task{:?};s shutdown channel send error:{:?}",
                 self.task_id, err
             ))
@@ -363,11 +366,11 @@ impl<C: BatchTaskContext> BatchTaskExecution<C> {
         let receiver = self.receivers.lock()[output_id.get_output_id() as usize]
             .take()
             .ok_or_else(|| {
-                ErrorCode::InternalError(format!(
+                anyhow!((format!(
                     "Task{:?}'s output{} has already been taken.",
                     task_id,
                     output_id.get_output_id(),
-                ))
+                )))
             })?;
         let task_output = TaskOutput {
             receiver,
@@ -377,16 +380,16 @@ impl<C: BatchTaskContext> BatchTaskExecution<C> {
         Ok(task_output)
     }
 
-    pub fn get_error(&self) -> Option<RwError> {
+    pub fn get_error(&self) -> Option<BatchError> {
         self.failure.lock().clone()
     }
 
     pub fn check_if_running(&self) -> Result<()> {
         if *self.state.lock() != TaskStatus::Running {
-            return Err(ErrorCode::InternalError(format!(
+            return Err(anyhow!((format!(
                 "task {:?} is not running",
                 self.get_task_id()
-            ))
+            )))
             .into());
         }
         Ok(())
@@ -395,7 +398,7 @@ impl<C: BatchTaskContext> BatchTaskExecution<C> {
     pub fn check_if_aborted(&self) -> Result<bool> {
         match *self.state.lock() {
             TaskStatus::Aborted => Ok(true),
-            TaskStatus::Finished => Err(ErrorCode::InternalError(format!(
+            TaskStatus::Finished => Err(anyhow!(format!(
                 "task {:?} has been finished",
                 self.get_task_id()
             ))

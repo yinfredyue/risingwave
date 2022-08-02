@@ -18,13 +18,15 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use risingwave_common::error::ErrorCode::{self, TaskNotFound};
-use risingwave_common::error::{Result, RwError};
+use risingwave_common::error::{RwError};
+use crate::error::BatchError;
 use risingwave_pb::batch_plan::{
     PlanFragment, TaskId as ProstTaskId, TaskOutputId as ProstTaskOutputId,
 };
 use risingwave_pb::task_service::GetDataResponse;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
+use crate::error::Result;
 
 use crate::rpc::service::exchange::GrpcExchangeWriter;
 use crate::task::{BatchTaskExecution, ComputeNodeContext, TaskId, TaskOutput, TaskOutputId};

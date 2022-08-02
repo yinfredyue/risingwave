@@ -16,6 +16,7 @@ pub use anyhow::anyhow;
 use risingwave_common::array::ArrayError;
 use risingwave_common::error::{ErrorCode, RwError};
 use thiserror::Error;
+use risingwave_pb::ProstFieldNotFound;
 
 pub type Result<T> = std::result::Result<T, BatchError>;
 
@@ -45,5 +46,39 @@ pub enum BatchError {
 impl From<BatchError> for RwError {
     fn from(s: BatchError) -> Self {
         ErrorCode::BatchError(Box::new(s)).into()
+    }
+}
+
+impl From<RwError> for BatchError {
+    fn from(e: RwError) -> Self {
+        BatchError::Internal(anyhow!(e))
+    }
+}
+
+
+impl From<ProstFieldNotFound> for BatchError {
+    fn from(err: ProstFieldNotFound) -> Self {
+        anyhow!("Failed to decode prost: field not found `{}`", err.0).into()
+    }
+}
+
+impl From<BatchError> for tonic::Status {
+    fn from(err: BatchError) -> Self {
+        match &*err.inner {
+            ErrorCode::OK => tonic::Status::ok(err.to_string()),
+            ErrorCode::ExprError(e) => tonic::Status::invalid_argument(e.to_string()),
+            ErrorCode::PermissionDenied(e) => tonic::Status::permission_denied(e),
+            _ => {
+                let bytes = {
+                    let status = err.to_status();
+                    let mut bytes = Vec::<u8>::with_capacity(status.encoded_len());
+                    status.encode(&mut bytes).expect("Failed to encode status.");
+                    bytes
+                };
+                let mut header = MetadataMap::new();
+                header.insert_bin(RW_ERROR_GRPC_HEADER, MetadataValue::from_bytes(&bytes));
+                tonic::Status::with_metadata(Code::Internal, err.to_string(), header)
+            }
+        }
     }
 }
