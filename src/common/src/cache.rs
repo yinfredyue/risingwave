@@ -26,10 +26,14 @@ use std::hash::Hash;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
+use madsim::time::timeout;
 use parking_lot::Mutex;
 use tokio::sync::oneshot::error::RecvError;
 use tokio::sync::oneshot::{channel, Receiver, Sender};
+use tokio::time::timeout_at;
+use tracing::{instrument, info};
 
 const IN_CACHE: u8 = 1;
 const REVERSE_IN_CACHE: u8 = !IN_CACHE;
@@ -773,31 +777,34 @@ impl<K: LruKey + Clone + 'static, T: LruValue + 'static> LruCache<K, T> {
         E: Error + Send + 'static,
         VC: Future<Output = Result<(T, usize), E>> + Send + 'static,
     {
-        match self.lookup_for_request(hash, key.clone()) {
-            LookupResult::Cached(entry) => Ok(Ok(entry)),
-            LookupResult::WaitPendingRequest(recv) => {
-                let entry = recv.await?;
-                Ok(Ok(entry))
-            }
-            LookupResult::Miss => {
-                let this = self.clone();
-                let fetch_value = fetch_value();
-                tokio::spawn(async move {
-                    match fetch_value.await {
-                        Ok((value, charge)) => {
-                            let entry = this.insert(key, hash, charge, value);
-                            Ok(Ok(entry))
+        timeout(Duration::from_secs(3),
+        async move {
+            match self.lookup_for_request(hash, key.clone()) {
+                LookupResult::Cached(entry) => Ok(Ok(entry)),
+                LookupResult::WaitPendingRequest(recv) => {
+                    let entry = recv.await?;
+                    Ok(Ok(entry))
+                }
+                LookupResult::Miss => {
+                    let this = self.clone();
+                    let fetch_value = fetch_value();
+                    tokio::spawn(async move {
+                        match fetch_value.await {
+                            Ok((value, charge)) => {
+                                let entry = this.insert(key, hash, charge, value);
+                                Ok(Ok(entry))
+                            }
+                            Err(e) => {
+                                this.clear_pending_request(&key, hash);
+                                Ok(Err(e))
+                            }
                         }
-                        Err(e) => {
-                            this.clear_pending_request(&key, hash);
-                            Ok(Err(e))
-                        }
-                    }
-                })
-                .await
-                .unwrap()
+                    })
+                    .await
+                    .unwrap()
+                }
             }
-        }
+        }).await.unwrap()
     }
 }
 
