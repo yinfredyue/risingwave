@@ -179,7 +179,7 @@ part = [3, 4]
 [[case]]
 type = "ByteRangeGet"
 [case.args]
-name = "s3 - byte range get (fit 2 parts) - 64MiB-p8MiB"
+name = "s3 - byte range get (fit 2 parts) - 64MiB-p8MiB - 16MiB range"
 obj = "64MiB-p8MiB"
 start = 16777216 # 16MiB
 end = 33554431 # 32MiB - 1
@@ -187,7 +187,7 @@ end = 33554431 # 32MiB - 1
 [[case]]
 type = "ByteRangeGet"
 [case.args]
-name = "s3 - byte range get (fit 2 parts) - 128MiB-p8MiB"
+name = "s3 - byte range get (fit 2 parts) - 128MiB-p8MiB - 16MiB range"
 obj = "128MiB-p8MiB"
 start = 16777216 # 16MiB
 end = 33554431 # 32MiB - 1
@@ -195,7 +195,7 @@ end = 33554431 # 32MiB - 1
 [[case]]
 type = "ByteRangeGet"
 [case.args]
-name = "s3 - byte range get (unfit 2 parts) - 64MiB-p8MiB"
+name = "s3 - byte range get (unfit 2 parts) - 64MiB-p8MiB - 16MiB range"
 obj = "64MiB-p8MiB"
 start = 19922944 # 19MiB
 end = 36700159 # 35MiB - 1
@@ -203,7 +203,39 @@ end = 36700159 # 35MiB - 1
 [[case]]
 type = "ByteRangeGet"
 [case.args]
-name = "s3 - byte range get (unfit 2 parts) - 128MiB-p8MiB"
+name = "s3 - byte range get (unfit 2 parts) - 128MiB-p8MiB - 16MiB range"
 obj = "128MiB-p8MiB"
 start = 19922944 # 19MiB
 end = 36700159 # 35MiB - 1
+
+[[case]]
+type = "ByteRangeGet"
+[case.args]
+name = "s3 - byte range get (fit 2 parts) - 64MiB-p8MiB - 8MiB range"
+obj = "64MiB-p8MiB"
+start = 16777216 # 16MiB
+end = 25165823 # 24MiB - 1
+
+[[case]]
+type = "ByteRangeGet"
+[case.args]
+name = "s3 - byte range get (fit 2 parts) - 128MiB-p8MiB - 8MiB range"
+obj = "128MiB-p8MiB"
+start = 16777216 # 16MiB
+end = 25165823 # 24MiB - 1
+
+[[case]]
+type = "ByteRangeGet"
+[case.args]
+name = "s3 - byte range get (unfit 2 parts) - 64MiB-p8MiB - 8MiB range"
+obj = "64MiB-p8MiB"
+start = 19922944 # 19MiB
+end = 28311551 # 27MiB - 1
+
+[[case]]
+type = "ByteRangeGet"
+[case.args]
+name = "s3 - byte range get (unfit 2 parts) - 128MiB-p8MiB - 8MiB range"
+obj = "128MiB-p8MiB"
+start = 19922944 # 19MiB
+end = 28311551 # 27MiB - 1
