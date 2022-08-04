@@ -318,7 +318,7 @@ macro_rules! for_all_scalar_variants {
             { Float64, float64, OrderedF64, OrderedF64 },
             { Utf8, utf8, String, &'scalar str },
             { Bool, bool, bool, bool },
-            { Decimal, decimal, Decimal, Decimal  },
+            { Decimal, decimal, Decimal, Decimal },
             { Interval, interval, IntervalUnit, IntervalUnit },
             { NaiveDate, naivedate, NaiveDateWrapper, NaiveDateWrapper },
             { NaiveDateTime, naivedatetime, NaiveDateTimeWrapper, NaiveDateTimeWrapper },

@@ -4152,6 +4152,7 @@ dependencies = [
  "crc32fast",
  "either",
  "enum-as-inner",
+ "fixedbitset",
  "futures",
  "futures-async-stream",
  "humantime",

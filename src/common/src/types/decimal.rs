@@ -19,6 +19,8 @@ use num_traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedRem, Che
 pub use rust_decimal::prelude::{FromPrimitive, FromStr, ToPrimitive};
 use rust_decimal::{Decimal as RustDecimal, Error, RoundingStrategy};
 
+pub const DECIMAL_SERDE_SIZE: usize = 16;
+
 #[derive(Debug, Copy, Clone, PartialEq, Hash, Eq, Ord, PartialOrd)]
 pub enum Decimal {
     Normalized(RustDecimal),
@@ -477,18 +479,27 @@ impl Decimal {
         }
     }
 
-    pub fn unordered_serialize(&self) -> [u8; 16] {
+    pub fn unordered_serialize(&self) -> [u8; DECIMAL_SERDE_SIZE] {
         // according to https://docs.rs/rust_decimal/1.18.0/src/rust_decimal/decimal.rs.html#665-684
         // the lower 15 bits is not used, so we can use first byte to distinguish nan and inf
         match self {
             Self::Normalized(d) => d.serialize(),
-            Self::NaN => [vec![1u8], vec![0u8; 15]].concat().try_into().unwrap(),
-            Self::PositiveINF => [vec![2u8], vec![0u8; 15]].concat().try_into().unwrap(),
-            Self::NegativeINF => [vec![3u8], vec![0u8; 15]].concat().try_into().unwrap(),
+            Self::NaN => [vec![1u8], vec![0u8; DECIMAL_SERDE_SIZE]]
+                .concat()
+                .try_into()
+                .unwrap(),
+            Self::PositiveINF => [vec![2u8], vec![0u8; DECIMAL_SERDE_SIZE]]
+                .concat()
+                .try_into()
+                .unwrap(),
+            Self::NegativeINF => [vec![3u8], vec![0u8; DECIMAL_SERDE_SIZE]]
+                .concat()
+                .try_into()
+                .unwrap(),
         }
     }
 
-    pub fn unordered_deserialize(bytes: [u8; 16]) -> Self {
+    pub fn unordered_deserialize(bytes: [u8; DECIMAL_SERDE_SIZE]) -> Self {
         match bytes[0] {
             0u8 => Self::Normalized(RustDecimal::deserialize(bytes)),
             1u8 => Self::NaN,

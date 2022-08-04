@@ -54,6 +54,7 @@ pub mod config;
 pub mod field_generator;
 pub mod hash;
 pub mod monitor;
+pub mod row;
 pub mod session_config;
 #[cfg(test)]
 pub mod test_utils;
