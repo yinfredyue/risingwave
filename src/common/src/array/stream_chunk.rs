@@ -155,9 +155,11 @@ impl StreamChunk {
         let (ops, columns, visibility) = self.into_inner();
         let visibility = visibility.unwrap();
 
-        let cardinality = visibility
-            .iter()
-            .fold(0, |vis_cnt, vis| vis_cnt + vis as usize);
+        let cardinality = visibility.num_high_bits();
+        if cardinality == 0 {
+            return Ok(StreamChunk::default());
+        }
+
         let columns = columns
             .into_iter()
             .map(|col| {

@@ -33,7 +33,7 @@ use crate::util::hash_util::finalize_hashers;
 #[derive(Clone, PartialEq)]
 pub struct DataChunk {
     columns: Vec<Column>,
-    vis2: Vis,
+    vis: Vis,
 }
 
 /// `Vis` is a visibility bitmap of rows. When all rows are visible, it is considered compact and
@@ -114,14 +114,14 @@ impl DataChunk {
             assert_eq!(capacity, column.array_ref().len());
         }
 
-        DataChunk { columns, vis2: vis }
+        DataChunk { columns, vis }
     }
 
     /// `new_dummy` creates a data chunk without columns but only a cardinality.
     pub fn new_dummy(cardinality: usize) -> Self {
         DataChunk {
             columns: vec![],
-            vis2: Vis::Compact(cardinality),
+            vis: Vis::Compact(cardinality),
         }
     }
 
@@ -152,7 +152,7 @@ impl DataChunk {
 
     /// Return the next visible row index on or after `row_idx`.
     pub fn next_visible_row_idx(&self, row_idx: usize) -> Option<usize> {
-        match &self.vis2 {
+        match &self.vis {
             Vis::Bitmap(vis) => vis.next_set_bit(row_idx),
             Vis::Compact(cardinality) => {
                 if row_idx < *cardinality {
@@ -165,7 +165,7 @@ impl DataChunk {
     }
 
     pub fn into_parts(self) -> (Vec<Column>, Vis) {
-        (self.columns, self.vis2)
+        (self.columns, self.vis)
     }
 
     pub fn dimension(&self) -> usize {
@@ -174,7 +174,7 @@ impl DataChunk {
 
     /// `cardinality` returns the number of visible tuples
     pub fn cardinality(&self) -> usize {
-        match &self.vis2 {
+        match &self.vis {
             Vis::Bitmap(b) => b.num_high_bits(),
             Vis::Compact(len) => *len,
         }
@@ -182,14 +182,14 @@ impl DataChunk {
 
     /// `capacity` returns physical length of any chunk column
     pub fn capacity(&self) -> usize {
-        match &self.vis2 {
+        match &self.vis {
             Vis::Bitmap(b) => b.len(),
             Vis::Compact(len) => *len,
         }
     }
 
     pub fn vis(&self) -> &Vis {
-        &self.vis2
+        &self.vis
     }
 
     #[must_use]
@@ -202,7 +202,7 @@ impl DataChunk {
     }
 
     pub fn get_visibility_ref(&self) -> Option<&Bitmap> {
-        match &self.vis2 {
+        match &self.vis {
             Vis::Bitmap(b) => Some(b),
             Vis::Compact(_) => None,
         }
@@ -212,7 +212,7 @@ impl DataChunk {
         for column in &self.columns {
             assert_eq!(visibility.len(), column.array_ref().len())
         }
-        self.vis2 = Vis::Bitmap(visibility);
+        self.vis = Vis::Bitmap(visibility);
     }
 
     pub fn column_at(&self, idx: usize) -> &Column {
@@ -225,7 +225,7 @@ impl DataChunk {
 
     pub fn to_protobuf(&self) -> ProstDataChunk {
         assert!(
-            matches!(self.vis2, Vis::Compact(_)),
+            matches!(self.vis, Vis::Compact(_)),
             "must be compacted before transfer"
         );
         let mut proto = ProstDataChunk {
@@ -243,12 +243,13 @@ impl DataChunk {
     /// `compact` will convert the chunk to compact format.
     /// Compact format means that `visibility == None`.
     pub fn compact(self) -> ArrayResult<Self> {
-        match &self.vis2 {
+        match &self.vis {
             Vis::Compact(_) => Ok(self),
             Vis::Bitmap(visibility) => {
-                let cardinality = visibility
-                    .iter()
-                    .fold(0, |vis_cnt, vis| vis_cnt + vis as usize);
+                let cardinality = visibility.num_high_bits();
+                if cardinality == 0 {
+                    return Ok(DataChunk::new_dummy(0));
+                }
                 let columns = self
                     .columns
                     .into_iter()
@@ -387,7 +388,7 @@ impl DataChunk {
     /// * bool - whether this tuple is visible
     pub fn row_at(&self, pos: usize) -> ArrayResult<(RowRef<'_>, bool)> {
         let row = self.row_at_unchecked_vis(pos);
-        let vis = match &self.vis2 {
+        let vis = match &self.vis {
             Vis::Bitmap(bitmap) => bitmap.is_set(pos)?,
             Vis::Compact(_) => true,
         };
@@ -620,7 +621,7 @@ impl DataChunkTestExt for DataChunk {
 
     fn assert_valid(&self) {
         let cols = self.columns();
-        let vis = &self.vis2;
+        let vis = &self.vis;
         let n = vis.len();
         for col in cols.iter() {
             assert_eq!(col.array().len(), n);

@@ -538,8 +538,7 @@ impl Dispatcher for HashDataDispatcher {
             // get hash value of every line by its key
             let hash_builder = CRC32FastBuilder {};
             let hash_values = chunk
-                .get_hash_values(&self.keys, hash_builder)
-                .unwrap()
+                .get_hash_values(&self.keys, hash_builder)?
                 .iter()
                 .map(|hash| *hash as usize % VIRTUAL_NODE_COUNT)
                 .collect_vec();
@@ -571,6 +570,7 @@ impl Dispatcher for HashDataDispatcher {
                             if *hash != last_hash_value_when_update_delete {
                                 new_ops.push(Op::Delete);
                                 new_ops.push(Op::Insert);
+                                panic!("Update of the same pk is shuffled to different partitions, which might cause problems. We forbid this for now.");
                             } else {
                                 new_ops.push(Op::UpdateDelete);
                                 new_ops.push(Op::UpdateInsert);
@@ -619,19 +619,20 @@ impl Dispatcher for HashDataDispatcher {
             // individually output StreamChunk integrated with vis_map
             for (vis_map, output) in vis_maps.into_iter().zip_eq(self.outputs.iter_mut()) {
                 let vis_map = vis_map.finish();
+                if vis_map.num_high_bits() == 0 {
+                    continue;
+                }
                 // columns is not changed in this function
                 let new_stream_chunk =
                     StreamChunk::new(ops.clone(), columns.clone(), Some(vis_map));
-                if new_stream_chunk.cardinality() > 0 {
-                    event!(
-                        tracing::Level::TRACE,
-                        msg = "chunk",
-                        downstream = output.actor_id(),
-                        "send = \n{:#?}",
-                        new_stream_chunk
-                    );
-                    output.send(Message::Chunk(new_stream_chunk)).await?;
-                }
+                event!(
+                    tracing::Level::TRACE,
+                    msg = "chunk",
+                    downstream = output.actor_id(),
+                    "send = \n{:#?}",
+                    new_stream_chunk
+                );
+                output.send(Message::Chunk(new_stream_chunk)).await?;
             }
             Ok(())
         }
