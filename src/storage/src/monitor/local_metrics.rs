@@ -22,6 +22,8 @@ pub struct StoreLocalStatistic {
     pub cache_data_block_total: u64,
     pub cache_meta_block_miss: u64,
     pub cache_meta_block_total: u64,
+    pub tiered_cache_miss: Arc<AtomicU64>, // use arc atomic for async code
+    pub tiered_cache_total: u64,
 
     // include multiple versions of one key.
     pub scan_key_count: u64,
@@ -38,6 +40,12 @@ impl StoreLocalStatistic {
 
         self.cache_data_block_miss += other.cache_data_block_miss;
         self.cache_data_block_total += other.cache_data_block_total;
+
+        self.tiered_cache_total += other.tiered_cache_total;
+        self.tiered_cache_miss.fetch_add(
+            other.tiered_cache_miss.load(Ordering::Relaxed),
+            Ordering::Relaxed,
+        );
 
         self.scan_key_count += other.scan_key_count;
         self.processed_key_count += other.processed_key_count;
@@ -78,6 +86,21 @@ impl StoreLocalStatistic {
                 .inc_by(self.cache_meta_block_miss);
         }
 
+        let tiered_cache_miss = self.tiered_cache_miss.load(Ordering::Relaxed);
+        if tiered_cache_miss > 0 {
+            metrics
+                .sst_store_block_request_counts
+                .with_label_values(&["tiered_cache_miss"])
+                .inc_by(tiered_cache_miss);
+        }
+
+        if self.tiered_cache_total > 0 {
+            metrics
+                .sst_store_block_request_counts
+                .with_label_values(&["tiered_cache_total"])
+                .inc_by(self.tiered_cache_total);
+        }
+
         if self.bloom_filter_true_negative_count > 0 {
             metrics
                 .bloom_filter_true_negative_counts
@@ -89,9 +112,9 @@ impl StoreLocalStatistic {
                 .bloom_filter_might_positive_counts
                 .inc_by(self.bloom_filter_might_positive_count);
         }
-        let t = self.remote_io_time.load(Ordering::Relaxed) as f64;
-        if t > 0.0 {
-            metrics.remote_read_time.observe(t / 1000.0);
+        let remote_read_time = self.remote_io_time.load(Ordering::Relaxed) as f64;
+        if remote_read_time > 0.0 {
+            metrics.remote_read_time.observe(remote_read_time / 1000.0);
         }
     }
 }
