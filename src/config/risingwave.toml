@@ -9,7 +9,7 @@ in_flight_barrier_nums = 40
 worker_node_parallelism = 4
 
 [storage]
-shared_buffer_capacity_mb = 4096
+shared_buffer_capacity_mb = 128
 sstable_size_mb = 256
 block_size_kb = 1024
 bloom_false_positive = 0.01
