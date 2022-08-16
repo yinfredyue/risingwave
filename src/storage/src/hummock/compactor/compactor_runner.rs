@@ -38,7 +38,8 @@ impl CompactorRunner {
     pub fn new(context: Arc<CompactorContext>, task: CompactTask) -> Self {
         let max_target_file_size = context.options.sstable_size_mb as usize * (1 << 20);
         let cache_policy = if task.target_level == 0 {
-            CachePolicy::Fill
+            // CachePolicy::Fill
+            CachePolicy::NotFill
         } else {
             CachePolicy::NotFill
         };

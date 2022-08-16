@@ -89,6 +89,10 @@ impl TableBuilderFactory for RemoteBuilderFactory {
     }
 }
 
+lazy_static::lazy_static! {
+    pub static ref COMPACTION_QUOTA:AtomicU64 = AtomicU64::new(0);
+}
+
 #[derive(Clone)]
 /// Implementation of Hummock compaction.
 pub struct Compactor {
@@ -204,6 +208,10 @@ impl Compactor {
             need_quota
         );
 
+        let remains = COMPACTION_QUOTA.fetch_add(need_quota, std::sync::atomic::Ordering::SeqCst)
+            + need_quota;
+        tracing::info!("total compaction quota (acquire): {}", remains);
+
         let multi_filter = build_multi_compaction_filter(&compact_task);
 
         let multi_filter_key_extractor = context
@@ -280,6 +288,11 @@ impl Compactor {
                 context.sstable_store.delete_cache(table.id);
             }
         }
+
+        let remains = COMPACTION_QUOTA.fetch_sub(need_quota, std::sync::atomic::Ordering::SeqCst)
+            - need_quota;
+        tracing::info!("total compaction quota (release): {}", remains);
+
         compact_success
     }
 

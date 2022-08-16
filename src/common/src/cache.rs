@@ -45,6 +45,12 @@ impl<T: Eq + Send + Hash> LruKey for T {}
 pub trait LruValue: Send + Sync {}
 impl<T: Send + Sync> LruValue for T {}
 
+lazy_static::lazy_static! {
+    pub static ref LRU_HANDLE_COUNT:AtomicUsize = AtomicUsize::new(0);
+    pub static ref LRU_HANDLE_CHARGE:AtomicUsize = AtomicUsize::new(0);
+
+}
+
 /// An entry is a variable length heap-allocated structure.
 /// Entries are referenced by cache and/or by any external entity.
 /// The cache keeps all its entries in a hash table. Some elements
@@ -116,6 +122,13 @@ impl<K: LruKey, T: LruValue> LruHandle<K, T> {
     }
 
     pub fn init(&mut self, key: K, value: T, hash: u64, charge: usize) {
+        let remains = LRU_HANDLE_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        tracing::info!("lru handle count (acquire): {}", remains);
+
+        let remains =
+            LRU_HANDLE_CHARGE.fetch_add(charge, std::sync::atomic::Ordering::SeqCst) + charge;
+        tracing::info!("lru handle charge (acquire): {}", remains);
+
         self.next_hash = null_mut();
         self.prev = null_mut();
         self.next = null_mut();
@@ -176,6 +189,13 @@ impl<K: LruKey, T: LruValue> LruHandle<K, T> {
     }
 
     unsafe fn take_kv(&mut self) -> (K, T) {
+        let remains = LRU_HANDLE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst) - 1;
+        tracing::info!("lru handle count (release): {}", remains);
+
+        let remains = LRU_HANDLE_CHARGE.fetch_sub(self.charge, std::sync::atomic::Ordering::SeqCst)
+            - self.charge;
+        tracing::info!("lru handle charge (release): {}", remains);
+
         debug_assert!(self.kv.is_some());
         self.kv.take().unwrap_unchecked()
     }
@@ -627,6 +647,9 @@ impl<K: LruKey, T: LruValue> LruCache<K, T> {
             if ptr.is_null() {
                 return None;
             }
+            let remains =
+                CACHEABLE_ENTRY_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            tracing::info!("cachable entry count (acquire): {}", remains);
             let entry = CachableEntry {
                 cache: self.clone(),
                 handle: ptr,
@@ -640,6 +663,9 @@ impl<K: LruKey, T: LruValue> LruCache<K, T> {
         unsafe {
             let ptr = shard.lookup(hash, &key);
             if !ptr.is_null() {
+                let remains =
+                    CACHEABLE_ENTRY_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                tracing::info!("cachable entry count (acquire): {}", remains);
                 return LookupResult::Cached(CachableEntry {
                     cache: self.clone(),
                     handle: ptr,
@@ -683,12 +709,18 @@ impl<K: LruKey, T: LruValue> LruCache<K, T> {
             if let Some(que) = pending_request {
                 for sender in que {
                     (*ptr).add_ref();
+                    let remains =
+                        CACHEABLE_ENTRY_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                    tracing::info!("cachable entry count (acquire): {}", remains);
                     let _ = sender.send(CachableEntry {
                         cache: self.clone(),
                         handle: ptr,
                     });
                 }
             }
+            let remains =
+                CACHEABLE_ENTRY_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            tracing::info!("cachable entry count (acquire): {}", remains);
             CachableEntry {
                 cache: self.clone(),
                 handle: ptr,
@@ -832,6 +864,10 @@ impl<K: LruKey + Clone + 'static, T: LruValue + 'static> LruCache<K, T> {
     }
 }
 
+lazy_static::lazy_static! {
+    pub static ref CACHEABLE_ENTRY_COUNT:AtomicUsize = AtomicUsize::new(0);
+}
+
 pub struct CachableEntry<K: LruKey, T: LruValue> {
     cache: Arc<LruCache<K, T>>,
     handle: *mut LruHandle<K, T>,
@@ -857,6 +893,8 @@ impl<K: LruKey, T: LruValue> Drop for CachableEntry<K, T> {
         unsafe {
             self.cache.release(self.handle);
         }
+        let remains = CACHEABLE_ENTRY_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst) - 1;
+        tracing::info!("cachable entry count (release): {}", remains);
     }
 }
 
