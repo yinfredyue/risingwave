@@ -210,6 +210,9 @@ impl ConnectorSourceReader {
         let columns = Self::build_columns(&self.columns, events.iter().flat_map(|e| &e.rows))?;
         let ops = events.into_iter().flat_map(|e| e.ops).collect();
 
+        log::warn!("columns {:#?}",columns);
+        log::warn!("ops {:#?}",ops);
+
         Ok(StreamChunkWithState {
             chunk: StreamChunk::new(ops, columns, None),
             split_offset_mapping: Some(split_offset_mapping),

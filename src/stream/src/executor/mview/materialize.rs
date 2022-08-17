@@ -143,6 +143,7 @@ impl<S: StateStore> MaterializeExecutor<S> {
                                 self.state_table.insert(row)?;
                             }
                             Delete | UpdateDelete => {
+                                log::warn!("materialize {:#?}", row);
                                 self.state_table.delete(row)?;
                             }
                         }

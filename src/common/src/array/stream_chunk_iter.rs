@@ -60,7 +60,10 @@ impl<'a> Iterator for StreamChunkRefIter<'a> {
 
         match op {
             Op::Insert => Some(RecordRef::Insert(row)),
-            Op::Delete => Some(RecordRef::Delete(row)),
+            Op::Delete => {
+                log::warn!("{:#?}",row);
+                Some(RecordRef::Delete(row))
+            },
             Op::UpdateDelete => {
                 let insert_row = self.inner.next().expect("expect a row after U-");
                 // SAFETY: index is checked since `insert_row` is `Some`.

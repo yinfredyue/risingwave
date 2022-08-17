@@ -76,6 +76,9 @@ impl SourceParser for DebeziumJsonParser {
 
         let mut payload = event.payload;
 
+        log::warn!("{:#?}", payload);
+        log::warn!("{:#?}", columns);
+
         match payload.op.as_str() {
             DEBEZIUM_UPDATE_OP => {
                 let before = payload.before.as_mut().ok_or_else(|| {

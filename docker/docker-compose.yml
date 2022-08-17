@@ -2,7 +2,7 @@
 version: "3"
 services:
   compactor-0:
-    image: "ghcr.io/singularity-data/risingwave:nightly-20220620"
+    image: "docker.io/library/risingwave:latest"
     command:
       - compactor-node
       - "--host"
@@ -39,7 +39,7 @@ services:
       timeout: 5s
       retries: 5
   compute-node-0:
-    image: "ghcr.io/singularity-data/risingwave:nightly-20220620"
+    image: "docker.io/library/risingwave:latest"
     command:
       - compute-node
       - "--host"
@@ -121,7 +121,7 @@ services:
       timeout: 5s
       retries: 5
   frontend-node-0:
-    image: "ghcr.io/singularity-data/risingwave:nightly-20220620"
+    image: "docker.io/library/risingwave:latest"
     command:
       - frontend-node
       - "--host"
@@ -173,7 +173,7 @@ services:
       timeout: 5s
       retries: 5
   meta-node-0:
-    image: "ghcr.io/singularity-data/risingwave:nightly-20220620"
+    image: "docker.io/library/risingwave:latest"
     command:
       - meta-node
       - "--listen-addr"
@@ -195,7 +195,8 @@ services:
       - "1250"
       - "5691"
     ports: []
-    depends_on: []
+    depends_on: 
+      - kafka
     volumes:
       - "./risingwave.toml:/risingwave.toml"
     environment:
@@ -312,6 +313,41 @@ services:
       interval: 1s
       timeout: 5s
       retries: 5
+  zookeeper:
+    image: quay.io/debezium/zookeeper:1.9
+    ports:
+     - 2181:2181
+     - 2888:2888
+     - 3888:3888
+  kafka:
+    image: quay.io/debezium/kafka:1.9
+    ports:
+     - 9093:9092
+    links:
+     - zookeeper
+    environment:
+     - ZOOKEEPER_CONNECT=zookeeper:2181
+  mysql:
+    image: quay.io/debezium/example-mysql:1.9
+    ports:
+     - 3306:3306
+    environment:
+     - MYSQL_ROOT_PASSWORD=debezium
+     - MYSQL_USER=mysqluser
+     - MYSQL_PASSWORD=mysqlpw
+  connect:
+    image: quay.io/debezium/connect:1.9
+    ports:
+     - 8083:8083
+    links:
+     - kafka
+     - mysql
+    environment:
+     - BOOTSTRAP_SERVERS=kafka:9092
+     - GROUP_ID=1
+     - CONFIG_STORAGE_TOPIC=my_connect_configs
+     - OFFSET_STORAGE_TOPIC=my_connect_offsets
+     - STATUS_STORAGE_TOPIC=my_connect_statuses
 volumes:
   etcd-0:
     external: false
