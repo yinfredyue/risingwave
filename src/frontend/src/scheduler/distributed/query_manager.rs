@@ -18,6 +18,7 @@ use futures::StreamExt;
 use futures_async_stream::{for_await, try_stream};
 use log::debug;
 use rand::seq::SliceRandom;
+use risingwave_batch::executor::ExecutorBuilder;
 use risingwave_common::array::DataChunk;
 use risingwave_common::error::RwError;
 use risingwave_common::types::VnodeMapping;
@@ -44,6 +45,8 @@ pub struct QueryResultFetcher {
     task_output_id: TaskOutputId,
     task_host: HostAddress,
     compute_client_pool: ComputeClientPoolRef,
+
+    root_fragment: Option<PlanFragment>,
 }
 
 /// Manages execution of distributed batch queries.
@@ -144,6 +147,7 @@ impl QueryManager {
             task_output_id,
             worker_node_addr,
             self.compute_client_pool.clone(),
+            None,
         );
 
         Ok(query_result_fetcher.run())
@@ -178,7 +182,7 @@ impl QueryManager {
             }
         };
 
-        Ok(query_result_fetcher.run())
+        Ok(query_result_fetcher.run_local(_context))
     }
 }
 
@@ -189,6 +193,7 @@ impl QueryResultFetcher {
         task_output_id: TaskOutputId,
         task_host: HostAddress,
         compute_client_pool: ComputeClientPoolRef,
+        root_fragment: Option<PlanFragment>,
     ) -> Self {
         Self {
             epoch,
@@ -196,6 +201,7 @@ impl QueryResultFetcher {
             task_output_id,
             task_host,
             compute_client_pool,
+            root_fragment,
         }
     }
 
@@ -212,6 +218,20 @@ impl QueryResultFetcher {
         let mut stream = compute_client.get_data(self.task_output_id.clone()).await?;
         while let Some(response) = stream.next().await {
             yield DataChunk::from_protobuf(response?.get_record_batch()?)?;
+        }
+    }
+
+    #[try_stream(ok = DataChunk, error = RwError)]
+    async fn run_local(self, execution_context: ExecutionContextRef) {
+        let plan_node = self.root_fragment.unwrap().root.unwrap();
+        let task_id = risingwave_batch::task::TaskId::from(&self.task_output_id.task_id.unwrap());
+        let executor = ExecutorBuilder::new(&plan_node, &task_id, execution_context.to_batch_task(), self.epoch);
+        let executor = executor.build().await?;
+
+        println!("yield chunk");
+        #[for_await]
+        for chunk in executor.execute() {
+            yield chunk?;
         }
     }
 }
