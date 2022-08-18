@@ -180,7 +180,7 @@ impl StageExecution {
 
                 // Change state before spawn runner.
                 *s = StageState::Started;
-
+                println!("Stage {:?} start to execute", self.stage.id);
                 spawn(async move {
                     if let Err(e) = runner.run(receiver).await {
                         error!("Stage failed: {:?}", e);
@@ -243,7 +243,6 @@ impl StageExecution {
     /// When this method is called, all tasks should have been scheduled, and their `worker_node`
     /// should have been set.
     pub fn all_exchange_sources_for(&self, output_id: u32) -> Vec<ExchangeSource> {
-        println!("get source exchange for self.stage.id {:?}", self.stage.id);
         self.tasks
             .iter()
             .map(|(task_id, status_holder)| {
@@ -388,6 +387,7 @@ impl StageRunner {
 
                                 TaskStatusProst::Failed => {
                                     // If receive task failure, report to query runner and abort tasks.
+                                    println!("get failed task status");
                                     let task_execution_err = SchedulerError::TaskExecutionError;
                                     self.send_event(QueryMessage::Stage(StageEvent::Failed {id: self.stage.id, reason: task_execution_err})).await?;
                                     self.abort_all_running_tasks().await?;
@@ -491,6 +491,7 @@ impl StageRunner {
             .map_err(|e| anyhow!(e))?;
 
         let t_id = task_id.task_id;
+        println!("Create Task for Task Id : {:?}", task_id);
         let stream_status = compute_client
             .create_task(task_id, plan_fragment, self.epoch)
             .await
