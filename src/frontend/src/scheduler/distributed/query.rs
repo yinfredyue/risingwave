@@ -221,18 +221,9 @@ impl QueryRunner {
                 error!("Failed to start stage: {}, reason: {:?}", stage_id, e);
                 e
             })?;
-            tracing::trace!(
-                "Query stage {:?}-{:?} started.",
-                self.query.query_id,
-                stage_id
-            );
-            println!(
-                "Query stage {:?}-{:?} started.",
-                self.query.query_id, stage_id
-            );
         }
         let mut stages_with_table_scan = self.query.stages_with_table_scan();
-        // println!(" target stages: {:?}", self.stage_executions.len() - 1);
+
         // Schedule other stages after leaf stages are all scheduled.
         while let Some(msg) = self.msg_receiver.recv().await {
             match msg {
@@ -259,8 +250,8 @@ impl QueryRunner {
                     if self.scheduled_stages_count == self.stage_executions.len() - 1 {
                         // Now all non-root stages have been scheduled, send root stage info.
                         self.send_root_stage_info().await;
-                        // FIXME: We can not break here, otherwise FE will not wait for CN execution
-                        // break;
+                        // FIXME: We can not break here, otherwise it will trigger shutdown
+                        // channel of StageRunner and abort some working task, therefore the results set is not complete.
                     } else {
                         for parent in self.query.get_parents(&stage_id) {
                             if self.all_children_scheduled(parent).await
@@ -297,7 +288,6 @@ impl QueryRunner {
 
                     // Stop all running stages.
                     for (_stage_id, stage_execution) in self.stage_executions.iter() {
-                        println!("abort stage {:?}", *_stage_id);
                         // The stop is return immediately so no need to spawn tasks.
                         stage_execution.stop().await;
                     }
@@ -373,13 +363,6 @@ impl QueryRunner {
         let plan_node_prost =
             Self::convert_plan_node(root_stage, &root_stage.stage.root, ROOT_TASK_ID);
         let exchange_info = root_stage.stage.exchange_info.clone();
-        println!("----------- Create Plan Fragment ----------");
-        // println!("exchange info for the plan: {:?}", exchange_info);
-        // println!("The plan: {:?}", plan_node_prost);
-        // println!("child for plan node prost: {:?}", plan_node_prost.children.len());
-        // println!("child for child for plan node prost: {:?}",
-        // plan_node_prost.children[0].children.len());
-        println!("----------- Create Plan Fragment ----------");
         PlanFragment {
             root: Some(plan_node_prost),
             exchange_info: Some(exchange_info),

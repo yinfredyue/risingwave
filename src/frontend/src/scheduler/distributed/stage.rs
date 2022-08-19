@@ -180,7 +180,6 @@ impl StageExecution {
 
                 // Change state before spawn runner.
                 *s = StageState::Started;
-                println!("Stage {:?} start to execute", self.stage.id);
                 spawn(async move {
                     if let Err(e) = runner.run(receiver).await {
                         error!("Stage failed: {:?}", e);
@@ -359,6 +358,7 @@ impl StageRunner {
             tokio::select! {
                     biased;
                     _ = &mut shutdown_tx => {
+                    // println!("received shutdown");
                     // Received shutdown signal from query runner, should send abort RPC to all CNs.
                     // change state to aborted. Note that the task cancel can only happen after schedule all these tasks to CN.
                     // This can be an optimization for future: How to stop before schedule tasks.
@@ -387,7 +387,6 @@ impl StageRunner {
 
                                 TaskStatusProst::Failed => {
                                     // If receive task failure, report to query runner and abort tasks.
-                                    println!("get failed task status");
                                     let task_execution_err = SchedulerError::TaskExecutionError;
                                     self.send_event(QueryMessage::Stage(StageEvent::Failed {id: self.stage.id, reason: task_execution_err})).await?;
                                     self.abort_all_running_tasks().await?;
