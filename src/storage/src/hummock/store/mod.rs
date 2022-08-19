@@ -6,12 +6,13 @@ use bytes::Bytes;
 use futures::Future;
 use risingwave_hummock_sdk::{HummockEpoch, LocalSstableInfo};
 use risingwave_pb::hummock::{HummockVersion, HummockVersionDelta};
+use tokio::sync::mpsc;
 
 use super::sstable_store::SstableStoreRef;
 use super::{HummockResult, HummockStateStoreIter};
-use crate::StateStoreIter;
 use crate::error::StorageResult;
 use crate::monitor::StateStoreMetrics;
+use crate::StateStoreIter;
 
 pub trait StateStore: Send + Sync + 'static + Clone {
     type Iter: StateStoreIter<Item = (Bytes, Bytes)>;
@@ -115,8 +116,6 @@ where
     version: LocalVersion<M>,
 
     sstable_store: SstableStoreRef,
-
-    stats: Arc<StateStoreMetrics>,
 }
 
 #[allow(unused)]
@@ -156,4 +155,27 @@ where
     {
         async move { unimplemented!() }
     }
+}
+
+pub struct HummockWriteQueueItem<M>
+where
+    M: Memtable,
+{
+    imm_mem: Arc<M>,
+    idx: OrderIdx,
+    table_id: u64,
+}
+
+pub struct HummockWriteQueue<M> where M: Memtable {
+    sender: mpsc::Sender<HummockWriteQueueItem<M>>,
+}
+
+#[allow(unused)]
+pub struct HummockStorage<M>
+where
+    M: Memtable,
+{
+    inner: HummockStorageBase<M>,
+
+    memtable: M,
 }
