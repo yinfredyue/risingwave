@@ -242,9 +242,6 @@ impl QueryRunner {
                         self.query.query_id,
                         stage_id
                     );
-                    println!(                        "Query stage {:?}-{:?} scheduled.",
-                                                     self.query.query_id,
-                                                     stage_id);
                     self.scheduled_stages_count += 1;
                     stages_with_table_scan.remove(&stage_id);
                     if stages_with_table_scan.is_empty() {
@@ -262,10 +259,13 @@ impl QueryRunner {
                     if self.scheduled_stages_count == self.stage_executions.len() - 1 {
                         // Now all non-root stages have been scheduled, send root stage info.
                         self.send_root_stage_info().await;
-                        break;
+                        // FIXME: We can not break here, otherwise FE will not wait for CN execution
+                        // break;
                     } else {
                         for parent in self.query.get_parents(&stage_id) {
-                            if self.all_children_scheduled(parent).await && *parent != self.query.stage_graph.root_stage_id {
+                            if self.all_children_scheduled(parent).await
+                                && *parent != self.query.stage_graph.root_stage_id
+                            {
                                 self.stage_executions[parent].start().await.map_err(|e| {
                                     error!("Failed to start stage: {}, reason: {:?}", stage_id, e);
                                     e
@@ -377,7 +377,8 @@ impl QueryRunner {
         // println!("exchange info for the plan: {:?}", exchange_info);
         // println!("The plan: {:?}", plan_node_prost);
         // println!("child for plan node prost: {:?}", plan_node_prost.children.len());
-        // println!("child for child for plan node prost: {:?}", plan_node_prost.children[0].children.len());
+        // println!("child for child for plan node prost: {:?}",
+        // plan_node_prost.children[0].children.len());
         println!("----------- Create Plan Fragment ----------");
         PlanFragment {
             root: Some(plan_node_prost),

@@ -174,8 +174,6 @@ impl<C: BatchTaskContext> ProbeSideSource<C> {
                 task_id: Some(ProstTaskId {
                     query_id: Uuid::new_v4().to_string(),
                     ..Default::default()
-                    // stage_id: prost_task_id.stage_id,
-                    // task_id: prost_task_id.task_id
                 }),
                 output_id: 0,
             }),
@@ -374,7 +372,6 @@ impl<P: 'static + ProbeSideSourceBuilder> LookupJoinExecutor<P> {
             while probe_side_chunk_exists {
                 let probe_side_chunk = probe_side_stream.next().await;
                 probe_side_chunk_exists = probe_side_chunk.is_some();
-
 
                 let probe_side_chunk = if let Some(chunk) = probe_side_chunk {
                     println!("some for probe side chunk");
