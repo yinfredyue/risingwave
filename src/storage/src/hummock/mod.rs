@@ -52,6 +52,7 @@ pub use compactor::{CompactorMemoryCollector, CompactorSstableStore};
 pub use utils::MemoryLimiter;
 pub mod vacuum;
 pub mod value;
+pub mod store;
 
 pub use error::*;
 pub use risingwave_common::cache::{CachableEntry, LookupResult, LruCache};
