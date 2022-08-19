@@ -40,6 +40,8 @@ use crate::optimizer::{PlanRef, PlanRoot};
 use crate::session::{OptimizerContext, OptimizerContextRef, SessionImpl};
 use crate::stream_fragmenter::build_graph;
 
+// FIXME: store PK columns in ProstTableSourceInfo as Catalog information, and then remove this
+
 /// Binds the column schemas declared in CREATE statement into `ColumnDesc`.
 /// If a column is marked as `primary key`, its `ColumnId` is also returned.
 /// This primary key is not combined with table constraints yet.
