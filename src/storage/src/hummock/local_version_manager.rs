@@ -19,6 +19,7 @@ use std::sync::atomic::Ordering::{Acquire, Relaxed};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use async_stack_trace::StackTrace;
 use bytes::Bytes;
 use futures::future::{join_all, try_join_all};
 use itertools::Itertools;
@@ -512,8 +513,8 @@ impl LocalVersionManager {
         let (tx, rx) = oneshot::channel();
         self.buffer_tracker
             .send_event(SharedBufferEvent::SyncEpoch(epochs, tx));
-        let join_handles = rx.await.unwrap();
-        for result in join_all(join_handles).await {
+        let join_handles = rx.stack_trace("wait_join_handles").await.unwrap();
+        for result in join_all(join_handles).stack_trace("join_all_handles").await {
             result.expect("should be able to join the flush handle")
         }
         self.sync_shared_buffer_le_epoch(epoch).await
@@ -574,6 +575,7 @@ impl LocalVersionManager {
         };
         let uncommitted_ssts = self
             .run_sync_upload_task(task_payload, epochs.clone(), epoch)
+            .stack_trace("run_sync_upload_task")
             .await?;
         tracing::trace!("sync epoch {} finished. Task size {}", epoch, sync_size);
         if let Some(conflict_detector) = self.write_conflict_detector.as_ref() {

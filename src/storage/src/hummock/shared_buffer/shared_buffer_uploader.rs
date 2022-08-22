@@ -14,6 +14,7 @@
 
 use std::sync::Arc;
 
+use async_stack_trace::StackTrace;
 use risingwave_common::config::StorageConfig;
 use risingwave_hummock_sdk::filter_key_extractor::FilterKeyExtractorManagerRef;
 use risingwave_hummock_sdk::{HummockEpoch, LocalSstableInfo};
@@ -101,9 +102,10 @@ impl SharedBufferUploader {
         mem_compactor_ctx
             .sstable_id_manager
             .add_watermark_sst_id(Some(epoch))
+            .stack_trace("sstable_id_manager_add_watermark_sst_id")
             .await?;
 
-        let tables = compact(mem_compactor_ctx, payload, sst_watermark_epoch).await?;
+        let tables = compact(mem_compactor_ctx, payload, sst_watermark_epoch).stack_trace("shared_buffer_flush_compact").await?;
 
         let uploaded_sst_info = tables.into_iter().collect();
 

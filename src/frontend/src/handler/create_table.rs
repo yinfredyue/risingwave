@@ -90,10 +90,7 @@ pub fn bind_sql_columns(columns: Vec<ColumnDef>) -> Result<(Vec<ColumnDesc>, Opt
             }
             check_valid_column_name(&name.real_value())?;
             let field_descs = if let AstDataType::Struct(fields) = &data_type {
-                fields
-                    .iter()
-                    .map(bind_struct_field)
-                    .collect::<Result<Vec<_>>>()?
+                fields.iter().map(bind_struct_field).try_collect()?
             } else {
                 vec![]
             };

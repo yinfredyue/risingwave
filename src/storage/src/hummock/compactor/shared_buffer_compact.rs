@@ -15,6 +15,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use async_stack_trace::StackTrace;
 use bytes::Bytes;
 use futures::future::try_join_all;
 use futures::{stream, StreamExt, TryFutureExt};
@@ -64,14 +65,14 @@ pub async fn compact(
     for (id, group_payload) in grouped_payload {
         let id_copy = id;
         futures.push(
-            compact_shared_buffer(context.clone(), group_payload, sst_watermark_epoch).map_ok(
-                move |results| {
+            compact_shared_buffer(context.clone(), group_payload, sst_watermark_epoch)
+                .map_ok(move |results| {
                     results
                         .into_iter()
                         .map(move |result| (id_copy, result))
                         .collect_vec()
-                },
-            ),
+                })
+                .stack_trace(format!("compact_shared_buffer({id_copy})")),
         );
     }
     // Note that the output is reordered compared with input `payload`.
@@ -137,6 +138,7 @@ async fn compact_shared_buffer(
     let multi_filter_key_extractor = context
         .filter_key_extractor_manager
         .acquire(existing_table_ids)
+        .stack_trace("filter_key_extractor_acquire")
         .await;
     let multi_filter_key_extractor = Arc::new(multi_filter_key_extractor);
 
