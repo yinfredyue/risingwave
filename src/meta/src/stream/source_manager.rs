@@ -558,7 +558,19 @@ where
                 unreachable!();
             }
         }
-
+        let print_assign_splits = assigned
+            .iter()
+            .map(|(aid, vec_split_impl)| {
+                (
+                    aid.clone(),
+                    vec_split_impl
+                        .iter()
+                        .map(|split_impl| split_impl.id())
+                        .collect::<Vec<SplitId>>(),
+                )
+            })
+            .collect::<HashMap<ActorId, Vec<SplitId>>>();
+        tracing::debug!("pre allocate splits: {:?}", print_assign_splits);
         Ok(assigned)
     }
 

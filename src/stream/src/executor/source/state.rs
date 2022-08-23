@@ -63,6 +63,10 @@ impl<S: StateStore> SourceStateHandler<S> {
             // TODO should be a clear Error Code
             bail!("states require not null");
         } else {
+            tracing::info!(
+                "keys: {:#?}",
+                states.iter().map(|i| i.id()).collect::<Vec<SplitId>>()
+            );
             let mut write_batch = self.keyspace.state_store().start_write_batch(WriteOptions {
                 epoch,
                 table_id: self.keyspace.table_id(),
