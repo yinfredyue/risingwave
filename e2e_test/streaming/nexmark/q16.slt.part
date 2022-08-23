@@ -1,0 +1,4 @@
+query IIRTT rowsort
+SELECT * FROM nexmark_q15;
+----
+xxx
