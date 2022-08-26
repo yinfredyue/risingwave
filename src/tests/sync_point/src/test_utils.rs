@@ -48,13 +48,22 @@ pub async fn start_cluster() -> (JoinHandle<()>, std::sync::mpsc::Sender<()>) {
     );
 
     let (tx, rx) = std::sync::mpsc::channel();
+    let sync_facility = sync_point::get_sync_facility();
+    println!("SYNC FACILITY {:?}", sync_facility);
     let join_handle = std::thread::spawn(move || {
+        let sync = sync_facility.clone();
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
+            .on_thread_start(move || {
+                let sync = sync.clone();
+                sync_point::initialize_for_thread(sync);
+                println!("SYNC FACILITY (in thread): {:?}", sync_point::get_sync_facility());
+            })
             .enable_all()
             .build()
             .unwrap();
         runtime.block_on(async {
+            // This will spawn in a runtime worker thread.
             tokio::spawn(async { playground().await });
             rx.recv().unwrap();
         });

@@ -87,6 +87,7 @@ async fn test_gc_watermark() {
 
     // Import data
     let run_slt = run_slt();
+    println!("SUCCESS");
     assert!(run_slt.status.success());
 
     let before_compaction = object_store_client.list("").await.unwrap();
@@ -95,6 +96,8 @@ async fn test_gc_watermark() {
     // Schedule a compaction task
     emit_now("SIG_SCHEDULE_COMPACTION_TASK".to_owned()).await;
 
+    println!("HERE 0");
+
     // Wait until SSTs have been written to object store
     wait_now(
         "SIG_DONE_COMPACT_UPLOAD".to_owned(),
@@ -102,6 +105,8 @@ async fn test_gc_watermark() {
     )
     .await
     .unwrap();
+
+    println!("HERE 1");
 
     let after_compaction_upload = object_store_client.list("").await.unwrap();
     let new_objects = after_compaction_upload
@@ -130,6 +135,8 @@ async fn test_gc_watermark() {
         after_compaction_upload.len() + 1
     );
 
+    println!("HERE 2");
+
     meta_client.trigger_full_gc(0).await.unwrap();
     // Wait until VACUUM is scheduled and reported
     for _ in 0..2 {
@@ -140,6 +147,9 @@ async fn test_gc_watermark() {
         .await
         .unwrap();
     }
+
+
+    println!("HERE 3");
     // Expect timeout aka no SST is deleted, because the garbage SST has greater id than watermark,
     // which is held by the on-going compaction.
     wait_now("SIG_DONE_REPORT_VACUUM".to_owned(), Duration::from_secs(10))
@@ -148,6 +158,7 @@ async fn test_gc_watermark() {
     let after_gc = object_store_client.list("").await.unwrap();
     assert_eq!(after_gc.len(), after_compaction_upload.len() + 1);
 
+    println!("HERE 4");
     // Signal to continue compaction report
     emit_now("SIG_START_COMPACT_REPORT".to_owned()).await;
 
@@ -158,6 +169,9 @@ async fn test_gc_watermark() {
     )
     .await
     .unwrap();
+
+
+    println!("HERE 5");
 
     // Wait until VACUUM is scheduled and reported
     for _ in 0..2 {
@@ -175,6 +189,8 @@ async fn test_gc_watermark() {
     let after_gc = object_store_client.list("").await.unwrap();
     assert!(after_gc.len() < after_compaction_upload.len());
 
+
+    println!("HERE 6");
     meta_client.trigger_full_gc(0).await.unwrap();
     // Wait until VACUUM is scheduled and reported
     for _ in 0..2 {
@@ -185,6 +201,9 @@ async fn test_gc_watermark() {
         .await
         .unwrap();
     }
+
+
+    println!("HERE 7");
     // Expect the garbage SST is deleted.
     wait_now("SIG_DONE_REPORT_VACUUM".to_owned(), Duration::from_secs(10))
         .await
@@ -192,7 +211,10 @@ async fn test_gc_watermark() {
     let after_gc_2 = object_store_client.list("").await.unwrap();
     assert_eq!(after_gc.len(), after_gc_2.len() + 1);
 
+    println!("HERE 8");
     stop_cluster(join_handle, tx).await;
+
+    println!("HERE 9");
 }
 
 #[tokio::test]
