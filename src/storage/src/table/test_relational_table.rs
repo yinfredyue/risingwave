@@ -13,9 +13,11 @@
 // limitations under the License.
 
 use futures::{pin_mut, StreamExt};
-use risingwave_common::array::Row;
+use nix::sys::personality::get;
+use risingwave_common::array::{ListValue, Row};
 use risingwave_common::catalog::{ColumnDesc, ColumnId, TableId, TableOption};
-use risingwave_common::types::DataType;
+use risingwave_common::types::{DataType, ScalarImpl};
+use risingwave_common::types::ScalarImpl::{List, Utf8};
 use risingwave_common::util::sort_util::OrderType;
 
 use crate::memory::MemoryStateStore;
@@ -558,6 +560,48 @@ async fn test_row_based_get_row() {
         .await
         .unwrap();
     assert_eq!(get_no_exist_res, None);
+}
+
+#[tokio::test]
+async fn test_array_varchar_null() {
+    let state_store = MemoryStateStore::new();
+    let column_ids = vec![ColumnId::from(0)];
+    let column_descs = vec![ColumnDesc::unnamed(column_ids[0], DataType::List{datatype: Box::new(DataType::Varchar)})];
+    // let column_descs = vec![ColumnDesc::unnamed(column_ids[0], DataType::Varchar)];
+    let pk_indices = vec![0_usize];
+    let order_types = vec![OrderType::Ascending];
+    let mut state = StateTable::new_without_distribution(
+        state_store.clone(),
+        TableId::from(0x42),
+        column_descs.clone(),
+        order_types.clone(),
+        pk_indices.clone(),
+    );
+    let mut table = RowBasedStorageTable::new_for_test(
+        state_store.clone(),
+        TableId::from(0x42),
+        column_descs.clone(),
+        order_types.clone(),
+        pk_indices,
+    );
+    let epoch: u64 = 0;
+
+    state.insert(Row(vec![Some(ScalarImpl::from(ListValue::new(vec![Some(Utf8(String::from("")))])))])).unwrap();
+    // state.insert(Row(vec![Some(ScalarImpl::from(Utf8(String::from(""))))])).unwrap();
+    state.commit(epoch).await.unwrap();
+    let epoch = u64::MAX;
+    // let get_row1_res = table.get_row(&Row(vec![Some(ScalarImpl::from(Utf8(String::from(""))))]), epoch).await.unwrap();
+
+    let get_row1_res = table.get_row(&Row(vec![Some(ScalarImpl::from(ListValue::new(vec![Some(Utf8(String::from("")))])))]), epoch).await.unwrap();
+    let row_datum = if let Some(Row(row_datum)) = get_row1_res {row_datum} else {vec![]};
+    assert_eq!(1, row_datum.clone().len());
+    let first_elem = row_datum[0].clone();
+    let var_char_array = if let Some(var_char_array) = first_elem  {var_char_array} else {ScalarImpl::from(ListValue::new(vec![]))};
+    let list_values = if let ScalarImpl::List(list_values) = var_char_array {list_values} else {ListValue::new(vec![])};
+    assert_eq!(1, list_values.clone().values().len());
+    let values = list_values.values();
+    let first_value = values[0].clone();
+    // assert!(matches!(first_value, Option::Some(_)));
 }
 
 // test row-based encoding in batch mode
