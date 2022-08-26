@@ -83,14 +83,15 @@ risedev:
     - use: etcd
     - use: meta-node
     - use: compute-node
+      enable-async-stack-trace: true
     - use: frontend
     - use: compactor
     - use: prometheus
     - use: grafana
-    - use: zookeeper
-      persist-data: true
-    - use: kafka
-      persist-data: true
+    # - use: zookeeper
+    #   persist-data: true
+    # - use: kafka
+    #   persist-data: true
 
   full-benchmark:
     - use: minio

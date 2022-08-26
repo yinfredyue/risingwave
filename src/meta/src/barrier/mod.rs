@@ -957,7 +957,7 @@ where
     pub async fn run_multiple_commands(&self, commands: Vec<Command>) -> MetaResult<()> {
         struct Context {
             collect_rx: Receiver<MetaResult<()>>,
-            finish_rx: Receiver<()>,
+            finish_rx: Receiver<MetaResult<()>>,
             is_create_mv: bool,
         }
 
@@ -977,9 +977,9 @@ where
             scheduleds.push((
                 command,
                 once(Notifier {
+                    to_send: None,
                     collected: Some(collect_tx),
                     finished: Some(finish_tx),
-                    ..Default::default()
                 })
                 .collect(),
             ));
@@ -1000,10 +1000,10 @@ where
                 // The snapshot ingestion may last for several epochs, we should pin the epoch here.
                 // TODO: this should be done in `post_collect`
                 let _snapshot = self.hummock_manager.pin_snapshot(META_NODE_ID).await?;
-                finish_rx.await.unwrap(); // Wait for this command to be finished.
+                finish_rx.await.unwrap()?; // Wait for this command to be finished.
                 self.hummock_manager.unpin_snapshot(META_NODE_ID).await?;
             } else {
-                finish_rx.await.unwrap(); // Wait for this command to be finished.
+                finish_rx.await.unwrap()?; // Wait for this command to be finished.
             }
         }
 
@@ -1020,8 +1020,9 @@ where
     pub async fn wait_for_next_barrier_to_collect(&self) -> MetaResult<()> {
         let (tx, rx) = oneshot::channel();
         let notifier = Notifier {
+            to_send: None,
             collected: Some(tx),
-            ..Default::default()
+            finished: None,
         };
         self.scheduled_barriers
             .attach_notifiers(once(notifier))

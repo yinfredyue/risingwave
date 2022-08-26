@@ -16,6 +16,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use anyhow::Context;
 use etcd_client::{Client as EtcdClient, ConnectOptions};
 use itertools::Itertools;
 use prost::Message;
@@ -105,7 +106,7 @@ pub async fn rpc_serve(
             }
             let client = EtcdClient::connect(endpoints, Some(options))
                 .await
-                .map_err(|e| anyhow::anyhow!("failed to connect etcd {}", e))?;
+                .context("failed to connect etcd")?;
             let meta_store = Arc::new(EtcdMetaStore::new(client));
             rpc_serve_with_store(
                 meta_store,

@@ -26,7 +26,7 @@ pub(super) struct Notifier {
     pub collected: Option<oneshot::Sender<MetaResult<()>>>,
 
     /// Get notified when scheduled barrier is finished.
-    pub finished: Option<oneshot::Sender<()>>,
+    pub finished: Option<oneshot::Sender<MetaResult<()>>>,
 }
 
 impl Notifier {
@@ -45,8 +45,13 @@ impl Notifier {
     }
 
     /// Notify when we failed to collect a barrier. This function consumes `self`.
-    pub fn notify_collection_failed(self, err: MetaError) {
-        if let Some(tx) = self.collected {
+    ///
+    /// Since the collection failed, the `finished` notification will also be `Err`.
+    pub fn notify_collection_failed(mut self, err: MetaError) {
+        if let Some(tx) = self.collected.take() {
+            tx.send(Err(err.clone())).ok();
+        }
+        if let Some(tx) = self.finished.take() {
             tx.send(Err(err)).ok();
         }
     }
@@ -56,9 +61,17 @@ impl Notifier {
     /// Generally when a barrier is collected, it's also finished since it does not require further
     /// report of finishing from actors.
     /// However for creating MV, this is only called when all `Chain` report it finished.
-    pub fn notify_finished(self) {
-        if let Some(tx) = self.finished {
-            tx.send(()).ok();
+    pub fn notify_finished(mut self) {
+        if let Some(tx) = self.finished.take() {
+            tx.send(Ok(())).ok();
+        }
+    }
+}
+
+impl Drop for Notifier {
+    fn drop(&mut self) {
+        if self.to_send.is_some() || self.collected.is_some() || self.finished.is_some() {
+            panic!("notifier is dropped before all notifications are sent");
         }
     }
 }
