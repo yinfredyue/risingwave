@@ -37,3 +37,4 @@ drop database ddl_database;
 # Drop it again with if exists.
 statement ok
 drop database if exists ddl_database;
+

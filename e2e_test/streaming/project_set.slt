@@ -1,17 +1,33 @@
 statement ok
-SET RW_IMPLICIT_FLUSH TO true;
+SET
+  RW_IMPLICIT_FLUSH TO true;
 
 statement ok
-create table t(x int[]);
+create table t(x int []);
 
 statement ok
-insert into t values (Array[1,2]), (Array[1,NULL]), (Array[3,4,5]), (NULL);
+insert into
+  t
+values
+  (Array [1,2]),
+  (Array [1,NULL]),
+  (Array [3,4,5]),
+  (NULL);
 
 statement ok
-create materialized view mv as select unnest(x) as unnest, x from t;
+create materialized view mv as
+select
+  unnest(x) as unnest,
+  x
+from
+  t;
 
 query I rowsort
-select unnest, x from mv;
+select
+  unnest,
+  x
+from
+  mv;
 ----
 NULL {1,NULL}
 1    {1,NULL}
@@ -20,6 +36,7 @@ NULL {1,NULL}
 3    {3,4,5}
 4    {3,4,5}
 5    {3,4,5}
+
 
 statement ok
 drop materialized view mv;
@@ -31,22 +48,42 @@ statement ok
 create table tweet(text VARCHAR);
 
 statement ok
-insert into tweet values ('#1 #2 abaaba'), ('ss #1 ggg #risingwave');
+insert into
+  tweet
+values
+  ('#1 #2 abaaba'),
+  ('ss #1 ggg #risingwave');
 
 statement ok
-create materialized view mv as 
-    with tags as (select unnest(regexp_matches(text, '#\w+', 'g')) as tag, text from tweet)
-    select tag, count(*) as cnt from tags group by tag;
+create materialized view mv as with tags as (
+  select
+    unnest(regexp_matches(text, '#\w+', 'g')) as tag,
+    text
+  from
+    tweet
+)
+select
+  tag,
+  count(*) as cnt
+from
+  tags
+group by
+  tag;
 
 query TI rowsort
-select * from mv;
+select
+  *
+from
+  mv;
 ----
 #1          2
 #2          1
 #risingwave 1
+
 
 statement ok
 drop materialized view mv;
 
 statement ok
 drop table tweet;
+

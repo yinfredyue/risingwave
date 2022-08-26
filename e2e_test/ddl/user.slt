@@ -50,3 +50,4 @@ DROP USER aBc;
 
 statement ok
 DROP USER "aBc";
+

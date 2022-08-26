@@ -63,3 +63,4 @@ drop schema Myschema;
 
 statement ok
 drop schema "Myschema";
+

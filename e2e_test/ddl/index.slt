@@ -4,7 +4,11 @@ create table ddl_t (v1 int);
 
 # Create a mview on top of it.
 statement ok
-create materialized view ddl_mv as select v1 from ddl_t;
+create materialized view ddl_mv as
+select
+  v1
+from
+  ddl_t;
 
 # Create an index on top of it.
 statement ok
@@ -24,3 +28,4 @@ drop materialized view ddl_mv;
 
 statement ok
 drop table ddl_t;
+

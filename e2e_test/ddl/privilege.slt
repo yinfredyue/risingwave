@@ -20,7 +20,9 @@ GRANT ALL ON DATABASE db1 TO user1 WITH GRANT OPTION GRANTED BY user;
 
 # Grant invalid privilege on database for user1.
 statement error
-GRANT INSERT ON DATABASE db1 TO user1 WITH GRANT OPTION GRANTED BY user;
+GRANT
+INSERT
+  ON DATABASE db1 TO user1 WITH GRANT OPTION GRANTED BY user;
 
 # Grant privilege on invalid database for user1.
 statement error
@@ -44,23 +46,33 @@ GRANT ALL PRIVILEGES ON ALL MATERIALIZED VIEWS IN SCHEMA db1.schema1 TO user1 GR
 
 # Revoke privilege on all mviews in schema for user1.
 statement ok
-REVOKE ALL PRIVILEGES ON ALL MATERIALIZED VIEWS IN SCHEMA db1.schema1 FROM user1;
+REVOKE ALL PRIVILEGES ON ALL MATERIALIZED VIEWS IN SCHEMA db1.schema1
+FROM
+  user1;
 
 # Revoke privilege on all sources in schema for user1.
 statement ok
-REVOKE ALL PRIVILEGES ON ALL SOURCES IN SCHEMA db1.schema1 FROM user1;
+REVOKE ALL PRIVILEGES ON ALL SOURCES IN SCHEMA db1.schema1
+FROM
+  user1;
 
 # Revoke privilege on schema for user1.
 statement ok
-REVOKE CREATE ON SCHEMA db1.schema1 FROM user1;
+REVOKE CREATE ON SCHEMA db1.schema1
+FROM
+  user1;
 
 # Revoke GRANT OPTION FOR from database for user1.
 statement ok
-REVOKE GRANT OPTION FOR ALL ON DATABASE db1 from user1 GRANTED BY user;
+REVOKE GRANT OPTION FOR ALL ON DATABASE db1
+from
+  user1 GRANTED BY user;
 
 # Revoke privilege on database for user1.
 statement ok
-REVOKE ALL ON DATABASE db1 FROM user1;
+REVOKE ALL ON DATABASE db1
+FROM
+  user1;
 
 # Drop schema
 statement ok
@@ -81,3 +93,4 @@ DROP USER user1;
 # Drop user
 statement ok
 DROP USER user;
+

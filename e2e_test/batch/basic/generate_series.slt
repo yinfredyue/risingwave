@@ -1,8 +1,16 @@
 statement ok
-SET RW_IMPLICIT_FLUSH TO true;
+SET
+  RW_IMPLICIT_FLUSH TO true;
 
 query I
-select generate_series from generate_series('2008-03-01 00:00:00'::TIMESTAMP,'2008-03-04 12:00:00'::TIMESTAMP, interval '12' hour)
+select
+  generate_series
+from
+  generate_series(
+    '2008-03-01 00:00:00' :: TIMESTAMP,
+    '2008-03-04 12:00:00' :: TIMESTAMP,
+    interval '12' hour
+  )
 ----
 2008-03-01 00:00:00
 2008-03-01 12:00:00
@@ -13,8 +21,16 @@ select generate_series from generate_series('2008-03-01 00:00:00'::TIMESTAMP,'20
 2008-03-04 00:00:00
 2008-03-04 12:00:00
 
+
 query I
-select * from generate_series(timestamp '2020-01-01 01:02:03', timestamp '2021-01-01 03:04:05', interval '1' month);
+select
+  *
+from
+  generate_series(
+    timestamp '2020-01-01 01:02:03',
+    timestamp '2021-01-01 03:04:05',
+    interval '1' month
+  );
 ----
 2020-01-01 01:02:03
 2020-02-01 01:02:03
@@ -30,8 +46,12 @@ select * from generate_series(timestamp '2020-01-01 01:02:03', timestamp '2021-0
 2020-12-01 01:02:03
 2021-01-01 01:02:03
 
+
 query I
-SELECT * FROM generate_series('2'::INT,'10'::INT,'2'::INT)
+SELECT
+  *
+FROM
+  generate_series('2' :: INT, '10' :: INT, '2' :: INT)
 ----
 2
 4
@@ -39,18 +59,28 @@ SELECT * FROM generate_series('2'::INT,'10'::INT,'2'::INT)
 8
 10
 
+
 query I
-SELECT * FROM generate_series('2'::INT + '2'::INT,'10'::INT,'2'::INT);
+SELECT
+  *
+FROM
+  generate_series('2' :: INT + '2' :: INT, '10' :: INT, '2' :: INT);
 ----
 4
 6
 8
 10
 
+
 query I
-SELECT generate_series FROM generate_series('2'::INT + '2'::INT,'10'::INT,'2'::INT);
+SELECT
+  generate_series
+FROM
+  generate_series('2' :: INT + '2' :: INT, '10' :: INT, '2' :: INT);
 ----
 4
 6
 8
 10
+
+

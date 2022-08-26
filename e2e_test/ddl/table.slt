@@ -3,7 +3,11 @@ statement ok
 create table ddl_t (v1 int);
 
 statement ok
-explain select v1 from ddl_t;
+explain
+select
+  v1
+from
+  ddl_t;
 
 # Create another table with duplicated name.
 statement error
@@ -22,21 +26,39 @@ statement ok
 create table ddl_t (v2 int);
 
 statement ok
-explain select v2 from ddl_t;
+explain
+select
+  v2
+from
+  ddl_t;
 
 # Create a mview on top of it.
 statement ok
-create materialized view ddl_mv as select v2 from ddl_t;
+create materialized view ddl_mv as
+select
+  v2
+from
+  ddl_t;
 
 statement ok
-explain select v2 from ddl_t;
+explain
+select
+  v2
+from
+  ddl_t;
 
 statement ok
-explain create sink sink_t from ddl_t with ( connector = 'kafka' );
+explain create sink sink_t
+from
+  ddl_t with (connector = 'kafka');
 
 # Create a mview with duplicated name.
 statement error
-create materialized view ddl_mv as select v2 from ddl_t;
+create materialized view ddl_mv as
+select
+  v2
+from
+  ddl_t;
 
 # Drop the table before dropping the mview.
 statement error
@@ -64,7 +86,12 @@ drop table ddl_t;
 
 # Create table concludes struct column.
 statement ok
-create table st (v1 int, v2 struct<v1 int, v2 struct<v1 int, v2 int>>);
+create table st (
+  v1 int,
+  v2 struct < v1 int,
+  v2 struct < v1 int,
+  v2 int > >
+);
 
 statement ok
 drop table st
@@ -89,7 +116,6 @@ create table "T1" (v1 int);
 # this test case cannot be enabled.
 # statement error
 # insert into "T1" ("V1") values (1);
-
 statement error
 drop table t1;
 
@@ -106,9 +132,11 @@ create table "T2" ("V1" int);
 # this test case cannot be enabled.
 # statement error
 # insert into "T2" (V1) values (1);
-
 statement ok
-insert into "T2" ("V1") values (1);
+insert into
+  "T2" ("V1")
+values
+  (1);
 
 statement error
 create table C1 (c1 varchar(5));
@@ -118,3 +146,4 @@ create table t (v1 int not null);
 
 statement error
 create table t (v1 varchar collate "en_US");
+

@@ -1,5 +1,4 @@
 include ../tpch/create_tables.slt.part
-
 include ../tpch/insert_customer.slt.part
 include ../tpch/insert_lineitem.slt.part
 include ../tpch/insert_nation.slt.part
@@ -8,9 +7,7 @@ include ../tpch/insert_part.slt.part
 include ../tpch/insert_partsupp.slt.part
 include ../tpch/insert_region.slt.part
 include ../tpch/insert_supplier.slt.part
-
 include ./tpch/create_views.slt.part
-
 include ./tpch/q1.slt.part
 include ./tpch/q2.slt.part
 include ./tpch/q3.slt.part
@@ -30,7 +27,5 @@ include ./tpch/q18.slt.part
 include ./tpch/q19.slt.part
 include ./tpch/q20.slt.part
 include ./tpch/q22.slt.part
-
 include ./tpch/drop_views.slt.part
-
 include ../tpch/drop_tables.slt.part

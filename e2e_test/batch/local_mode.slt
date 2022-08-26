@@ -1,8 +1,10 @@
 statement ok
-SET RW_IMPLICIT_FLUSH TO true;
+SET
+  RW_IMPLICIT_FLUSH TO true;
 
 statement ok
-SET QUERY_MODE TO local;
+SET
+  QUERY_MODE TO local;
 
 include ./basic/*.slt.part
 include ./basic/local/*.slt.part
@@ -13,8 +15,8 @@ include ./aggregate/*.slt.part
 include ./types/*.slt.part
 include ./catalog/*.slt.part
 include ./functions/*.slt.part
-
 statement ok
-SET QUERY_MODE TO distributed;
+SET
+  QUERY_MODE TO distributed;
 
 # This test should not be running in parallel mode

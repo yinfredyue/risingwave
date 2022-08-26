@@ -12,9 +12,11 @@ query T
 show sources
 ----
 
+
 query T
 show tables
 ----
+
 
 statement ok
 create source s with (
@@ -30,9 +32,11 @@ query T
 show sources
 ----
 
+
 query T
 show tables
 ----
+
 
 statement ok
 create source s with (
@@ -46,9 +50,11 @@ show sources
 ----
 s
 
+
 query T
 show tables
 ----
+
 
 statement ok
 drop source s
@@ -65,9 +71,12 @@ show sources
 ----
 s
 
+
 query T
 show tables
 ----
 
+
 statement ok
 drop source s
+

@@ -1,11 +1,12 @@
 statement ok
-SET RW_IMPLICIT_FLUSH TO true;
+SET
+  RW_IMPLICIT_FLUSH TO true;
 
 statement ok
-SET QUERY_MODE TO distributed;
+SET
+  QUERY_MODE TO distributed;
 
 include ../tpch/create_tables.slt.part
-
 include ../tpch/insert_customer.slt.part
 include ../tpch/insert_lineitem.slt.part
 include ../tpch/insert_nation.slt.part
@@ -14,7 +15,6 @@ include ../tpch/insert_part.slt.part
 include ../tpch/insert_partsupp.slt.part
 include ../tpch/insert_supplier.slt.part
 include ../tpch/insert_region.slt.part
-
 include ./tpch/q1.slt.part
 include ./tpch/q2.slt.part
 include ./tpch/q3.slt.part
@@ -37,5 +37,4 @@ include ./tpch/q19.slt.part
 include ./tpch/q20.slt.part
 include ./tpch/q21.slt.part
 include ./tpch/q22.slt.part
-
 include ../tpch/drop_tables.slt.part
