@@ -120,6 +120,7 @@ risedev:
       unsafe-disable-recovery: true
       max-idle-secs-to-exit: 1800
     - use: compute-node
+      enable-in-memory-kv-state-backend: true
     - use: frontend
 
   playground-test:

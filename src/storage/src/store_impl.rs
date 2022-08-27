@@ -28,6 +28,7 @@ use crate::hummock::compaction_group_client::CompactionGroupClientImpl;
 use crate::hummock::{HummockStorage, SstableStore, TieredCache, TieredCacheMetricsBuilder};
 use crate::memory::MemoryStateStore;
 use crate::monitor::{MonitoredStateStore as Monitored, ObjectStoreMetrics, StateStoreMetrics};
+use crate::remote_store::RemoteStateStore;
 use crate::StateStore;
 
 /// The type erased [`StateStore`].
@@ -47,6 +48,8 @@ pub enum StateStoreImpl {
     /// store misses some critical implementation to ensure the correctness of persisting streaming
     /// state. (e.g., no read_epoch support, no async checkpoint)
     MemoryStateStore(Monitored<MemoryStateStore>),
+
+    RemoteStateStore(Monitored<RemoteStateStore>),
 }
 
 impl StateStoreImpl {
@@ -60,6 +63,7 @@ impl Debug for StateStoreImpl {
         match self {
             StateStoreImpl::HummockStateStore(_) => write!(f, "HummockStateStore"),
             StateStoreImpl::MemoryStateStore(_) => write!(f, "MemoryStateStore"),
+            StateStoreImpl::RemoteStateStore(_) => write!(f, "RemoteStateStore"),
         }
     }
 }
@@ -82,6 +86,7 @@ macro_rules! dispatch_state_store {
                 }
             }
             StateStoreImpl::HummockStateStore($store) => $body,
+            StateStoreImpl::RemoteStateStore($store) => $body,
         }
     };
 }
@@ -162,7 +167,10 @@ impl StateStoreImpl {
 
             "in_memory" | "in-memory" => {
                 tracing::warn!("in-memory state backend should never be used in benchmarks and production environment.");
-                StateStoreImpl::shared_in_memory_store(state_store_stats.clone())
+                // StateStoreImpl::shared_in_memory_store(state_store_stats.clone())
+                StateStoreImpl::RemoteStateStore(
+                    RemoteStateStore::new().await?.monitored(state_store_stats),
+                )
             }
 
             other => unimplemented!("{} state store is not supported", other),

@@ -3743,6 +3743,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "proto"
+version = "0.1.0"
+source = "git+https://github.com/BugenZhao/humrock.git#dddbfab8ec9e4221e6d4014f87b02946b5294884"
+dependencies = [
+ "prost",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
 name = "protobuf"
 version = "2.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4944,6 +4954,7 @@ dependencies = [
  "paste",
  "prometheus",
  "prost",
+ "proto",
  "rand 0.8.5",
  "regex",
  "risingwave_common",
