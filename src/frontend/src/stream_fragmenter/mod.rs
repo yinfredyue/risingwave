@@ -97,6 +97,36 @@ pub fn build_graph(plan_node: PlanRef) -> StreamFragmentGraphProto {
     fragment_graph
 }
 
+fn is_stateful_executor(stream_plan: PlanRef) -> bool {
+    use crate::optimizer::plan_node::PlanNodeType::*;
+    match stream_plan.node_type() {
+        StreamHashJoin | StreamHashAgg | StreamMaterialize | StreamDeltaJoin
+        | StreamDynamicFilter => true,
+        _ => false,
+    }
+}
+
+fn rw_stream_inner(
+    state: &mut BuildFragmentGraphState,
+    stream_plan: PlanRef,
+    insert_exchange_flag: bool,
+) -> Result<PlanRef> {
+    let inputs = stream_plan
+        .inputs()
+        .into_iter()
+        .map(|child| {
+            if is_stateful_executor(stream_plan) {
+                if insert_exchange_flag {
+                } else {
+                    rw_stream_inner(state, child, true)?
+                }
+            } else {
+            }
+        })
+        .collect::<Result<Vec<PlanRef>>>()?;
+    Ok()
+}
+
 pub struct StreamFragmenter {}
 
 impl StreamFragmenter {
