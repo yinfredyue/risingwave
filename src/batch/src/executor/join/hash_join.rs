@@ -67,7 +67,7 @@ pub struct HashJoinExecutor<K> {
     /// Non-equi join condition (optional)
     cond: Option<BoxedExpression>,
     /// Whether or not to find matched build rows for probe rows with NULL keys
-    match_null: bool,
+    null_safe: Vec<bool>,
     identity: String,
     _phantom: PhantomData<K>,
 }
@@ -208,7 +208,7 @@ impl<K: HashKey> HashJoinExecutor<K> {
             for (build_row_id, build_key) in build_keys
                 .into_iter()
                 .enumerate()
-                .filter(|(_, key)| self.match_null || !key.has_null())
+                .filter(|(_, key)| key.match_null_safe(&self.null_safe))
             {
                 let row_id = RowId::new(build_chunk_id, build_row_id);
                 next_build_row_with_same_key[row_id] = hash_map.insert(build_key, row_id);
@@ -1592,8 +1592,10 @@ impl BoxedExecutorBuilder for HashJoinExecutor<()> {
             .iter()
             .map(|&idx| idx as usize)
             .collect_vec();
+        let null_safe = hash_join_node.get_null_safe().iter().copied().collect_vec();
 
         ensure!(left_key_idxs.len() == right_key_idxs.len());
+        ensure!(left_key_idxs.len() == null_safe.len());
 
         let right_data_types = right_child.schema().data_types();
         let right_key_types = right_key_idxs
@@ -1618,8 +1620,7 @@ impl BoxedExecutorBuilder for HashJoinExecutor<()> {
                 right_child,
                 left_key_idxs,
                 right_key_idxs,
-                // TODO: frontend should pass match_null in plan node
-                false,
+                null_safe,
                 cond,
                 context.plan_node().get_identity().clone(),
             ),
@@ -1639,7 +1640,7 @@ impl HashKeyDispatcher for HashJoinExecutor<()> {
             input.build_side_source,
             input.probe_key_idxs,
             input.build_key_idxs,
-            input.match_null,
+            input.null_safe,
             input.cond,
             input.identity,
         ))
@@ -1655,7 +1656,7 @@ impl<K> HashJoinExecutor<K> {
         build_side_source: BoxedExecutor,
         probe_key_idxs: Vec<usize>,
         build_key_idxs: Vec<usize>,
-        match_null: bool,
+        null_safe: Vec<bool>,
         cond: Option<BoxedExpression>,
         identity: String,
     ) -> Self {
@@ -1685,7 +1686,7 @@ impl<K> HashJoinExecutor<K> {
             build_side_source,
             probe_key_idxs,
             build_key_idxs,
-            match_null,
+            null_safe,
             cond,
             identity,
             _phantom: PhantomData,
@@ -1900,7 +1901,7 @@ mod tests {
             )
         }
 
-        fn create_join_executor(&self, has_non_equi_cond: bool) -> BoxedExecutor {
+        fn create_join_executor(&self, has_non_equi_cond: bool, null_safe: bool) -> BoxedExecutor {
             let join_type = self.join_type;
 
             let left_child = self.create_left_executor();
@@ -1926,14 +1927,14 @@ mod tests {
                 right_child,
                 vec![0],
                 vec![0],
-                false,
+                vec![null_safe],
                 cond,
                 "HashJoinExecutor".to_string(),
             ))
         }
 
-        async fn do_test(&self, expected: DataChunk, has_non_equi_cond: bool) {
-            let join_executor = self.create_join_executor(has_non_equi_cond);
+        async fn do_test(&self, expected: DataChunk, has_non_equi_cond: bool, null_safe: bool) {
+            let join_executor = self.create_join_executor(has_non_equi_cond, null_safe);
 
             let mut data_chunk_merger = DataChunkMerger::new(self.output_data_types()).unwrap();
 
@@ -1984,7 +1985,52 @@ mod tests {
              3   .   3   .",
         );
 
-        test_fixture.do_test(expected_chunk, false).await;
+        test_fixture.do_test(expected_chunk, false, false).await;
+    }
+
+    /// Sql:
+    /// ```sql
+    /// select * from t1 join t2 on t1.v1 is not distinct from t2.v1;
+    /// ```
+    #[tokio::test]
+    async fn test_null_safe_inner_join() {
+        let test_fixture = TestFixture::with_join_type(JoinType::Inner);
+
+        let expected_chunk = DataChunk::from_pretty(
+            "i   f   i   F
+             2    .  2     .
+             .  8.4  .  8.18
+             .  8.4  .  9.6
+             .  8.4  .  9.1
+             .  8.4  .  8
+             .  8.4  .  3.5
+             .  8.4  .  8.9
+             3  3.9  3  3.7
+             3  3.9  3     .
+             .    .  .  8.18
+             .    .  .  9.6
+             .    .  .  9.1
+             .    .  .  8
+             .    .  .  3.5
+             .    .  .  8.9
+             4  6.6  4  7.5
+             3    .  3  3.7
+             3    .  3     .
+             .  0.7  .  8.18
+             .  0.7  .  9.6
+             .  0.7  .  9.1
+             .  0.7  .  8
+             .  0.7  .  3.5
+             .  0.7  .  8.9
+             .  5.5  .  8.18
+             .  5.5  .  9.6
+             .  5.5  .  9.1
+             .  5.5  .  8
+             .  5.5  .  3.5
+             .  5.5  .  8.9",
+        );
+
+        test_fixture.do_test(expected_chunk, false, true).await;
     }
 
     /// Sql:
@@ -2000,7 +2046,7 @@ mod tests {
              4   6.6 4   7.5",
         );
 
-        test_fixture.do_test(expected_chunk, true).await;
+        test_fixture.do_test(expected_chunk, true, false).await;
     }
 
     /// Sql:
@@ -2027,7 +2073,7 @@ mod tests {
              .   5.5 .   .",
         );
 
-        test_fixture.do_test(expected_chunk, false).await;
+        test_fixture.do_test(expected_chunk, false, false).await;
     }
 
     /// Sql:
@@ -2052,7 +2098,7 @@ mod tests {
              .   5.5 .   .",
         );
 
-        test_fixture.do_test(expected_chunk, true).await;
+        test_fixture.do_test(expected_chunk, true, false).await;
     }
 
     /// Sql:
@@ -2087,7 +2133,7 @@ mod tests {
              .   .   200 .",
         );
 
-        test_fixture.do_test(expected_chunk, false).await;
+        test_fixture.do_test(expected_chunk, false, false).await;
     }
 
     /// Sql:
@@ -2120,7 +2166,7 @@ mod tests {
              .   .   200 .",
         );
 
-        test_fixture.do_test(expected_chunk, true).await;
+        test_fixture.do_test(expected_chunk, true, false).await;
     }
 
     /// ```sql
@@ -2160,7 +2206,7 @@ mod tests {
              .   .   200 .",
         );
 
-        test_fixture.do_test(expected_chunk, false).await;
+        test_fixture.do_test(expected_chunk, false, false).await;
     }
 
     /// ```sql
@@ -2201,7 +2247,7 @@ mod tests {
              .   .   200 .",
         );
 
-        test_fixture.do_test(expected_chunk, true).await;
+        test_fixture.do_test(expected_chunk, true, false).await;
     }
 
     #[tokio::test]
@@ -2218,7 +2264,7 @@ mod tests {
              .   5.5",
         );
 
-        test_fixture.do_test(expected_chunk, false).await;
+        test_fixture.do_test(expected_chunk, false, false).await;
     }
 
     #[tokio::test]
@@ -2238,7 +2284,7 @@ mod tests {
              .   5.5",
         );
 
-        test_fixture.do_test(expected_chunk, true).await;
+        test_fixture.do_test(expected_chunk, true, false).await;
     }
 
     #[tokio::test]
@@ -2253,7 +2299,7 @@ mod tests {
              3   .",
         );
 
-        test_fixture.do_test(expected_chunk, false).await;
+        test_fixture.do_test(expected_chunk, false, false).await;
     }
 
     #[tokio::test]
@@ -2265,7 +2311,7 @@ mod tests {
              4   6.6",
         );
 
-        test_fixture.do_test(expected_chunk, true).await;
+        test_fixture.do_test(expected_chunk, true, false).await;
     }
 
     #[tokio::test]
@@ -2290,7 +2336,7 @@ mod tests {
              200 .",
         );
 
-        test_fixture.do_test(expected_chunk, false).await;
+        test_fixture.do_test(expected_chunk, false, false).await;
     }
 
     #[tokio::test]
@@ -2318,7 +2364,7 @@ mod tests {
              200 .",
         );
 
-        test_fixture.do_test(expected_chunk, true).await;
+        test_fixture.do_test(expected_chunk, true, false).await;
     }
 
     #[tokio::test]
@@ -2333,7 +2379,7 @@ mod tests {
              3   3.7",
         );
 
-        test_fixture.do_test(expected_chunk, false).await;
+        test_fixture.do_test(expected_chunk, false, false).await;
     }
 
     #[tokio::test]
@@ -2345,7 +2391,7 @@ mod tests {
              4   7.5",
         );
 
-        test_fixture.do_test(expected_chunk, true).await;
+        test_fixture.do_test(expected_chunk, true, false).await;
     }
 
     #[tokio::test]

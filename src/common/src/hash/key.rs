@@ -143,6 +143,8 @@ pub trait HashKey: Clone + Debug + Hash + Eq + Sized + Send + Sync + 'static {
     fn deserialize_to_builders(self, array_builders: &mut [ArrayBuilderImpl]) -> ArrayResult<()>;
 
     fn has_null(&self) -> bool;
+
+    fn match_null_safe(&self, null_safe: &[bool]) -> bool;
 }
 
 /// Designed for hash keys with at most `N` serialized bytes.
@@ -162,7 +164,7 @@ pub struct FixedSizeKey<const N: usize> {
 pub struct SerializedKey {
     key: Vec<Datum>,
     hash_code: u64,
-    has_null: bool,
+    null_vec: Vec<bool>,
 }
 
 /// Fix clippy warning.
@@ -537,7 +539,7 @@ impl<const N: usize> HashKeyDeserializer for FixedSizeKeyDeserializer<N> {
 pub struct SerializedKeySerializer {
     buffer: Vec<Datum>,
     hash_code: u64,
-    has_null: bool,
+    null_vec: Vec<bool>,
 }
 
 impl HashKeySerializer for SerializedKeySerializer {
@@ -547,7 +549,7 @@ impl HashKeySerializer for SerializedKeySerializer {
         Self {
             buffer: Vec::new(),
             hash_code: hash_code.0,
-            has_null: false,
+            null_vec: Vec::new(),
         }
     }
 
@@ -555,10 +557,11 @@ impl HashKeySerializer for SerializedKeySerializer {
         match data {
             Some(v) => {
                 self.buffer.push(Some(v.to_owned_scalar().into()));
+                self.null_vec.push(false);
             }
             None => {
                 self.buffer.push(None);
-                self.has_null = true;
+                self.null_vec.push(true);
             }
         }
     }
@@ -567,7 +570,7 @@ impl HashKeySerializer for SerializedKeySerializer {
         SerializedKey {
             key: self.buffer,
             hash_code: self.hash_code,
-            has_null: self.has_null,
+            null_vec: self.null_vec,
         }
     }
 }
@@ -638,6 +641,22 @@ impl<const N: usize> HashKey for FixedSizeKey<N> {
     fn has_null(&self) -> bool {
         self.null_bitmap != 0xFF
     }
+
+    fn match_null_safe(&self, null_safe: &[bool]) -> bool {
+        for (i, &match_null) in null_safe.iter().enumerate() {
+            if match_null {
+                continue;
+            } else {
+                let mask = 1u8 << i;
+                let null = (self.null_bitmap & mask) == 0u8;
+                if null {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
 }
 
 impl HashKey for SerializedKey {
@@ -654,7 +673,19 @@ impl HashKey for SerializedKey {
     }
 
     fn has_null(&self) -> bool {
-        self.has_null
+        self.null_vec.iter().any(|x| *x)
+    }
+
+    fn match_null_safe(&self, null_safe: &[bool]) -> bool {
+        self.null_vec.iter().zip_eq(null_safe).all(
+            |(&null, &match_null)| {
+                if match_null {
+                    true
+                } else {
+                    !null
+                }
+            },
+        )
     }
 }
 
