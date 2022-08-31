@@ -19,6 +19,9 @@ use num_traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedNeg, CheckedRem, Che
 pub use rust_decimal::prelude::{FromPrimitive, FromStr, ToPrimitive};
 use rust_decimal::{Decimal as RustDecimal, Error, RoundingStrategy};
 
+// rust_decimal's checked_add function currently can not guarantee catching underflow/overflow when resulting Decimal value has a precision greater than 27. Therefore we need to cap the max precision for Decimal at 27. For more info: https://github.com/paupino/rust-decimal/issues/511
+const MAX_PRECISION: u32 = 27;
+
 #[derive(Debug, Copy, Clone, PartialEq, Hash, Eq, Ord, PartialOrd)]
 pub enum Decimal {
     Normalized(RustDecimal),
@@ -115,7 +118,10 @@ macro_rules! checked_proxy {
             fn $func(&self, other: &Self) -> Option<Self> {
                 match (self, other) {
                     (Self::Normalized(lhs), Self::Normalized(rhs)) => {
-                        lhs.$func(rhs).map(Decimal::Normalized)
+                        match lhs.$func(rhs).map(Decimal::Normalized) {
+                            Some(d) if d.has_valid_precision() => Some(d),
+                            _ => None
+                        }
                     }
                     (lhs, rhs) => Some(*lhs $op *rhs),
                 }
@@ -402,6 +408,11 @@ impl Decimal {
         }
     }
 
+    /// Check whether Decimal's precision is not exceeding max precision.
+    pub fn has_valid_precision(&self) -> bool {
+        self.precision() <= MAX_PRECISION
+    }
+
     pub fn new(num: i64, scale: u32) -> Self {
         Self::Normalized(RustDecimal::new(num, scale))
     }
@@ -543,7 +554,10 @@ impl FromStr for Decimal {
             "nan" | "NaN" | "NAN" => Ok(Decimal::NaN),
             "inf" | "INF" | "+inf" | "+INF" | "+Inf" => Ok(Decimal::PositiveINF),
             "-inf" | "-INF" | "-Inf" => Ok(Decimal::NegativeINF),
-            s => RustDecimal::from_str(s).map(Decimal::Normalized),
+            s => match RustDecimal::from_str(s).map(Decimal::Normalized) {
+                Ok(dec) if dec.has_valid_precision() => Ok(dec),
+                _ => Err(Error::ExceedsMaximumPossibleValue),
+            },
         }
     }
 }
@@ -712,5 +726,34 @@ mod tests {
         assert_eq!(Decimal::to_i32(&Decimal::from_i32(1).unwrap()).unwrap(), 1,);
         assert_eq!(Decimal::to_u64(&Decimal::from_u64(1).unwrap()).unwrap(), 1,);
         assert_eq!(Decimal::to_i64(&Decimal::from_i64(1).unwrap()).unwrap(), 1,);
+    }
+
+    #[test]
+    fn max_precision_test() {
+        // Left align
+        let max_value = Decimal::from_str(
+            format!("{:9<precision$}", 9, precision = MAX_PRECISION as usize).as_str(),
+        );
+        assert!(max_value.is_ok());
+        assert!(max_value.unwrap().checked_add(&Decimal::from(1)).is_none());
+        assert!(Decimal::from_str(
+            format!("{:9<precision$}", 9, precision = MAX_PRECISION as usize + 1).as_str()
+        )
+        .is_err());
+        // Right align
+        let min_value = Decimal::from_str(
+            format!(
+                "0.{:0>precision$}",
+                1,
+                precision = MAX_PRECISION as usize - 1
+            )
+            .as_str(),
+        );
+        assert!(min_value.is_ok());
+        assert!(min_value.unwrap().checked_div(&Decimal::from(10)).is_none());
+        assert!(Decimal::from_str(
+            format!("0.{:0>precision$}", 1, precision = MAX_PRECISION as usize).as_str()
+        )
+        .is_err());
     }
 }

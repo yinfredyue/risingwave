@@ -31,3 +31,17 @@ query T
 values(round(42, 1));
 ----
 42
+
+# Decimal at max precision (27)
+query R
+select 10000000000000000000000000 + 0.1::decimal;
+----
+10000000000000000000000000.1
+
+# Decimal exceeding max precision
+statement error
+select 100000000000000000000000000 + 0.1::decimal;
+
+# Decimal exceeding max precision
+statement error
+select 0.00000000000000000000000001 / 10::decimal;

@@ -98,6 +98,14 @@ where
         .map_err(|_| ExprError::Cast(type_name::<str>(), type_name::<T>()))
 }
 
+#[inline(always)]
+pub fn str_to_dec(elem: &str) -> Result<Decimal> {
+    match elem.parse::<Decimal>() {
+        Ok(dec) if dec.has_valid_precision() => Ok(dec),
+        _ => Err(ExprError::Cast(type_name::<str>(), type_name::<Decimal>())),
+    }
+}
+
 /// Define the cast function to primitive types.
 ///
 /// Due to the orphan rule, some data can't implement `TryFrom` trait for basic type.
@@ -253,7 +261,7 @@ macro_rules! for_each_cast {
             { varchar, int64, str_parse },
             { varchar, float32, str_parse },
             { varchar, float64, str_parse },
-            { varchar, decimal, str_parse },
+            { varchar, decimal, str_to_dec },
             { varchar, boolean, str_to_bool },
 
             { boolean, varchar, general_to_string },

@@ -14,8 +14,8 @@
 
 use itertools::Itertools;
 use risingwave_common::error::{ErrorCode, Result};
-use risingwave_common::types::{DataType, DateTimeField, Decimal, IntervalUnit, ScalarImpl};
-use risingwave_expr::vector_op::cast::str_parse;
+use risingwave_common::types::{DataType, DateTimeField, IntervalUnit, ScalarImpl};
+use risingwave_expr::vector_op::cast::str_to_dec;
 use risingwave_sqlparser::ast::{DateTimeField as AstDateTimeField, Expr, Value};
 
 use crate::binder::Binder;
@@ -57,7 +57,7 @@ impl Binder {
             (Some(ScalarImpl::Int64(int_64)), DataType::Int64)
         } else {
             // Notice: when the length of decimal exceeds 29(>= 30), it will be rounded up.
-            let decimal = str_parse::<Decimal>(&s)?;
+            let decimal = str_to_dec(&s)?;
             (Some(ScalarImpl::Decimal(decimal)), DataType::Decimal)
         };
         Ok(Literal::new(data, data_type))
@@ -156,6 +156,8 @@ mod tests {
     #[tokio::test]
     async fn test_bind_value() {
         use std::str::FromStr;
+
+        use risingwave_common::types::Decimal;
 
         use super::*;
 
