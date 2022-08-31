@@ -4139,6 +4139,7 @@ dependencies = [
  "risingwave_hummock_sdk",
  "risingwave_pb",
  "risingwave_rpc_client",
+ "risingwave_rt",
  "risingwave_source",
  "risingwave_storage",
  "serde",
