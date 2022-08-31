@@ -30,8 +30,10 @@ use risingwave_pb::batch_plan::{
     ExchangeInfo, ExchangeSource, LocalExecutePlan, PlanFragment, PlanNode as PlanNodeProst,
     TaskId as ProstTaskId, TaskOutputId,
 };
-use tracing::debug;
+use tracing::{debug, info};
 use uuid::Uuid;
+use risingwave_rt::time::TimedExt;
+use crate::handler::query::trace_time;
 
 use super::plan_fragmenter::{PartitionInfo, QueryStageRef};
 use crate::optimizer::plan_node::PlanNodeType;
@@ -87,13 +89,17 @@ impl LocalQueryExecution {
             .front_env
             .hummock_snapshot_manager()
             .get_epoch(query_id)
+            .timed(|_, elasped| info!("Get epoch elasped {} us", elasped.as_micros()))
             .await?
             .committed_epoch;
+
         self.epoch = Some(epoch);
-        let plan_fragment = self.create_plan_fragment()?;
+        let plan_fragment = trace_time(|| self.create_plan_fragment(), "Create plan fragement")?;
         let plan_node = plan_fragment.root.unwrap();
-        let executor = ExecutorBuilder::new(&plan_node, &task_id, context, epoch);
-        let executor = executor.build().await?;
+        let executor = trace_time(|| ExecutorBuilder::new(&plan_node, &task_id, context, epoch),
+                                  "Executor builder ") ;
+        let executor = executor.build().timed(|_, elasped| info!("Executor builder elasped {} us",
+            elasped.as_micros())) .await?;
 
         #[for_await]
         for chunk in executor.execute() {

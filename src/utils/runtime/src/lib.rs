@@ -14,6 +14,8 @@
 
 //! Configures the RisingWave binary, including logging, locks, panic handler, etc.
 
+pub mod time;
+
 use std::path::PathBuf;
 use std::time::Duration;
 

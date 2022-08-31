@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::time::Instant;
 use futures_async_stream::for_await;
 use pgwire::pg_field_descriptor::PgFieldDescriptor;
 use pgwire::pg_response::{PgResponse, StatementType};
@@ -19,7 +20,7 @@ use risingwave_batch::executor::BoxedDataChunkStream;
 use risingwave_common::error::Result;
 use risingwave_common::session_config::QueryMode;
 use risingwave_sqlparser::ast::Statement;
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::binder::{Binder, BoundStatement};
 use crate::handler::util::{force_local_mode, to_pg_field, to_pg_rows};
@@ -28,6 +29,15 @@ use crate::scheduler::{
     BatchPlanFragmenter, ExecutionContext, ExecutionContextRef, LocalQueryExecution,
 };
 use crate::session::OptimizerContext;
+
+pub fn trace_time<F, R>(closure: F, msg: &str) -> R
+where F: FnOnce() -> R
+{
+    let now = Instant::now();
+    let ret = closure();
+    error!("{} takes {} us", msg, now.elapsed().as_micros());
+    ret
+}
 
 pub async fn handle_query(
     context: OptimizerContext,
@@ -51,7 +61,7 @@ pub async fn handle_query(
     debug!("query_mode:{:?}", query_mode);
 
     let (data_stream, pg_descs) = match query_mode {
-        QueryMode::Local => local_execute(context, bound)?,
+        QueryMode::Local => trace_time(|| local_execute(context, bound), "Local execute")?,
         QueryMode::Distributed => distribute_execute(context, bound).await?,
     };
 
@@ -126,7 +136,7 @@ fn local_execute(
 
     // Subblock to make sure PlanRef (an Rc) is dropped before `await` below.
     let (query, pg_descs) = {
-        let root = Planner::new(context.into()).plan(stmt)?;
+        let root = trace_time(|| Planner::new(context.into()).plan(stmt), "Planner")?;
 
         let pg_descs = root
             .schema()
