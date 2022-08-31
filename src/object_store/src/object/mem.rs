@@ -52,6 +52,7 @@ impl StreamingUploader for InMemStreamingUploader {
         if obj.is_empty() {
             Err(ObjectError::internal("upload empty object"))
         } else {
+            rand_delay().await;
             let metadata = get_obj_meta(&self.path, &obj)?;
             self.objects.lock().await.insert(self.path, (metadata, obj));
             Ok(())
@@ -78,6 +79,7 @@ impl ObjectStore for InMemObjectStore {
         if obj.is_empty() {
             Err(ObjectError::internal("upload empty object"))
         } else {
+            rand_delay().await;
             let metadata = get_obj_meta(path, &obj)?;
             self.objects
                 .lock()
@@ -88,6 +90,8 @@ impl ObjectStore for InMemObjectStore {
     }
 
     async fn streaming_upload(&self, path: &str) -> ObjectResult<BoxedStreamingUploader> {
+        rand_delay().await;
+
         Ok(Box::new(InMemStreamingUploader {
             path: path.to_string(),
             buf: BytesMut::new(),
@@ -115,6 +119,8 @@ impl ObjectStore for InMemObjectStore {
     }
 
     async fn metadata(&self, path: &str) -> ObjectResult<ObjectMetadata> {
+        rand_delay().await;
+
         self.objects
             .lock()
             .await
@@ -128,6 +134,7 @@ impl ObjectStore for InMemObjectStore {
         fail_point!("mem_delete_err", |_| Err(ObjectError::internal(
             "mem delete error"
         )));
+        rand_delay().await;
         self.objects.lock().await.remove(path);
         Ok(())
     }
@@ -135,6 +142,7 @@ impl ObjectStore for InMemObjectStore {
     /// Deletes the objects with the given paths permanently from the storage. If an object
     /// specified in the request is not found, it will be considered as successfully deleted.
     async fn delete_objects(&self, paths: &[String]) -> ObjectResult<()> {
+        rand_delay().await;
         let mut guard = self.objects.lock().await;
 
         for path in paths {
@@ -145,6 +153,7 @@ impl ObjectStore for InMemObjectStore {
     }
 
     async fn list(&self, prefix: &str) -> ObjectResult<Vec<ObjectMetadata>> {
+        rand_delay().await;
         Ok(self
             .objects
             .lock()
@@ -187,6 +196,7 @@ impl InMemObjectStore {
     where
         F: Fn(&Bytes) -> R,
     {
+        rand_delay().await;
         self.objects
             .lock()
             .await
@@ -215,6 +225,20 @@ fn get_obj_meta(path: &str, obj: &Bytes) -> ObjectResult<ObjectMetadata> {
         total_size: obj.len(),
     })
 }
+
+#[cfg(madsim)]
+async fn rand_delay() {
+    use rand::Rng;
+    let t = if rand::thread_rng().gen_bool(0.9) {
+        rand::thread_rng().gen_range(100..200)
+    } else {
+        rand::thread_rng().gen_range(200..1000)
+    };
+    tokio::time::sleep(std::time::Duration::from_micros(t)).await;
+}
+
+#[cfg(not(madsim))]
+async fn rand_delay() {}
 
 #[cfg(test)]
 mod tests {
