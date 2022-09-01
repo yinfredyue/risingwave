@@ -42,7 +42,7 @@ pub struct BlockLoc {
 }
 
 impl BlockLoc {
-    /// block count in cache file
+    /// block len in cache file
     #[inline(always)]
     pub fn blen(&self, bsz: u32) -> u32 {
         utils::align_up(bsz, self.len)

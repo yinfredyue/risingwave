@@ -116,6 +116,7 @@ where
         if !freelist.is_empty() {
             let mut guard = self.store.meta_file.write().await;
             for slot in freelist {
+                // tracing::info!("free slot: {}", slot);
                 if let Some(bloc) = guard.free(slot) {
                     let offset = bloc.bidx as u64 * self.block_size as u64;
                     let len = bloc.blen(self.block_size as u32) as usize;
@@ -138,12 +139,52 @@ where
             .disk_write_throughput
             .inc_by(self.buffer.len() as f64);
         let timer = self.store.metrics.disk_write_latency.start_timer();
+
+        let buffer = self.buffer.clone();
+
         let boff = self.store.cache_file.append(self.buffer).await? / self.block_size as u64;
         let boff: u32 = boff.try_into().unwrap();
+
         timer.observe_duration();
 
         for bloc in &mut self.blocs {
             bloc.bidx += boff;
+        }
+
+        let buf = self
+            .store
+            .cache_file
+            .read(boff as u64 * self.block_size as u64, buffer.len())
+            .await
+            .unwrap();
+        assert_eq!(
+            buffer,
+            buf,
+            "\nbuffer len: {}, buf len: {}",
+            buffer.len(),
+            buf.len()
+        );
+
+        for (i, bloc) in self.blocs.iter().enumerate() {
+            let buf = self
+                .store
+                .cache_file
+                .read(
+                    bloc.bidx as u64 * self.block_size as u64,
+                    bloc.blen(self.block_size as u32) as usize,
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                &buffer[(bloc.bidx - boff) as usize * self.block_size
+                    ..(bloc.bidx - boff) as usize * self.block_size + bloc.len as usize],
+                &buf[..bloc.len as usize],
+                "\ni: {}, boff: {}, bidx: {}, blen: {}",
+                i,
+                boff,
+                bloc.bidx,
+                bloc.blen(self.block_size as u32),
+            );
         }
 
         // Write guard is only needed when updating meta file, for data file is append-only.
@@ -152,6 +193,8 @@ where
         for (key, bloc) in self.keys.iter().zip_eq(self.blocs.iter()) {
             slots.push(guard.insert(key, bloc)?);
         }
+
+        tracing::info!("ok");
 
         Ok((self.keys, slots))
     }
@@ -304,6 +347,8 @@ where
         let guard = self.meta_file.read().await;
 
         let (bloc, _key) = guard.get(slot).ok_or(Error::InvalidSlot(slot))?;
+        // tracing::info!("access slot: {}", slot);
+
         let offset = bloc.bidx as u64 * self.block_size as u64;
         let blen = bloc.blen(self.block_size as u32) as usize;
 

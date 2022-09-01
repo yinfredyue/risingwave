@@ -130,6 +130,8 @@ impl CacheFile {
 
         let offset = core.len.fetch_add(buf.len(), Ordering::SeqCst);
 
+        let len = buf.len();
+
         asyncify(move || {
             let mut capacity = core.capacity.load(Ordering::Acquire);
 
@@ -171,6 +173,8 @@ impl CacheFile {
             Ok(())
         })
         .await?;
+
+        tracing::info!("write at offset: {}, len: {}", offset, len);
 
         Ok(offset as u64)
     }

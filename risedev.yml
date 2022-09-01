@@ -83,6 +83,7 @@ risedev:
     - use: etcd
     - use: meta-node
     - use: compute-node
+      enable-tiered-cache: true
     - use: frontend
     - use: compactor
     - use: prometheus

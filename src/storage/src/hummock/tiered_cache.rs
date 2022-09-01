@@ -28,7 +28,7 @@ pub trait TieredCacheKey: Eq + Send + Sync + Hash + Clone + 'static + std::fmt::
 }
 
 #[expect(clippy::len_without_is_empty)]
-pub trait TieredCacheValue: Send + Sync + Clone + 'static {
+pub trait TieredCacheValue: Send + Sync + Clone + 'static + PartialEq + std::fmt::Debug {
     fn len(&self) -> usize;
 
     fn encoded_len(&self) -> usize;

@@ -13,10 +13,12 @@
 // limitations under the License.
 
 use std::collections::hash_map::RandomState;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use itertools::Itertools;
+use parking_lot::RwLock;
 use risingwave_common::cache::LruCache;
 use tokio::sync::Notify;
 
@@ -137,6 +139,8 @@ where
     buffer_flusher_notifier: Arc<Notify>,
 
     metrics: FileCacheMetricsRef,
+
+    checker: Arc<RwLock<HashMap<K, V>>>,
 }
 
 impl<K, V, S> Clone for FileCache<K, V, S>
@@ -153,6 +157,7 @@ where
             buffer: self.buffer.clone(),
             buffer_flusher_notifier: self.buffer_flusher_notifier.clone(),
             metrics: self.metrics.clone(),
+            checker: self.checker.clone(),
         }
     }
 }
@@ -229,10 +234,13 @@ where
             buffer_flusher_notifier,
 
             metrics,
+            checker: Arc::new(RwLock::new(HashMap::default())),
         })
     }
 
     pub fn insert(&self, key: K, value: V) -> Result<()> {
+        self.checker.write().insert(key.clone(), value.clone());
+
         let timer = self.metrics.insert_latency.start_timer();
 
         let hash = self.hash_builder.hash_one(&key);
@@ -251,6 +259,11 @@ where
         let hash = self.hash_builder.hash_one(key);
         if let Some(holder) = self.buffer.get(hash, key) {
             timer.observe_duration();
+
+            if let Some(v) = self.checker.read().get(key) {
+                assert_eq!(*v, *holder, "key: {:?}", key);
+            }
+
             return Ok(Some(holder));
         }
 
@@ -260,6 +273,10 @@ where
             let value = V::decode(raw);
 
             timer.observe_duration();
+
+            if let Some(v) = self.checker.read().get(key) {
+                assert_eq!(*v, value, "key: {:?}", key);
+            }
 
             return Ok(Some(TieredCacheEntryHolder::from_owned_value(value)));
         }
