@@ -274,6 +274,7 @@ impl<C: BatchTaskContext> BatchTaskExecution<C> {
               span.add_property(|| ("query_id", task_id.query_id.to_string()));
               span
             })
+            .timed(|_, elasped| info!("Running executor took {} us", elasped.as_micros()))
             .await
         {
           // Prints the entire backtrace of error.
