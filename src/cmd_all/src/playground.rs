@@ -126,6 +126,7 @@ pub async fn playground() -> Result<()> {
                     ServiceConfig::Frontend(c) => {
                         let mut command = Command::new("frontend-node");
                         FrontendService::apply_command_args(&mut command, c)?;
+                        apply_config_file(&mut command);
                         rw_services.push(RisingWaveService::Frontend(
                             command.get_args().map(ToOwned::to_owned).collect(),
                         ));
