@@ -83,9 +83,6 @@ pub async fn handle_query(
         _ => unreachable!(),
     };
 
-    // TODO: delete query id from session.
-    // let session = context.session_ctx.clone();
-    // session.delete_corresponding_query();
     Ok(PgResponse::new(stmt_type, rows_count, rows, pg_descs, true))
 }
 
