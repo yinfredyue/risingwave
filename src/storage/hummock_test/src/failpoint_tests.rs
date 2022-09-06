@@ -51,7 +51,7 @@ async fn test_failpoints_state_store_read_upload() {
         filter_key_extractor_manager.clone(),
     )
     .unwrap();
-    let local_version_manager = hummock_storage.local_version_manager();
+    let _local_version_manager = hummock_storage.local_version_manager();
     let observer_manager = get_observer_manager(
         env,
         hummock_manager_ref,
