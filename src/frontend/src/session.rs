@@ -31,8 +31,10 @@ use risingwave_common::catalog::{
 };
 use risingwave_common::config::load_config;
 use risingwave_common::error::Result;
+use risingwave_common::monitor::process_linux::monitor_process;
 use risingwave_common::session_config::ConfigMap;
 use risingwave_common::util::addr::HostAddr;
+use risingwave_common_service::MetricsManager;
 use risingwave_common_service::observer_manager::ObserverManager;
 use risingwave_pb::common::WorkerType;
 use risingwave_pb::user::auth_info::EncryptionType;
@@ -51,6 +53,7 @@ use crate::expr::CorrelatedId;
 use crate::handler::handle;
 use crate::handler::util::to_pg_field;
 use crate::meta_client::{FrontendMetaClient, FrontendMetaClientImpl};
+use crate::monitor::FrontendMetrics;
 use crate::observer::observer_manager::FrontendObserverNode;
 use crate::optimizer::plan_node::PlanNodeId;
 use crate::planner::Planner;
@@ -192,6 +195,8 @@ pub struct FrontendEnv {
     hummock_snapshot_manager: HummockSnapshotManagerRef,
     server_addr: HostAddr,
     client_pool: ComputeClientPoolRef,
+
+    pub frontend_metrics: Arc<FrontendMetrics>,
 }
 
 impl FrontendEnv {
@@ -234,6 +239,7 @@ impl FrontendEnv {
             hummock_snapshot_manager,
             server_addr,
             client_pool,
+            frontend_metrics: Arc::new(FrontendMetrics::for_test()),
         }
     }
 
@@ -316,6 +322,15 @@ impl FrontendEnv {
 
         let client_pool = Arc::new(ComputeClientPool::new(u64::MAX));
 
+        let registry = prometheus::Registry::new();
+        monitor_process(&registry).unwrap();
+        let frontend_metrics = Arc::new(FrontendMetrics::new(registry.clone()));
+
+        MetricsManager::boot_metrics_service(
+            "127.0.0.1:2222".to_string(),
+            Arc::new(registry),
+        );
+
         Ok((
             Self {
                 catalog_reader,
@@ -328,6 +343,7 @@ impl FrontendEnv {
                 hummock_snapshot_manager,
                 server_addr: frontend_address,
                 client_pool,
+                frontend_metrics,
             },
             observer_join_handle,
             heartbeat_join_handle,
