@@ -139,11 +139,8 @@ pub async fn handle(
                     .into(),
             ),
         },
-        Statement::Query(_) => {
-            let rsp = query::handle_query(context, stmt, format).await;
-            session.env().frontend_metrics.qps_local_exection.inc();
-            rsp
-        },
+        Statement::Query(_) => query::handle_query(context, stmt, format).await,
+
         Statement::Insert { .. } | Statement::Delete { .. } | Statement::Update { .. } => {
             dml::handle_dml(context, stmt).await
         }

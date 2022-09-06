@@ -56,6 +56,18 @@ pub async fn handle_query(
     };
     debug!("query_mode:{:?}", query_mode);
 
+    let timer = if query_mode == QueryMode::Local {
+        Some(
+            session
+                .env()
+                .frontend_metrics
+                .latency_local_execution
+                .start_timer(),
+        )
+    } else {
+        None
+    };
+
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let (data_stream, pg_descs) = match query_mode {
         QueryMode::Local => local_execute(context, bound)?,
@@ -82,6 +94,15 @@ pub async fn handle_query(
         StatementType::SELECT => rows.len() as i32,
         _ => unreachable!(),
     };
+
+    if let Some(timer) = timer {
+        timer.observe_duration();
+        session
+            .env()
+            .frontend_metrics
+            .query_counter_local_execution
+            .inc();
+    }
 
     Ok(PgResponse::new(stmt_type, rows_count, rows, pg_descs, true))
 }
